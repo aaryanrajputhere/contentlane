@@ -1,0 +1,16 @@
+{
+  "sessionId": "1778338569071",
+  "totalDuration": 1.488875,
+  "scenes": [
+    {
+      "characterId": "cmoto7ewi000310hzyucgihkx",
+      "characterName": "Stewie Griffin",
+      "text": "hey , it's stewie",
+      "audioUrl": "/public/voiceovers/1778338569071/line_0.mp3",
+      "start": 0,
+      "duration": 1.488875,
+      "imageUrl": "/public/characters/stewie griffin.png"
+    }
+  ],
+  "bgVideoUrl": "/public/assets/subway_surfer.mp4"
+}

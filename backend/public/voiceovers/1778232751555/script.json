@@ -1,0 +1,106 @@
+{
+  "sessionId": "1778232751555",
+  "totalDuration": 53.341123,
+  "scenes": [
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "[excited] Morty, I just reversed the timeline... of this linked list! [laughing]",
+      "audioUrl": "/public/voiceovers/1778232751555/line_0.mp3",
+      "start": 0,
+      "duration": 4.466875,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "[confused] Wait, what?! [panicking] How did you even do that?!",
+      "audioUrl": "/public/voiceovers/1778232751555/line_1.mp3",
+      "start": 4.466875,
+      "duration": 2.8995,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "[teasing] Oh, it's easy. [smirking] You just need to change the pointers, Morty.",
+      "audioUrl": "/public/voiceovers/1778232751555/line_2.mp3",
+      "start": 7.366375,
+      "duration": 4.33625,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "[overwhelmed] Pointers?! [screaming] I don't understand! [frustrated]",
+      "audioUrl": "/public/voiceovers/1778232751555/line_3.mp3",
+      "start": 11.702625,
+      "duration": 2.925625,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "[calm] Relax, Morty. [pause] Think of it like a train. Each car points to the next one.",
+      "audioUrl": "/public/voiceovers/1778232751555/line_4.mp3",
+      "start": 14.62825,
+      "duration": 4.701937,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "[curious] Okay... [thinking] So to reverse it, I just need to... [excited] make each car point to the previous one?!",
+      "audioUrl": "/public/voiceovers/1778232751555/line_5.mp3",
+      "start": 19.330187,
+      "duration": 6.79175,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "[impressed] Exactly, Morty! [smiling] You're a genius! [laughing] Now, let's do it step by step.",
+      "audioUrl": "/public/voiceovers/1778232751555/line_6.mp3",
+      "start": 26.121937,
+      "duration": 4.884812,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "[determined] Alright! [focused] I'll start with the head of the list... [thinking] and then I'll make it point to null.",
+      "audioUrl": "/public/voiceovers/1778232751555/line_7.mp3",
+      "start": 31.006749,
+      "duration": 6.321562,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "[guiding] That's right! [encouraging] And then you'll move to the next node... [explaining] and make it point to the previous one.",
+      "audioUrl": "/public/voiceovers/1778232751555/line_8.mp3",
+      "start": 37.328311,
+      "duration": 4.989312,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "[excited] I get it! [relieved] I just need to keep doing that until I reach the end of the list! [triumphant] And then it's reversed!",
+      "audioUrl": "/public/voiceovers/1778232751555/line_9.mp3",
+      "start": 42.317623,
+      "duration": 5.355,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "[proud] That's it, Morty! [smiling] You've reversed the linked list! [laughing] Now, let's go get some szechuan sauce.",
+      "audioUrl": "/public/voiceovers/1778232751555/line_10.mp3",
+      "start": 47.672623,
+      "duration": 5.6685,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    }
+  ],
+  "bgVideoUrl": "/public/assets/subway_surfer.mp4"
+}

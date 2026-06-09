@@ -1,0 +1,16 @@
+{
+  "sessionId": "1778874352656",
+  "totalDuration": 0.574625,
+  "scenes": [
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "yoo",
+      "audioUrl": "/public/voiceovers/1778874352656/line_0.mp3",
+      "start": 0,
+      "duration": 0.574625,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    }
+  ],
+  "bgVideoUrl": "/public/assets/subway_surfer.mp4"
+}

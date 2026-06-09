@@ -1,0 +1,88 @@
+{
+  "sessionId": "1779563713669",
+  "totalDuration": 35.264500999999996,
+  "scenes": [
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "Okay Morty, imagine a tree...  but BINARY!",
+      "audioUrl": "/public/voiceovers/1779563713669/line_0.mp3",
+      "start": 0,
+      "duration": 4.284,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "Uh, like a tree with...  zeros and ones?",
+      "audioUrl": "/public/voiceovers/1779563713669/line_1.mp3",
+      "start": 4.284,
+      "duration": 4.623563,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "YES, Morty! Now, to invert it...  you gotta FLIP IT!",
+      "audioUrl": "/public/voiceovers/1779563713669/line_2.mp3",
+      "start": 8.907563,
+      "duration": 3.500313,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "Just... flip it?  That's it?",
+      "audioUrl": "/public/voiceovers/1779563713669/line_3.mp3",
+      "start": 12.407876,
+      "duration": 3.683187,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "NO, not like that!  You swap the left and right child nodes!",
+      "audioUrl": "/public/voiceovers/1779563713669/line_4.mp3",
+      "start": 16.091063,
+      "duration": 3.9705,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "OH, like a mirror!  I get it!",
+      "audioUrl": "/public/voiceovers/1779563713669/line_5.mp3",
+      "start": 20.061563,
+      "duration": 2.84725,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "Exactly, Morty!  Now you can invert a binary tree...  maybe.",
+      "audioUrl": "/public/voiceovers/1779563713669/line_6.mp3",
+      "start": 22.908813,
+      "duration": 4.466875,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "I'll practice!  Watch me invert this tree!",
+      "audioUrl": "/public/voiceovers/1779563713669/line_7.mp3",
+      "start": 27.375687999999997,
+      "duration": 3.082375,
+      "imageUrl": "/public/characters/morty smith.png"
+    },
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "Go ahead, Morty...  try not to break it.",
+      "audioUrl": "/public/voiceovers/1779563713669/line_8.mp3",
+      "start": 30.458062999999996,
+      "duration": 4.806438,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    }
+  ],
+  "bgVideoUrl": "/public/assets/subway_surfer.mp4"
+}

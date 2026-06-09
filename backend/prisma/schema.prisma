@@ -24,4 +24,93 @@ model Character {
   category    String
 }
 
+model User {
+  id       String    @id @default(cuid())
+  email    String    @unique
+  password String
+  name     String?
+  projects Project[]
+}
 
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  emoji     String   @default("🎬")
+  style     String   @default("product-hook")
+  state     Json     @default("{}")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaignId         String?
+  campaign           Campaign? @relation(fields: [campaignId], references: [id])
+  productId          String?
+  product            Product?  @relation(fields: [productId], references: [id])
+  scriptGenerationId String?
+  scriptGeneration   ScriptGeneration? @relation(fields: [scriptGenerationId], references: [id])
+
+  @@index([userId])
+}
+
+model Campaign {
+  id           String             @id @default(cuid())
+  website      String
+  status       String             @default("PENDING")
+  createdAt    DateTime           @default(now())
+  brandContext BrandContext?
+  products     Product[]
+  scripts      ScriptGeneration[]
+  projects     Project[]
+}
+
+model BrandContext {
+  id                  String   @id @default(cuid())
+  campaignId          String   @unique
+  campaign            Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  brandName           String
+  productCategory     String
+  targetAudience      String[]
+  benefits            String[]
+  painPoints          String[]
+  objections          String[]
+  uniqueSellingPoints String[]
+  brandVoice          String
+  socialProof            String[]
+
+  productSummary         String   @default("")
+  customerDesires        String[]
+  emotionalTriggers      String[]
+  purchaseMotivations    String[]
+  contentAngles          String[]
+  hooks                  Json?
+  competitorAlternatives String[]
+  customerIdentity       String[]
+}
+
+model Product {
+  id          String             @id @default(cuid())
+  campaignId  String
+  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  imageUrls   String[]
+  url         String?
+  scripts     ScriptGeneration[]
+  projects    Project[]
+}
+
+model ScriptGeneration {
+  id              String   @id @default(cuid())
+  campaignId      String
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  hook            String
+  scenes          Json     @default("[]") // Array of { onScreenText: string, videoPrompt: string, durationSeconds: number }
+  templateType    String
+  cta             String
+  durationSeconds Int
+  createdAt       DateTime @default(now())
+  projects        Project[]
+}

@@ -59,12 +59,11 @@ async function fetchModelId(characterName: string): Promise<string | null> {
 }
 
 export const generateScriptVoiceover = async (req: Request, res: Response): Promise<void> => {
-    const sessionId = Date.now().toString();
-    const publicDir = path.join(process.cwd(), "public", "voiceovers");
-    const sessionDir = path.join(publicDir, sessionId);
-
     try {
-        const { dialogue } = req.body;
+        const { dialogue, sessionId: reqSessionId } = req.body;
+        const sessionId = reqSessionId || Date.now().toString();
+        const publicDir = path.join(process.cwd(), "public", "voiceovers");
+        const sessionDir = path.join(publicDir, sessionId);
 
         if (!dialogue || !Array.isArray(dialogue)) {
             res.status(400).json({ error: "Invalid dialogue format" });
@@ -99,11 +98,11 @@ export const generateScriptVoiceover = async (req: Request, res: Response): Prom
             }
 
             if (!refId || refId === "your_id_here") {
-                console.error(`Skipping line ${i}: No voice found for "${identifier || 'unknown'}"`);
-                continue;
+                throw new Error(`No voice reference ID found for character "${charData?.name || identifier}". Please update the character in the database or set a default REFERENCE_ID in .env`);
             }
 
-            console.log(`Generating audio for line ${i} (${charData?.name || identifier}) using ID ${refId}...`);
+            const lineIdx = item.originalIndex !== undefined ? item.originalIndex : i;
+            console.log(`Generating audio for line ${lineIdx} (${charData?.name || identifier}) using ID ${refId}...`);
 
             const response = await fetch("https://api.fish.audio/v1/tts", {
                 method: "POST",
@@ -121,12 +120,12 @@ export const generateScriptVoiceover = async (req: Request, res: Response): Prom
             });
 
             if (!response.ok) {
-                console.error(`Error on line ${i}: ${await response.text()}`);
-                continue;
+                const errorText = await response.text();
+                throw new Error(`Failed to generate audio for line ${lineIdx}: ${errorText}`);
             }
 
             const buffer = Buffer.from(await response.arrayBuffer());
-            const outputFilename = `line_${i}.mp3`;
+            const outputFilename = `line_${lineIdx}.mp3`;
             const outputPath = path.join(sessionDir, outputFilename);
 
             await writeFile(outputPath, buffer);
@@ -134,11 +133,12 @@ export const generateScriptVoiceover = async (req: Request, res: Response): Prom
             // 2. Measure the exact duration of the generated audio
             const duration = await getAudioDurationInSeconds(outputPath);
 
-            // 3. Add to our metadata array
+            // 3. Add to our metadata array (Clean text for subtitles)
+            const cleanText = item.line.replace(/\[.*?\]/g, '').trim();
             processedScenes.push({
                 characterId: charData?.id || identifier,
                 characterName: charData?.name || identifier,
-                text: item.line,
+                text: cleanText,
                 audioUrl: `/public/voiceovers/${sessionId}/${outputFilename}`,
                 start: currentTime,
                 duration: duration,
@@ -167,48 +167,75 @@ export const generateScriptVoiceover = async (req: Request, res: Response): Prom
             data: finalMetadata
         });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Script voiceover error:", error);
-        res.status(500).json({ error: "Internal server error" });
+        res.status(500).json({ error: error.message || "Internal server error" });
     }
 };
 
 export const generateVoiceOver = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { text, reference_id } = req.body;
+        const { text, reference_id, sessionId, lineIndex } = req.body;
 
         if (!text) {
             res.status(400).json({ error: "Text is required" });
             return;
         }
 
-        const refId = reference_id || process.env.REFERENCE_ID;
+        let refId = reference_id || process.env.REFERENCE_ID;
+        const sId = sessionId || Date.now().toString();
+        const lIdx = lineIndex !== undefined ? lineIndex : "custom";
 
-        const client = await getFishAudio();
-        const audio = await client.textToSpeech.convert({
-            text: text,
-            reference_id: refId,
+        if (!refId || refId === "your_id_here") {
+            res.status(400).json({ error: "No valid voice reference ID found. Please set a valid REFERENCE_ID in .env or update the character." });
+            return;
+        }
+
+        console.log(`Generating audio for single line ${lIdx} using ID ${refId}...`);
+
+        const response = await fetch("https://api.fish.audio/v1/tts", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.FISH_API_KEY}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                text: text,
+                reference_id: [refId], 
+                format: "mp3",
+                normalize: true,
+                latency: "normal"
+            })
         });
 
-        // fish-audio convert returns a Blob or standard node structure
-        const buffer = Buffer.from(await new Response(audio as any).arrayBuffer());
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Fish Audio API error for line ${lIdx}:`, errorText);
+            res.status(response.status).json({ error: `Fish Audio API error: ${errorText}` });
+            return;
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
         
         const publicDir = path.join(process.cwd(), "public", "voiceovers");
-        await mkdir(publicDir, { recursive: true });
+        const sessionDir = path.join(publicDir, sId);
+        await mkdir(sessionDir, { recursive: true });
 
-        const filename = `custom_voice_${Date.now()}.mp3`;
-        const filepath = path.join(publicDir, filename);
+        const filename = `line_${lIdx}.mp3`;
+        const filepath = path.join(sessionDir, filename);
         
         await writeFile(filepath, buffer);
-        console.log(`✓ Audio saved to ${filename}`);
+        const duration = await getAudioDurationInSeconds(filepath);
+        console.log(`✓ Audio saved to ${sId}/${filename} (${duration}s)`);
 
         res.status(200).json({ 
             message: "Audio saved successfully", 
-            url: `/public/voiceovers/${filename}`,
-            filename: filename 
+            url: `/public/voiceovers/${sId}/${filename}`,
+            filename: filename,
+            duration: duration
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Voiceover error:", error);
-        res.status(500).json({ error: "Internal server error" });
+        res.status(500).json({ error: error.message || "Internal server error" });
     }
 };

@@ -5,7 +5,11 @@ import prisma from "../lib/prisma";
 export const getAllCharacters = async (req: Request, res: Response): Promise<void> => {
     try {
         const characters = await prisma.character.findMany();
-        res.status(200).json(characters);
+        const charactersWithImages = characters.map(c => ({
+            ...c,
+            imageUrl: `/public/characters/${c.name.toLowerCase()}.png`
+        }));
+        res.status(200).json(charactersWithImages);
     } catch (error) {
         console.error("Error fetching characters:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -25,7 +29,10 @@ export const getCharacterById = async (req: Request, res: Response): Promise<voi
             return;
         }
 
-        res.status(200).json(character);
+        res.status(200).json({
+            ...character,
+            imageUrl: `/public/characters/${character.name.toLowerCase()}.png`
+        });
     } catch (error) {
         console.error("Error fetching character:", error);
         res.status(500).json({ error: "Internal server error" });

@@ -1,0 +1,25 @@
+{
+  "sessionId": "1779621571204",
+  "totalDuration": 3.0561249999999998,
+  "scenes": [
+    {
+      "characterId": "cmoto52m0000010hzm5a0hbdc",
+      "characterName": "Rick Sanchez",
+      "text": "hey , i am rick",
+      "audioUrl": "/public/voiceovers/1779621571204/line_0.mp3",
+      "start": 0,
+      "duration": 1.515,
+      "imageUrl": "/public/characters/rick sanchez.png"
+    },
+    {
+      "characterId": "cmoto5ygp000110hz7mp8jhiu",
+      "characterName": "Morty Smith",
+      "text": "hey , i am morty",
+      "audioUrl": "/public/voiceovers/1779621571204/line_1.mp3",
+      "start": 1.515,
+      "duration": 1.541125,
+      "imageUrl": "/public/characters/morty smith.png"
+    }
+  ],
+  "bgVideoUrl": "/public/assets/subway_surfer.mp4"
+}
