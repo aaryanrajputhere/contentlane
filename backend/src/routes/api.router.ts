@@ -1,0 +1,21 @@
+import { Router } from 'express';
+import { analyzeCampaign, cancelJob, createHooksJob, createImageJob, createScriptJob, createVideoJob, deleteScript, getCampaign, getJob, getScript, listScripts, quota } from '../controllers/api.controller';
+import { analyzeSchema, hookJobSchema, idParamsSchema, mediaJobSchema, scriptJobSchema, scriptsQuerySchema } from '../domain/schemas';
+import { requireAuth } from '../lib/auth';
+import { validate } from '../lib/validation';
+
+const router = Router();
+router.use(requireAuth);
+router.post('/campaigns/analyze', validate({ body: analyzeSchema }), analyzeCampaign);
+router.get('/campaigns/:id', validate({ params: idParamsSchema }), getCampaign);
+router.post('/campaigns/:id/hooks/jobs', validate({ params: idParamsSchema, body: hookJobSchema }), createHooksJob);
+router.get('/campaigns/:id/scripts', validate({ params: idParamsSchema, query: scriptsQuerySchema }), listScripts);
+router.post('/scripts/jobs', validate({ body: scriptJobSchema }), createScriptJob);
+router.get('/scripts/:id', validate({ params: idParamsSchema }), getScript);
+router.delete('/scripts/:id', validate({ params: idParamsSchema }), deleteScript);
+router.post('/scripts/:id/images/jobs', validate({ params: idParamsSchema, body: mediaJobSchema }), createImageJob);
+router.post('/scripts/:id/videos/jobs', validate({ params: idParamsSchema, body: mediaJobSchema.pick({ idempotencyKey: true }) }), createVideoJob);
+router.get('/jobs/:id', validate({ params: idParamsSchema }), getJob);
+router.post('/jobs/:id/cancel', validate({ params: idParamsSchema }), cancelJob);
+router.get('/quota', quota);
+export default router;

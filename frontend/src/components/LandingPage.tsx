@@ -1,19 +1,32 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Play, CheckCircle2, Link as LinkIcon, BrainCircuit, Target, Clapperboard, Clock, TrendingUp, Palette, Coins, Star, Layers, Check, Loader2 } from 'lucide-react';
+import { ArrowRight, Play, CheckCircle2, Link as LinkIcon, BrainCircuit, Target, Clapperboard, Clock, TrendingUp, Coins, Star, Layers, Check, Loader2 } from 'lucide-react';
 import { Header } from './Header';
 import { useNavigate } from 'react-router-dom';
+import { post, waitForJob } from '../lib/api';
+import type { AuthUser, BrandContext, Product } from '../types/domain';
+
+type AnalyzeCampaignResponse =
+  | { job: { id: string }; campaignId: string; cached?: false }
+  | {
+      campaignId: string;
+      brandContext: BrandContext;
+      products: Product[];
+      cached: true;
+    };
 
 interface Props {
   onGetStarted: () => void;
-  user?: any;
+  user?: AuthUser | null;
+  onLogout?: () => void;
 }
 
-const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
+const LandingPage: React.FC<Props> = ({ onGetStarted, onLogout, user }) => {
   const [urlInput, setUrlInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
-  const [forceRegenerate, setForceRegenerate] = useState(false);
+  const [analysisMessage, setAnalysisMessage] = useState('');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const fadeIn = {
@@ -21,10 +34,10 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
     whileInView: { opacity: 1, y: 0 },
     viewport: { once: true, margin: "-50px" },
     transition: { duration: 0.6, ease: "easeOut" }
-  };
+  } as const;
 
   const handleAnalyze = async () => {
-    if (!urlInput) {
+    if (!user || !urlInput) {
       onGetStarted();
       return;
     }
@@ -33,40 +46,19 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
     setAnalysisStep(1); // Discovering pages
 
     try {
-      // Simulate intermediate steps since API is long-polling
-      const steps = [
-        { step: 1, delay: 0 },
-        { step: 2, delay: 3000 }, // Extracting products
-        { step: 3, delay: 8000 }, // Understanding audience
-        { step: 4, delay: 15000 }, // Identifying benefits
-        { step: 5, delay: 20000 }, // Building brand profile
-      ];
+      setError('');
+      const response = await post<AnalyzeCampaignResponse>('/campaigns/analyze', { website: urlInput });
 
-      const timeouts = steps.map(s => setTimeout(() => setAnalysisStep(s.step), s.delay));
-
-      const res = await fetch('/api/campaigns/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ website: urlInput, forceRegenerate })
-      });
-
-      timeouts.forEach(clearTimeout);
-
-      if (res.ok) {
-        setAnalysisStep(5);
-        const data = await res.json();
-        setTimeout(() => {
-          navigate(`/campaign/${data.campaignId}/brand-profile`, {
-            state: { brandContext: data.brandContext, products: data.products, totalProductsFound: data.totalProductsFound }
-          });
-        }, 1000);
-      } else {
-        alert("Failed to analyze website");
-        setIsAnalyzing(false);
+      if ('job' in response) {
+        await waitForJob<{ campaignId: string; brandContext: BrandContext; products: Product[] }>(response.job.id, (progress, message) => {
+          setAnalysisStep(Math.max(1, Math.ceil(progress / 20)));
+          setAnalysisMessage(message ?? 'Analyzing website');
+        });
       }
-    } catch (error) {
-      console.error(error);
-      alert("Error occurred during analysis");
+
+      navigate(`/campaign/${response.campaignId}/brand-profile`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Website analysis failed');
       setIsAnalyzing(false);
     }
   };
@@ -77,8 +69,10 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
       <Header 
         type="landing"
         user={user}
+        onLogout={onLogout}
         onGetStarted={onGetStarted}
         onGoToLanding={() => {}}
+        actions={user?.role === 'ADMIN' ? <div className="flex items-center gap-4"><button onClick={() => navigate('/admin/creators')} className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Creators</button><button onClick={() => navigate('/admin/hooks')} className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Hooks</button></div> : undefined}
       />
 
       <main className="pt-24 pb-20 px-6 max-w-7xl mx-auto flex flex-col gap-32">
@@ -131,19 +125,6 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
               </button>
             </div>
             
-            <div className="w-full flex items-center gap-2 px-2">
-              <input 
-                type="checkbox" 
-                id="forceRegenerate" 
-                checked={forceRegenerate}
-                onChange={(e) => setForceRegenerate(e.target.checked)}
-                className="w-4 h-4 rounded border-white/20 bg-black text-dodgerblue focus:ring-dodgerblue focus:ring-offset-zinc-900"
-              />
-              <label htmlFor="forceRegenerate" className="text-sm text-zinc-400 font-medium cursor-pointer hover:text-zinc-300 transition-colors">
-                Force re-analysis (ignore cached results)
-              </label>
-            </div>
-            
             {isAnalyzing && (
               <div className="w-full mt-4 space-y-2 p-4 bg-zinc-900/50 rounded-xl border border-white/[0.05]">
                  <div className="flex items-center gap-3 text-sm">
@@ -178,6 +159,8 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
                  </div>
               </div>
             )}
+            {analysisMessage && isAnalyzing && <p role="status" className="text-sm text-zinc-400">{analysisMessage}</p>}
+            {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
 
             <button className="text-sm font-medium text-zinc-400 hover:text-white flex items-center gap-2 transition-colors">
               <Play className="w-4 h-4" /> Watch Demo
@@ -311,25 +294,7 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
           </div>
         </section>
 
-        {/* SECTION 6: VIDEO SHOWCASE */}
-        <section className="relative z-10 py-16 border-y border-white/[0.05]">
-          <motion.div {...fadeIn} className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tight">Content Generated By ReelSwarm</h2>
-          </motion.div>
-
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8">
-            {["/assets/landing/demo1.mp4", "/assets/landing/demo2.mp4", "/assets/landing/demo3.mp4"].map((video, i) => (
-              <motion.div 
-                {...fadeIn} transition={{ delay: 0.1 * i }}
-                key={i} 
-                className="relative w-full max-w-[280px] aspect-[9/16] rounded-[2.5rem] bg-black border-[6px] border-zinc-900 shadow-2xl overflow-hidden shrink-0"
-              >
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-5 bg-zinc-900 rounded-b-xl z-20" />
-                <video autoPlay loop muted playsInline src={video} className="w-full h-full object-cover" />
-              </motion.div>
-            ))}
-          </div>
-        </section>
+        {/* SECTION 6: VIDEO SHOWCASE (removed) */}
 
         {/* SECTION 7: BENEFITS */}
         <section className="relative z-10">

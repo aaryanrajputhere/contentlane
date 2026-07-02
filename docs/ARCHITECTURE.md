@@ -1,40 +1,29 @@
-# System Architecture: Brainrot Studio
+# ReelSwarm Architecture
 
-## Overview
-Brainrot Studio is a full-stack application that enables users to generate "brainrot" style videos using AI-generated scripts, synthesized voices, and dynamic visual overlays.
+## Frontend
 
-## Components
+The React/Vite SPA implements this route flow:
 
-### 1. Frontend (React + Vite)
-- **Framework**: React 18 with TypeScript.
-- **Rendering Engine**: [Remotion](https://www.remotion.dev/) for frame-by-frame video synthesis in the browser.
-- **Communication**: Interacts with the backend via REST API.
-- **Key Modules**:
-    - `StudioMonitor`: The primary workspace for visual positioning and previewing.
-    - `ScriptEditor`: Interface for AI script generation and audio synthesis.
-    - `AssetManager`: Handles character images and background videos.
+```text
+/ → /campaign/:id/brand-profile → /campaign/:id/hooks
+  → /campaign/:id/scripts → /editor
+```
 
-### 2. Backend (Node.js + Express)
-- **Framework**: Express.js with TypeScript.
-- **Database**: PostgreSQL with Prisma ORM.
-- **API Endpoints**:
-    - `/api/auth`: User registration and login.
-    - `/api/scripts`: Script generation logic.
-    - `/api/voice`: Synthesis of audio clips.
-    - `/api/characters`: Metadata and assets for video characters.
-    - `/api/video`: Video project management.
+Campaign data is passed between workflow pages through router state. `EditorPage` previews generated scene videos and exports the assembled result with Canvas, Web Audio, and MediaRecorder.
 
-### 3. Video Rendering Pipeline
-- **Browser-Based**: Rendering occurs primarily on the client side using `@remotion/web-renderer`.
-- **Audio Synthesis**: Backend fetches audio from external TTS APIs and serves them via `/public` assets.
-- **Composition**: Assets (background, characters, subtitles) are layered in real-time within the Remotion `Composition`.
+## Backend
 
-## Data Model (Prisma)
-- **User**: Stores authentication and profile data.
-- **Character**: Metadata for visual assets including `referenceId`, `description`, and `tags`.
-- **Project/Video**: (Planned) To store script state, asset positions, and rendering configurations.
+Express exposes REST endpoints for:
 
-## Security & Performance
-- **Cross-Origin Isolation**: Necessary for shared array buffers and high-performance video rendering.
-- **Stateless Auth**: (Planned) JWT-based authentication.
-- **Asset Caching**: Background videos and audio clips are served with appropriate headers for browser caching.
+- `/api/auth`: signup and login.
+- `/api/campaigns`: website analysis, persisted brand context, products, and hooks.
+- `/api/scripts`: marketing-script generation and retrieval.
+- `/api/images`: image upload plus RunPod image/video generation.
+- `/api/creators`: optional marketing spokesperson assets.
+- `/api/proxy`: cross-origin image loading for the browser editor.
+
+## Data and integrations
+
+PostgreSQL is accessed through Prisma. The retained models are `User`, `Campaign`, `BrandContext`, `Product`, `ScriptGeneration`, and `Creator`.
+
+External integrations are Firecrawl, Hugging Face inference, RunPod, and Cloudinary. Generated media is stored in Cloudinary rather than in the repository.

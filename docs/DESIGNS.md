@@ -1,35 +1,12 @@
-# Design System: Brainrot Studio
+# ReelSwarm Design System
 
-## Core Aesthetic
-- **Vibe**: High-energy, chaotic yet polished, dark mode, high contrast.
-- **Inspiration**: TikTok/Shorts trends, cyberpunk, gaming dashboards.
+ReelSwarm uses a dark, high-contrast interface optimized for short-form marketing workflows.
 
-## Color Palette
-- **Background**: `#000000` (Pitch Black)
-- **Primary/Accent**: `#3080FF` (Dodger Blue)
-- **Secondary**: Dark grays (`#111`, `#222`, `#333`)
-- **Text**: `#FFFFFF` (White)
-- **Subtext**: Gray-400/500
+- Background: black and near-black surfaces.
+- Accent: `#3080FF`.
+- Typography: bold sans-serif headings with compact supporting copy.
+- Cards: subtle white borders, rounded corners, and restrained glow effects.
+- Video: portrait 9:16 previews with prominent scene controls.
+- Feedback: explicit loading states for website analysis and AI media generation.
 
-## Typography
-- **Primary Font**: `Inter` (Sans-serif)
-- **Weight**: Bold/Extra-Bold for headings and subtitles.
-
-## Component Patterns0
-- Sticky video preview on the right.
-- Responsive container that maintains 9:16 aspect ratio.
-- Ghost overlays for positioning elements.
-
-### 2. Script Editor
-- Line-by-line editing.
-- Integration with Voiceover generation status.
-- Bulk actions (Generate all, Clear all).
-
-### 3. Subtitles
-- Large, centered, high-contrast text.
-- Dynamic animations (pop-in, scaling) synced with audio.
-
-## UX Principles
-- **Instant Feedback**: Preview should update as soon as the script or layout changes.
-- **Gesture Support**: Hit-testing for moving characters and text instead of manual coordinate inputs.
-- **Workflow-Centric**: Step-by-step navigation (Script -> Character -> Background -> Render).
+The workflow should always make the current stage clear: website, brand profile, hooks, scripts, media generation, then editor.

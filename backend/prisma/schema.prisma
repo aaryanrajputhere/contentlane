@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,77 +7,106 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
 
+enum CampaignStatus {
+  PENDING
+  ANALYZING
+  COMPLETED
+  FAILED
+}
 
-model Character {
-  id          String   @id @default(cuid())
-  name        String
-  referenceId String
-  description String
-  tags        String[]
-  category    String
+enum JobType {
+  CAMPAIGN_ANALYSIS
+  HOOK_GENERATION
+  SCRIPT_GENERATION
+  IMAGE_GENERATION
+  VIDEO_GENERATION
+}
+
+enum JobStatus {
+  QUEUED
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum UsageStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
 }
 
 model User {
-  id       String    @id @default(cuid())
-  email    String    @unique
-  password String
-  name     String?
-  projects Project[]
+  id            String          @id @default(cuid())
+  email         String          @unique
+  password      String
+  name          String?
+  role          UserRole        @default(USER)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  campaigns     Campaign[]
+  jobs          GenerationJob[]
+  usageEvents   UsageEvent[]
+  allowedEmails AllowedEmail[]  @relation("AllowedEmailCreator")
 }
 
-model Project {
-  id        String   @id @default(cuid())
-  name      String
-  emoji     String   @default("🎬")
-  style     String   @default("product-hook")
-  state     Json     @default("{}")
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  campaignId         String?
-  campaign           Campaign? @relation(fields: [campaignId], references: [id])
-  productId          String?
-  product            Product?  @relation(fields: [productId], references: [id])
-  scriptGenerationId String?
-  scriptGeneration   ScriptGeneration? @relation(fields: [scriptGenerationId], references: [id])
-
-  @@index([userId])
+model AllowedEmail {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation("AllowedEmailCreator", fields: [createdById], references: [id], onDelete: SetNull)
 }
 
 model Campaign {
   id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   website      String
-  status       String             @default("PENDING")
+  websiteKey   String
+  status       CampaignStatus     @default(PENDING)
   createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
   brandContext BrandContext?
   products     Product[]
   scripts      ScriptGeneration[]
-  projects     Project[]
+  jobs         GenerationJob[]
+  mediaAssets  MediaAsset[]
+
+  @@unique([userId, websiteKey])
+  @@index([userId, createdAt])
+  @@index([userId, status])
 }
 
 model BrandContext {
-  id                  String   @id @default(cuid())
-  campaignId          String   @unique
-  campaign            Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  brandName           String
-  productCategory     String
-  targetAudience      String[]
-  benefits            String[]
-  painPoints          String[]
-  objections          String[]
-  uniqueSellingPoints String[]
-  brandVoice          String
+  id                     String   @id @default(cuid())
+  campaignId             String   @unique
+  campaign               Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  brandName              String
+  productCategory        String
+  targetAudience         String[]
+  benefits               String[]
+  painPoints             String[]
+  objections             String[]
+  uniqueSellingPoints    String[]
+  brandVoice             String
   socialProof            String[]
-
   productSummary         String   @default("")
   customerDesires        String[]
   emotionalTriggers      String[]
   purchaseMotivations    String[]
   contentAngles          String[]
-  hooks                  Json?
+  hooks                   Json?
   competitorAlternatives String[]
   customerIdentity       String[]
 }
@@ -92,25 +115,123 @@ model Product {
   id          String             @id @default(cuid())
   campaignId  String
   campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  sourceKey   String
   name        String
   description String
   imageUrls   String[]
   url         String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
   scripts     ScriptGeneration[]
-  projects    Project[]
+
+  @@unique([campaignId, sourceKey])
+  @@index([campaignId])
 }
 
 model ScriptGeneration {
-  id              String   @id @default(cuid())
+  id              String       @id @default(cuid())
   campaignId      String
-  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign        Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   productId       String
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product         Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
   hook            String
-  scenes          Json     @default("[]") // Array of { onScreenText: string, videoPrompt: string, durationSeconds: number }
+  scenes          Json         @default("[]")
   templateType    String
   cta             String
   durationSeconds Int
-  createdAt       DateTime @default(now())
-  projects        Project[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  jobs            GenerationJob[]
+  mediaAssets     MediaAsset[]
+
+  @@index([campaignId, productId, createdAt])
+}
+
+model HookTemplate {
+  id                   String   @id @default(cuid())
+  title                String
+  text                 String
+  templateType         String
+  sceneDurationSeconds Int      @default(2)
+  scenes               Json
+  sortOrder            Int      @default(0)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@index([sortOrder])
+}
+
+model GenerationJob {
+  id                String       @id @default(cuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId        String?
+  campaign          Campaign?    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scriptId          String?
+  script            ScriptGeneration? @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  type              JobType
+  status            JobStatus    @default(QUEUED)
+  progress          Int          @default(0)
+  progressMessage   String?
+  input             Json
+  result            Json?
+  errorCode         String?
+  errorMessage      String?
+  idempotencyKey    String
+  cancelRequestedAt DateTime?
+  attempts          Int          @default(0)
+  createdAt         DateTime     @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  updatedAt         DateTime     @updatedAt
+  usageEvents       UsageEvent[]
+
+  @@unique([userId, type, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model UsageEvent {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId       String
+  job         GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  category    String
+  units       Int
+  status      UsageStatus @default(RESERVED)
+  periodStart DateTime
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([userId, category, periodStart, status])
+}
+
+model MediaAsset {
+  id          String      @id @default(cuid())
+  campaignId  String
+  campaign    Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scriptId    String
+  script      ScriptGeneration @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  sceneIndex  Int
+  type        MediaType
+  provider    String
+  providerId  String?
+  secureUrl   String
+  mimeType    String?
+  bytes       Int?
+  createdAt   DateTime    @default(now())
+
+  @@index([scriptId, sceneIndex])
+}
+
+model Creator {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

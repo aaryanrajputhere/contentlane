@@ -1,140 +1,23 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
+import { post } from '../lib/api';
 
-interface Props {
-  onAuthSuccess: (user: any) => void;
-  onBack: () => void;
+interface Props { onAuthSuccess: () => void; onBack: () => void }
+export default function AuthPage({ onAuthSuccess, onBack }: Props) {
+  const [isLogin, setIsLogin] = useState(true); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [name, setName] = useState(''); const [loading, setLoading] = useState(false); const [error, setError] = useState('');
+  const submit = async (event: FormEvent) => { event.preventDefault(); setLoading(true); setError(''); try { await post(`/auth/${isLogin ? 'login' : 'signup'}`, isLogin ? { email, password } : { email, password, name }); onAuthSuccess(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Authentication failed'); } finally { setLoading(false); } };
+  return <main className="min-h-screen bg-[#020202] text-white flex items-center justify-center p-6">
+    <section className="w-full max-w-md bg-[#080808] border border-zinc-800 rounded-3xl p-8">
+      <button onClick={onBack} className="text-sm text-zinc-400 hover:text-white mb-8">← Back</button>
+      <h1 className="text-3xl font-black mb-2">{isLogin ? 'Sign in' : 'Private beta signup'}</h1>
+      <p className="text-zinc-400 text-sm mb-8">{isLogin ? 'Use your ReelSwarm account.' : 'Your email must be allowlisted by an administrator.'}</p>
+      <form onSubmit={submit} className="space-y-5">
+        {!isLogin && <label className="block text-sm">Name<input className="mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3" value={name} onChange={event => setName(event.target.value)} required /></label>}
+        <label className="block text-sm">Email<input type="email" autoComplete="email" className="mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3" value={email} onChange={event => setEmail(event.target.value)} required /></label>
+        <label className="block text-sm">Password<input type="password" minLength={12} autoComplete={isLogin ? 'current-password' : 'new-password'} className="mt-2 w-full bg-zinc-900 border border-zinc-700 rounded-xl p-3" value={password} onChange={event => setPassword(event.target.value)} required /><span className="block mt-1 text-xs text-zinc-500">Minimum 12 characters</span></label>
+        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        <button disabled={loading} className="w-full bg-white text-black rounded-xl p-3 font-bold disabled:opacity-50">{loading ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}</button>
+      </form>
+      <button onClick={() => { setIsLogin(value => !value); setError(''); }} className="mt-6 text-sm text-blue-400">{isLogin ? 'Need an account?' : 'Already registered?'}</button>
+    </section>
+  </main>;
 }
-
-const AuthPage: React.FC<Props> = ({ onAuthSuccess, onBack }) => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-    const body = isLogin ? { email, password } : { email, password, name };
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Something went wrong');
-      }
-
-      // Persist JWT and user info so the session survives a page refresh
-      localStorage.setItem('reelswarm-jwt', data.token);
-      localStorage.setItem('reelswarm-user', JSON.stringify(data.user));
-
-      onAuthSuccess(data.user);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#020202] text-white flex items-center justify-center p-6 selection:bg-dodgerblue/30 relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-dodgerblue/10 blur-[120px] rounded-full pointer-events-none" />
-
-      <div className="w-full max-w-md relative z-10 animate-in fade-in zoom-in-95 duration-500">
-        <button 
-          onClick={onBack}
-          className="mb-8 flex items-center gap-2 text-zinc-500 hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest group"
-        >
-          <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Landing
-        </button>
-
-        <div className="bg-[#050505] border border-zinc-900 rounded-[32px] p-10 shadow-2xl">
-          <div className="text-center mb-10">
-            <div className="w-12 h-12 bg-dodgerblue rounded-2xl flex items-center justify-center font-black text-black text-xs shadow-lg shadow-dodgerblue/20 mx-auto mb-6">B</div>
-            <h2 className="text-3xl font-black tracking-tighter mb-2">{isLogin ? 'WELCOME BACK' : 'JOIN THE CHAOS'}</h2>
-            <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
-              {isLogin ? 'Enter your credentials to continue' : 'Create your account to start generating'}
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {!isLogin && (
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 px-1">Full Name</label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-5 py-4 text-white placeholder:text-zinc-700 outline-none focus:border-dodgerblue transition-all"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-            )}
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 px-1">Email Address</label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-5 py-4 text-white placeholder:text-zinc-700 outline-none focus:border-dodgerblue transition-all"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 px-1">Password</label>
-              <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-zinc-900/50 border border-zinc-800 rounded-xl px-5 py-4 text-white placeholder:text-zinc-700 outline-none focus:border-dodgerblue transition-all"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase tracking-widest p-4 rounded-xl text-center">
-                ⚠ {error}
-              </div>
-            )}
-
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full py-5 bg-dodgerblue text-black font-black uppercase tracking-widest text-xs rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-dodgerblue/20 disabled:opacity-50 disabled:scale-100 mt-4"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
-              ) : (
-                isLogin ? 'Sign In' : 'Create Account'
-              )}
-            </button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-zinc-500 hover:text-dodgerblue transition-colors text-[10px] font-black uppercase tracking-widest"
-            >
-              {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default AuthPage;
