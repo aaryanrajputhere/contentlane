@@ -1,30 +1,50 @@
 import 'dotenv/config';
-import { Prisma, PrismaClient, UserRole } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-import { defaultHookTemplates } from '../src/domain/defaultHookTemplates';
+import { PrismaClient } from '@prisma/client';
+import { hashPassword, normalizeEmail } from '../src/lib/auth';
 
 const prisma = new PrismaClient();
-const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@reelswarm.local').trim().toLowerCase();
-const password = process.env.SEED_ADMIN_PASSWORD ?? 'local-admin-password';
-if (password.length < 12) throw new Error('SEED_ADMIN_PASSWORD must contain at least 12 characters');
 
 async function main() {
-  await prisma.allowedEmail.upsert({ where: { email }, update: {}, create: { email } });
-  const admin = await prisma.user.upsert({ where: { email }, update: { role: UserRole.ADMIN, password: await bcrypt.hash(password, 12) }, create: { email, password: await bcrypt.hash(password, 12), name: process.env.SEED_ADMIN_NAME ?? 'Local Admin', role: UserRole.ADMIN } });
-  await prisma.campaign.updateMany({ where: { userId: '' }, data: { userId: admin.id } });
-  for (const creator of [
-    { name: 'Casual Creator', description: 'A young, energetic short-form creator.' },
-    { name: 'Professional Expert', description: 'A confident expert in a modern office.' },
-    { name: 'Tech Creator', description: 'A high-energy product reviewer.' },
-  ]) await prisma.creator.upsert({ where: { id: creator.name.toLowerCase().replace(/ /g, '_') }, update: creator, create: { id: creator.name.toLowerCase().replace(/ /g, '_'), ...creator } });
-  for (const template of defaultHookTemplates) {
-    const id = template.templateType.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-    await prisma.hookTemplate.upsert({
-      where: { id },
-      update: { ...template, scenes: template.scenes as Prisma.InputJsonValue },
-      create: { id, ...template, scenes: template.scenes as Prisma.InputJsonValue },
-    });
+  const email = process.env.SEED_ADMIN_EMAIL?.trim();
+  const password = process.env.SEED_ADMIN_PASSWORD?.trim();
+  const name = process.env.SEED_ADMIN_NAME?.trim() || 'ReelSwarm Admin';
+
+  if (!email || !password) {
+    console.log('Seed skipped: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are not set.');
+    return;
   }
-  console.log(`Seeded admin ${admin.email}`);
+
+  const normalizedEmail = normalizeEmail(email);
+
+  await prisma.allowedEmail.upsert({
+    where: { email: normalizedEmail },
+    update: {},
+    create: { email: normalizedEmail },
+  });
+
+  await prisma.user.upsert({
+    where: { email: normalizedEmail },
+    update: {
+      name,
+      role: 'ADMIN',
+      passwordHash: await hashPassword(password),
+    },
+    create: {
+      email: normalizedEmail,
+      name,
+      role: 'ADMIN',
+      passwordHash: await hashPassword(password),
+    },
+  });
+
+  console.log(`Seeded admin user ${normalizedEmail}`);
 }
-main().finally(() => prisma.$disconnect());
+
+void main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

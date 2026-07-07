@@ -1,31 +1,84 @@
-import type { RequestHandler } from 'express';
+import type { Response } from 'express';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '@prisma/client';
 import { config } from '../config';
-import prisma from './prisma';
-import { ApiError } from './errors';
 
-export const AUTH_COOKIE = 'reelswarm_session';
+const sessionTtlMs = config.SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 
-export const signSession = (userId: string) => jwt.sign({ sub: userId }, config.JWT_SECRET, { expiresIn: '7d' });
+export type AuthUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: 'USER' | 'ADMIN';
+};
 
-export const requireAuth: RequestHandler = async (req, _res, next) => {
-  try {
-    const token = req.cookies?.[AUTH_COOKIE] as string | undefined;
-    if (!token) throw new ApiError(401, 'UNAUTHENTICATED', 'Authentication required');
-    const payload = jwt.verify(token, config.JWT_SECRET);
-    const userId = typeof payload === 'object' ? payload.sub : undefined;
-    if (typeof userId !== 'string') throw new ApiError(401, 'UNAUTHENTICATED', 'Invalid session');
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, role: true } });
-    if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Invalid session');
-    req.auth = { userId: user.id, email: user.email, role: user.role };
-    next();
-  } catch (error) {
-    next(error instanceof ApiError ? error : new ApiError(401, 'UNAUTHENTICATED', 'Invalid or expired session'));
+type SessionClaims = {
+  sub: string;
+  email: string;
+  role: AuthUser['role'];
+};
+
+function baseCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: config.NODE_ENV === 'production',
+    path: '/',
+  };
+}
+
+export function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+export async function hashPassword(password: string) {
+  return bcrypt.hash(password, 12);
+}
+
+export async function verifyPassword(password: string, passwordHash: string) {
+  return bcrypt.compare(password, passwordHash);
+}
+
+export function signSession(user: AuthUser) {
+  return jwt.sign(
+    { email: user.email, role: user.role },
+    config.JWT_SECRET,
+    {
+      algorithm: 'HS256',
+      expiresIn: `${config.SESSION_TTL_DAYS}d`,
+      subject: user.id,
+    },
+  );
+}
+
+export function verifySession(token: string): SessionClaims {
+  const payload = jwt.verify(token, config.JWT_SECRET);
+  if (!payload || typeof payload === 'string' || typeof payload.sub !== 'string' || typeof payload.email !== 'string') {
+    throw new Error('Invalid session');
   }
-};
+  return {
+    sub: payload.sub,
+    email: payload.email,
+    role: payload.role === 'ADMIN' ? 'ADMIN' : 'USER',
+  };
+}
 
-export const requireAdmin: RequestHandler = (req, _res, next) => {
-  if (req.auth?.role !== UserRole.ADMIN) return next(new ApiError(403, 'FORBIDDEN', 'Administrator access required'));
-  next();
-};
+export function setSessionCookie(res: Response, user: AuthUser) {
+  res.cookie(config.COOKIE_NAME, signSession(user), {
+    ...baseCookieOptions(),
+    maxAge: sessionTtlMs,
+  });
+}
+
+export function clearSessionCookie(res: Response) {
+  res.clearCookie(config.COOKIE_NAME, baseCookieOptions());
+}
+
+export function toAuthUser(user: { id: string; email: string; name: string | null; role: 'USER' | 'ADMIN' }): AuthUser {
+  return {
+    id: user.id,
+    email: normalizeEmail(user.email),
+    name: user.name,
+    role: user.role,
+  };
+}

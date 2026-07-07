@@ -1,30 +1,43 @@
-import { Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
-import AuthPage from './components/AuthPage';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import AdminCreatorsPage from './components/AdminCreatorsPage';
-import AdminHooksPage from './components/AdminHooksPage';
-import BrandProfile from './components/BrandProfile';
-import EditorPage from './components/EditorPage';
+import AuthPage from './components/AuthPage';
 import LandingPage from './components/LandingPage';
-import ScriptReview from './components/ScriptReview';
-import { useAuth } from './context/AuthContext';
-
-function Protected() { const { user, loading } = useAuth(); if (loading) return <div className="min-h-screen bg-[#050505]" />; return user ? <Outlet /> : <Navigate to="/auth" replace />; }
-function AdminProtected() { const { user, loading } = useAuth(); if (loading) return <div className="min-h-screen bg-[#050505]" />; return user?.role === 'ADMIN' ? <Outlet /> : <Navigate to="/" replace />; }
+import ProjectPage from './components/ProjectPage';
+import ProjectRenderPage from './components/ProjectRenderPage';
+import { PublicOnlyRoute, RequireAdmin, RequireAuth } from './lib/auth';
 
 export default function App() {
-  const navigate = useNavigate(); const { user, refresh, logout } = useAuth();
-  return <Routes>
-    <Route path="/" element={<LandingPage user={user} onLogout={() => void logout()} onGetStarted={() => navigate(user ? '/' : '/auth')} />} />
-    <Route path="/auth" element={user ? <Navigate to="/" replace /> : <AuthPage onAuthSuccess={() => { void refresh(); navigate('/'); }} onBack={() => navigate('/')} />} />
-    <Route element={<Protected />}>
-      <Route path="/campaign/:id/brand-profile" element={<BrandProfile />} />
-      <Route path="/campaign/:id/scripts" element={<ScriptReview />} />
-      <Route path="/editor/:scriptId" element={<EditorPage />} />
-    </Route>
-    <Route element={<AdminProtected />}>
-      <Route path="/admin/creators" element={<AdminCreatorsPage />} />
-      <Route path="/admin/hooks" element={<AdminHooksPage />} />
-    </Route>
-    <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes>;
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route
+        path="/login"
+        element={(
+          <PublicOnlyRoute>
+            <AuthPage mode="login" />
+          </PublicOnlyRoute>
+        )}
+      />
+      <Route
+        path="/signup"
+        element={(
+          <PublicOnlyRoute>
+            <AuthPage mode="signup" />
+          </PublicOnlyRoute>
+        )}
+      />
+      <Route element={<RequireAuth />}>
+        <Route path="/projects/:id" element={<ProjectPage />} />
+        <Route path="/projects/:id/demo" element={<ProjectPage page="brand-demo" />} />
+        <Route path="/projects/:id/hooks" element={<ProjectPage page="hooks" />} />
+        <Route path="/projects/:id/creator" element={<ProjectPage page="creator" />} />
+        <Route path="/projects/:id/export" element={<ProjectPage page="export" />} />
+        <Route path="/projects/:id/render" element={<ProjectRenderPage />} />
+      </Route>
+      <Route element={<RequireAdmin />}>
+        <Route path="/admin/creators" element={<AdminCreatorsPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }

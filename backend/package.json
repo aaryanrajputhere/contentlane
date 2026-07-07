@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon --watch src --exec ts-node src/index.ts",
     "worker:dev": "nodemon --watch src --exec ts-node src/worker.ts",
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "start": "node dist/index.js",
     "worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
@@ -40,7 +40,6 @@
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.18",
-    "@mendable/firecrawl-js": "^4.25.2",
     "@bull-board/api": "^6.12.0",
     "@bull-board/express": "^6.12.0",
     "@prisma/client": "^5.22.0",

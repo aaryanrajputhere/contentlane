@@ -1,32 +1,55 @@
-import bcrypt from 'bcryptjs';
 import type { RequestHandler } from 'express';
 import prisma from '../lib/prisma';
+import { clearSessionCookie, hashPassword, normalizeEmail, setSessionCookie, toAuthUser, verifyPassword } from '../lib/auth';
 import { ApiError } from '../lib/errors';
-import { AUTH_COOKIE, signSession } from '../lib/auth';
-import { config } from '../config';
-
-const cookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: config.NODE_ENV === 'production', path: '/', maxAge: 7 * 24 * 60 * 60 * 1000 };
-const publicUser = (user: { id: string; email: string; name: string | null; role: string }) => ({ id: user.id, email: user.email, name: user.name, role: user.role });
+import { loginSchema, signupSchema } from '../domain/schemas';
 
 export const signup: RequestHandler = async (req, res) => {
-  const { email, password, name } = req.body;
-  const allowed = await prisma.allowedEmail.findUnique({ where: { email } });
-  if (!allowed) throw new ApiError(403, 'EMAIL_NOT_ALLOWED', 'This email is not enabled for the private beta');
-  if (await prisma.user.findUnique({ where: { email } })) throw new ApiError(409, 'EMAIL_IN_USE', 'An account already exists for this email');
-  const user = await prisma.user.create({ data: { email, password: await bcrypt.hash(password, 12), name } });
-  res.cookie(AUTH_COOKIE, signSession(user.id), cookieOptions).status(201).json({ user: publicUser(user) });
+  const { email, password, name } = signupSchema.parse(req.body);
+  const normalizedEmail = normalizeEmail(email);
+
+  const [allowedEmail, existingUser] = await Promise.all([
+    prisma.allowedEmail.findUnique({ where: { email: normalizedEmail } }),
+    prisma.user.findUnique({ where: { email: normalizedEmail } }),
+  ]);
+
+  if (!allowedEmail) throw new ApiError(403, 'EMAIL_NOT_ALLOWED', 'This email is not approved for the beta yet');
+  if (existingUser) throw new ApiError(409, 'ACCOUNT_EXISTS', 'An account already exists for this email');
+
+  const user = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash: await hashPassword(password),
+      name: name?.trim() || null,
+    },
+    select: { id: true, email: true, name: true, role: true },
+  });
+
+  const authUser = toAuthUser(user);
+  setSessionCookie(res, authUser);
+  res.status(201).json({ user: authUser });
 };
 
 export const login: RequestHandler = async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { email: req.body.email } });
-  if (!user || !await bcrypt.compare(req.body.password, user.password)) throw new ApiError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
-  res.cookie(AUTH_COOKIE, signSession(user.id), cookieOptions).json({ user: publicUser(user) });
+  const { email, password } = loginSchema.parse(req.body);
+  const normalizedEmail = normalizeEmail(email);
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password');
+  }
+
+  const authUser = toAuthUser(user);
+  setSessionCookie(res, authUser);
+  res.json({ user: authUser });
+};
+
+export const logout: RequestHandler = async (_req, res) => {
+  clearSessionCookie(res);
+  res.status(204).end();
 };
 
 export const me: RequestHandler = async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
-  if (!user) throw new ApiError(401, 'UNAUTHENTICATED', 'Invalid session');
-  res.json({ user: publicUser(user) });
+  if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+  res.json({ user: req.user });
 };
-
-export const logout: RequestHandler = (_req, res) => { res.clearCookie(AUTH_COOKIE, { ...cookieOptions, maxAge: undefined }).status(204).end(); };

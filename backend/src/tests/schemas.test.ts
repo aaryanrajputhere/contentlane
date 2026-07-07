@@ -1,88 +1,78 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { authSchema, hookTemplateSchema, sceneSchema, scriptJobSchema } from '../domain/schemas';
+import { Prisma } from '@prisma/client';
+import { conceptSelectionSchema, conceptStageInputSchema, creatorCharacterSchema, creatorClipMutationSchema, creatorListQuerySchema, exportPayloadSchema, mediaStageInputSchema, websiteInputSchema } from '../domain/schemas';
+import { creatorToCharacter } from '../lib/creator-library';
+import { buildBrandProfile, buildConceptImagePrompt, buildConceptVideoPrompt, buildExportState, normalizeWebsiteInput } from '../lib/workflow';
 
-test('authentication normalizes email addresses', () => {
-  const value = authSchema.parse({ email: '  Tester@Example.COM ', password: 'a-secure-password' });
-  assert.equal(value.email, 'tester@example.com');
+test('website input normalizes bare domains and mixed casing', () => {
+  assert.equal(normalizeWebsiteInput(' Example.com/Launch '), 'https://example.com/launch');
+  const value = websiteInputSchema.parse({ website: 'example.com' });
+  assert.equal(value.website, 'example.com');
 });
 
-test('authentication rejects short passwords', () => {
-  assert.throws(() => authSchema.parse({ email: 'tester@example.com', password: 'short' }));
+test('workflow helpers derive a lean brand profile', () => {
+  const profile = buildBrandProfile('https://signal-studio.io');
+  assert.equal(profile.brandName.length > 0, true);
+  assert.equal(profile.angles.length >= 3, true);
+  assert.match(profile.summary, /signal/i);
 });
 
-test('persisted scenes reject oversized prompts', () => {
-  assert.throws(() => sceneSchema.parse({ onScreenText: 'Hook', imagePrompt: 'x'.repeat(4001), durationSeconds: 5 }));
-  assert.throws(() => sceneSchema.parse({ onScreenText: 'Hook', videoPrompt: 'Legacy prompt', durationSeconds: 5 }));
-  assert.throws(() => sceneSchema.parse({ onScreenText: 'Hook', imagePrompt: 'New prompt', videoPrompt: 'Legacy prompt', durationSeconds: 5 }));
+test('generation payload schemas set sane defaults', () => {
+  assert.equal(conceptStageInputSchema.parse({}).count, 8);
+  assert.equal(mediaStageInputSchema.parse({}).forceRegenerate, false);
+  const exportValue = exportPayloadSchema.parse({ settings: { overlayText: 'Publish now' } });
+  assert.equal(exportValue.settings.overlayText, 'Publish now');
+  assert.equal(conceptSelectionSchema.parse({ conceptId: null }).conceptId, null);
 });
 
-
-const validScriptJobBase = {
-  campaignId: 'ckv9z7t7f0000xkqwf8dlqy3d',
-  productId: 'ckv9z7t7f0001xkqw9t4s81fb',
-};
-
-test('script jobs accept legacy string hooks', () => {
-  const value = scriptJobSchema.parse({ ...validScriptJobBase, hooks: ['A better setup in seconds'] });
-  assert.equal(value.hooks[0], 'A better setup in seconds');
-});
-
-test('script jobs accept structured scene-by-scene hook briefs', () => {
-  const value = scriptJobSchema.parse({
-    ...validScriptJobBase,
-    hooks: [{
-      text: 'The difference is visible fast',
-      templateType: 'Mess vs. Masterpiece',
-      sceneDurationSeconds: 2,
-      scenes: [
-        { purpose: 'Show the mess', context: 'A cluttered table', requiredVisualChange: 'Add one wrong item', overlayTextDirection: 'Messy start' },
-        { purpose: 'Reveal the fix', context: 'Same table after clearing space', requiredVisualChange: 'Place the product', overlayTextDirection: 'Now it fits' },
-      ],
-    }],
+test('creator library schemas normalize editor payloads', () => {
+  assert.equal(creatorListQuerySchema.parse({ tag: ' founder ' }).tag, 'founder');
+  assert.deepEqual(creatorClipMutationSchema.parse({ tags: ['Hook', 'Founder'] }).tags, ['Hook', 'Founder']);
+  assert.equal(creatorCharacterSchema.parse({ id: 'creator-test', source: 'preset', name: 'Test', persona: 'Persona', appearance: 'Look', voice: 'Voice', prompt: 'Prompt', baseImageUrl: 'https://example.com/image.png' }).baseImageUrl, 'https://example.com/image.png');
+  const longDescription = 'A friendly, relatable American content creator who specializes in authentic product reviews, lifestyle recommendations, and app demos. Her content is casual, natural, and filmed in everyday environments with an iPhone.';
+  const character = creatorToCharacter({
+    id: 'creator-test',
+    name: 'Test',
+    description: longDescription,
+    baseImageUrl: 'https://example.com/image.png',
+    baseImageProvider: 'cloudinary',
+    baseImageMimeType: 'image/png',
+    clips: [],
   });
-  const hook = value.hooks[0];
-  assert.equal(typeof hook, 'object');
-  if (typeof hook === 'object') {
-    assert.equal(hook.scenes.length, 2);
-    assert.equal(hook.sceneDurationSeconds, 2);
-  }
+  assert.equal(creatorCharacterSchema.parse(character).persona.length <= 160, true);
 });
 
-test('script jobs reject invalid structured hook timing and empty briefs', () => {
-  assert.throws(() => scriptJobSchema.parse({
-    ...validScriptJobBase,
-    hooks: [{ text: 'Bad timing', sceneDurationSeconds: 0, scenes: [{ purpose: 'x', context: 'x', requiredVisualChange: 'x', overlayTextDirection: 'x' }] }],
-  }));
-  assert.throws(() => scriptJobSchema.parse({
-    ...validScriptJobBase,
-    hooks: [{ text: 'No scenes', sceneDurationSeconds: 2, scenes: [] }],
-  }));
-});
+test('concept prompt builders and export state stay aligned', () => {
+  const profile = buildBrandProfile('https://reelswarm.dev');
+  const concept = {
+    id: 'ckv9z7t7f0000xkqwf3concept',
+    projectId: 'ckv9z7t7f0000xkqwf3proj',
+    angle: 'Sharper contrast',
+    hookText: 'Stop generic hooks before they cost the next customer.',
+    hookImagePrompt: 'Create a cinematic vertical 9:16 marketing image for ReelSwarm.',
+    demoOverlayText: 'ReelSwarm in 4 seconds',
+    videoDirection: 'Create a 4-5 second demo video for ReelSwarm.',
+    targetDurationLabel: '4-5s',
+    targetDurationSeconds: 5,
+    score: 94,
+    scoreLabel: 'Top rank',
+    rationale: 'ReelSwarm positions the website as the source of truth.',
+    generatedImageUrl: null,
+    generatedVideoUrl: null,
+    sortOrder: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  // @ts-expect-error Local fixture intentionally mirrors only the fields these helpers need.
+  const imagePrompt = buildConceptImagePrompt(profile, concept);
+  // @ts-expect-error Local fixture intentionally mirrors only the fields these helpers need.
+  const videoPrompt = buildConceptVideoPrompt(profile, concept);
+  const exportState = buildExportState({ id: 'ckv9z7t7f0000xkqwf3proj', website: 'https://reelswarm.dev', normalizedWebsite: 'https://reelswarm.dev', status: 'READY', createdAt: new Date(), updatedAt: new Date(), selectedConceptId: null, selectedCharacterId: null, selectedCharacter: null }, concept, null, null);
 
-
-test('hook template payloads accept full scene briefs', () => {
-  const value = hookTemplateSchema.parse({
-    title: 'Value Stacker',
-    text: 'Three details make this worth it',
-    templateType: 'Value Stacker',
-    sceneDurationSeconds: 2,
-    sortOrder: 30,
-    isActive: true,
-    scenes: [
-      { purpose: 'Open with promise', context: 'Use case before reveal', requiredVisualChange: 'Reveal the product', overlayTextDirection: 'Three details matter' },
-    ],
-  });
-  assert.equal(value.title, 'Value Stacker');
-  assert.equal(value.scenes.length, 1);
-});
-
-test('hook template payloads reject invalid scenes', () => {
-  assert.throws(() => hookTemplateSchema.parse({
-    title: 'Bad template',
-    text: 'No scene context',
-    templateType: 'Bad',
-    sceneDurationSeconds: 2,
-    scenes: [{ purpose: 'x', context: '', requiredVisualChange: 'x', overlayTextDirection: 'x' }],
-  }));
+  assert.match(imagePrompt, /Hook:/i);
+  assert.match(videoPrompt.prompt, /Duration target: 4-5s/i);
+  assert.equal(videoPrompt.durationSeconds, 5);
+  assert.match(exportState.overlayText, /generic hooks/i);
+  assert.equal(exportState.selectedConceptId, concept.id);
 });

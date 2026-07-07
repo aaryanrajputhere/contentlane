@@ -4,7 +4,7 @@ ReelSwarm turns a business website into short-form marketing videos. This reposi
 
 ## Requirements
 
-- Node.js 22 or newer (required by the current Firecrawl SDK)
+- Node.js 22 or newer
 - npm 10+
 - Docker with Compose v2
 
@@ -45,7 +45,7 @@ npm run jobs:retry -- <job-id>
 
 ## Provider modes
 
-`AI_PROVIDER_MODE=mock` is the default. It produces deterministic brand, hook, script, image, and video fixtures and does not call Firecrawl, Hugging Face, RunPod, or Cloudinary. Use this mode for routine development and automated tests.
+`AI_PROVIDER_MODE=mock` is the default. It produces deterministic brand, hook, script, image, and video fixtures and does not call Anakin, Hugging Face, RunPod, or Cloudinary. Use this mode for routine development and automated tests.
 
 For live generation, set `AI_PROVIDER_MODE=live` and provide every credential documented in [backend/.env.example](backend/.env.example). Startup fails when a required live credential or the JWT secret is missing.
 
@@ -85,4 +85,4 @@ The browser editor intentionally exports WebM. Current desktop Chrome, Edge, or 
 - API ready check fails: run `docker compose ps`, then verify PostgreSQL and Redis health.
 - Jobs remain queued: ensure `npm run dev` is running the `worker` process and Redis is healthy.
 - Live provider job fails: inspect the worker log using the job/request/campaign IDs, then run `npm run jobs:failed`.
-- Firecrawl engine warning: upgrade to Node.js 22+; live mode is not supported on older Node versions.
+- Anakin scraper warning: live website analysis requires ANAKIN_API_KEY and uses Anakin map plus batch URL scraping.
