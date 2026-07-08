@@ -1,0 +1,26 @@
+{
+  "name": "reelswarm",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev": "concurrently -k -n frontend,api,worker -c cyan,green,magenta \"npm run dev -w frontend\" \"npm run dev -w backend\" \"npm run worker:dev -w backend\"",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "preflight": "node scripts/preflight.mjs",
+    "env:setup": "node scripts/setup-env.mjs",
+    "setup": "npm run preflight && npm install && npm run env:setup && npm run infra:up && npm run prisma:generate -w backend && npm run db:migrate -w backend && npm run db:seed -w backend",
+    "check": "npm run check -w backend && npm run check -w frontend",
+    "db:reset": "npm run db:reset -w backend",
+    "db:seed": "npm run db:seed -w backend",
+    "allow-email": "npm run allow-email -w backend --",
+    "disallow-email": "npm run disallow-email -w backend --",
+    "jobs:failed": "npm run jobs:failed -w backend",
+    "jobs:retry": "npm run jobs:retry -w backend --"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

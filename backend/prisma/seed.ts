@@ -1,22 +1,50 @@
-
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import { hashPassword, normalizeEmail } from '../src/lib/auth';
+
 const prisma = new PrismaClient();
 
 async function main() {
-  const hashedPassword = await bcrypt.hash('password123', 10);
-  const testUser = await prisma.user.upsert({
-    where: { email: 'test@example.com' },
-    update: { password: hashedPassword },
+  const email = process.env.SEED_ADMIN_EMAIL?.trim();
+  const password = process.env.SEED_ADMIN_PASSWORD?.trim();
+  const name = process.env.SEED_ADMIN_NAME?.trim() || 'ReelSwarm Admin';
+
+  if (!email || !password) {
+    console.log('Seed skipped: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are not set.');
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+
+  await prisma.allowedEmail.upsert({
+    where: { email: normalizedEmail },
+    update: {},
+    create: { email: normalizedEmail },
+  });
+
+  await prisma.user.upsert({
+    where: { email: normalizedEmail },
+    update: {
+      name,
+      role: 'ADMIN',
+      passwordHash: await hashPassword(password),
+    },
     create: {
-      email: 'test@example.com',
-      password: hashedPassword,
-      name: 'Test User',
+      email: normalizedEmail,
+      name,
+      role: 'ADMIN',
+      passwordHash: await hashPassword(password),
     },
   });
-  console.log('Test User created/found:', testUser);
+
+  console.log(`Seeded admin user ${normalizedEmail}`);
 }
 
-main()
-  .catch(e => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+void main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,104 +7,223 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
 
+enum ProjectStatus {
+  DRAFT
+  ANALYZING
+  READY
+  HOOKS_READY
+  SCRIPTS_READY
+  MEDIA_READY
+  EXPORT_READY
+  FAILED
+}
 
-model Character {
-  id          String   @id @default(cuid())
-  name        String
-  referenceId String
-  description String
-  tags        String[]
-  category    String
+enum JobType {
+  ANALYZE_WEBSITE
+  GENERATE_CONCEPTS
+  GENERATE_MEDIA
+  SAVE_EXPORT
+  GENERATE_HOOKS
+  GENERATE_SCRIPTS
+}
+
+enum JobStatus {
+  QUEUED
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
 }
 
 model User {
-  id       String    @id @default(cuid())
-  email    String    @unique
-  password String
-  name     String?
-  projects Project[]
+  id                String         @id @default(cuid())
+  email             String         @unique
+  passwordHash      String
+  name              String?
+  role              UserRole       @default(USER)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  projects          Project[]
+  allowedEmailsMade AllowedEmail[] @relation("AllowedEmailCreatedBy")
+}
+
+model AllowedEmail {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation("AllowedEmailCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 }
 
 model Project {
-  id        String   @id @default(cuid())
-  name      String
-  emoji     String   @default("🎬")
-  style     String   @default("product-hook")
-  state     Json     @default("{}")
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String         @id @default(cuid())
+  userId              String?
+  user                User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  website             String
+  normalizedWebsite   String
+  status              ProjectStatus  @default(DRAFT)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  selectedConceptId   String?        @map("selectedHookId")
+  selectedCharacterId String?        @map("selectedCharacterId")
+  selectedCharacter   Json?          @map("selectedCharacter")
+  selectedConcept     HookConcept?   @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
+  brandProfile        BrandProfile?
+  websiteAnalysis     WebsiteAnalysis?
+  concepts            HookConcept[]
+  mediaAssets         MediaAsset[]
+  exportState         ProjectExport?
+  jobs                GenerationJob[]
 
-  campaignId         String?
-  campaign           Campaign? @relation(fields: [campaignId], references: [id])
-  productId          String?
-  product            Product?  @relation(fields: [productId], references: [id])
-  scriptGenerationId String?
-  scriptGeneration   ScriptGeneration? @relation(fields: [scriptGenerationId], references: [id])
-
-  @@index([userId])
+  @@unique([userId, normalizedWebsite])
+  @@index([userId, createdAt])
+  @@index([userId, normalizedWebsite])
 }
 
-model Campaign {
-  id           String             @id @default(cuid())
-  website      String
-  status       String             @default("PENDING")
-  createdAt    DateTime           @default(now())
-  brandContext BrandContext?
-  products     Product[]
-  scripts      ScriptGeneration[]
-  projects     Project[]
+model BrandProfile {
+  id          String   @id @default(cuid())
+  projectId    String   @unique
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brandName    String
+  tagline      String
+  audience     String
+  painPoints   String[]
+  benefits     String[]
+  voice        String
+  offer        String
+  cta          String
+  angles       String[]
+  summary      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
-model BrandContext {
-  id                  String   @id @default(cuid())
-  campaignId          String   @unique
-  campaign            Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  brandName           String
-  productCategory     String
-  targetAudience      String[]
-  benefits            String[]
-  painPoints          String[]
-  objections          String[]
-  uniqueSellingPoints String[]
-  brandVoice          String
-  socialProof            String[]
-
-  productSummary         String   @default("")
-  customerDesires        String[]
-  emotionalTriggers      String[]
-  purchaseMotivations    String[]
-  contentAngles          String[]
-  hooks                  Json?
-  competitorAlternatives String[]
-  customerIdentity       String[]
+model WebsiteAnalysis {
+  id            String   @id @default(cuid())
+  projectId     String   @unique
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceUrl     String
+  rootDomain    String
+  discoveredUrls Json
+  rankedPages   Json
+  selectedPages Json
+  crawlSummary  Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
-model Product {
-  id          String             @id @default(cuid())
-  campaignId  String
-  campaign    Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  name        String
-  description String
-  imageUrls   String[]
-  url         String?
-  scripts     ScriptGeneration[]
-  projects    Project[]
+model HookConcept {
+  id                    String    @id @default(cuid())
+  projectId             String
+  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  angle                 String
+  hookText              String
+  hookImagePrompt       String
+  demoOverlayText       String
+  videoDirection        String
+  targetDurationLabel   String
+  targetDurationSeconds Int
+  score                 Int
+  scoreLabel            String
+  rationale             String
+  generatedImageUrl     String?
+  generatedVideoUrl     String?
+  sortOrder             Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  selectedByProjects    Project[] @relation("ProjectSelectedConcept")
+  mediaAssets           MediaAsset[]
+
+  @@index([projectId, sortOrder])
+  @@map("HookDraft")
 }
 
-model ScriptGeneration {
-  id              String   @id @default(cuid())
-  campaignId      String
-  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  productId       String
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  hook            String
-  scenes          Json     @default("[]") // Array of { onScreenText: string, videoPrompt: string, durationSeconds: number }
-  templateType    String
-  cta             String
-  durationSeconds Int
-  createdAt       DateTime @default(now())
-  projects        Project[]
+model MediaAsset {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conceptId   String?      @map("scriptDraftId")
+  concept     HookConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  type        MediaType
+  provider    String
+  providerId  String?
+  url         String
+  mimeType    String?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+model ProjectExport {
+  id         String   @id @default(cuid())
+  projectId  String   @unique
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  settings   Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Creator {
+  id                  String       @id @default(cuid())
+  name                String
+  description         String?
+  baseImageUrl        String
+  baseImageProvider   String
+  baseImageProviderId String?
+  baseImageMimeType   String?
+  baseImageMetadata   Json?
+  sortOrder           Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  clips               CreatorClip[]
+
+  @@index([sortOrder, createdAt])
+}
+
+model CreatorClip {
+  id          String   @id @default(cuid())
+  creatorId   String
+  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title       String?
+  url         String
+  provider    String
+  providerId  String?
+  mimeType    String?
+  metadata    Json?
+  tags        String[]
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([creatorId, sortOrder])
+  @@index([createdAt])
+}
+
+model GenerationJob {
+  id             String      @id @default(cuid())
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type           JobType
+  status         JobStatus   @default(QUEUED)
+  progress       Int         @default(0)
+  progressMessage String?
+  input          Json
+  result         Json?
+  errorMessage   String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([projectId, createdAt])
+  @@index([status, createdAt])
 }

@@ -1,32 +1,36 @@
 # Agent Context: ReelSwarm
 
-This document provides the necessary context for AI agents working on the ReelSwarm project.
-
 ## Project Overview
-**ReelSwarm** is an AI-powered content generation platform designed to create high-energy, viral short-form content (split-screen, dynamic subtitles, AI voiceovers).
+
+ReelSwarm is an AI-powered platform that turns a business website into short-form marketing videos.
+
+## Active Workflow
+
+```text
+Website → Brand Profile → Hooks → Scripts → AI Images/Videos → EditorPage
+```
 
 ## Tech Stack
-- **Frontend**: React (Vite), Remotion (for video rendering), Tailwind CSS.
-- **Backend**: Node.js, Express.
-- **Database**: PostgreSQL with Prisma ORM.
-- **Icons**: Lucide React.
-- **State Management**: React Hooks (Context/State).
 
-## Coding Standards & Guidelines
-1. **TypeScript First**: Use strict typing. Avoid `any`.
-2. **Functional Components**: Use modern React patterns (Hooks, functional components).
-3. **Remotion Constraints**: 
-    - Always remember that the video is rendered in the browser using `@remotion/web-renderer`.
-    - Avoid heavy computations during frame rendering.
-    - Use `useVideoConfig` and `useCurrentFrame` appropriately.
-4. **Naming Conventions**:
-    - Components: `PascalCase`
-    - Functions/Variables: `camelCase`
-    - Styles: Tailwind utility classes preferred over custom CSS.
-5. **Cross-Origin Isolation**: The project requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` for Remotion to work correctly in some environments.
+- Frontend: React, Vite, TypeScript, Tailwind CSS.
+- Browser editor: Canvas, Web Audio, and MediaRecorder.
+- Backend: Node.js, Express, TypeScript.
+- Database: PostgreSQL with Prisma ORM.
+- AI and media: Hugging Face, Firecrawl, RunPod, and Cloudinary.
+- Icons: Lucide React.
 
-## Persona
-When assisting with this project, you are a **Senior Creative Technologist** who understands both high-performance frontend rendering (Remotion) and scalable backend architecture. You prioritize:
-- **Visual Impact**: Designs should be "wow" and high-energy.
-- **Performance**: Real-time previews must be smooth.
-- **Efficiency**: Minimize unnecessary API calls (e.g., voiceover generation).
+## Coding Standards
+
+1. Use strict TypeScript and avoid `any` in new code.
+2. Use functional React components and Hooks.
+3. Keep long-running AI media operations outside frame/render loops.
+4. Use `PascalCase` for components and `camelCase` for functions and variables.
+5. Prefer Tailwind utility classes over custom CSS.
+6. Preserve the active marketing workflow and avoid reintroducing the removed character-dialogue, voice-generation, project-editor, or Remotion systems.
+
+## Priorities
+
+- Visual impact for short-form marketing content.
+- Smooth browser previews and exports.
+- Efficient external API usage.
+- Clear separation between campaign analysis, script generation, media generation, and editing.

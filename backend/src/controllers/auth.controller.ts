@@ -1,81 +1,55 @@
-import { Request, Response } from "express";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import prisma from "../lib/prisma";
+import type { RequestHandler } from 'express';
+import prisma from '../lib/prisma';
+import { clearSessionCookie, hashPassword, normalizeEmail, setSessionCookie, toAuthUser, verifyPassword } from '../lib/auth';
+import { ApiError } from '../lib/errors';
+import { loginSchema, signupSchema } from '../domain/schemas';
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback-secret";
+export const signup: RequestHandler = async (req, res) => {
+  const { email, password, name } = signupSchema.parse(req.body);
+  const normalizedEmail = normalizeEmail(email);
 
-const signToken = (userId: string) =>
-  jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: "7d" });
+  const [allowedEmail, existingUser] = await Promise.all([
+    prisma.allowedEmail.findUnique({ where: { email: normalizedEmail } }),
+    prisma.user.findUnique({ where: { email: normalizedEmail } }),
+  ]);
 
-export const signup = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { email, password, name } = req.body;
+  if (!allowedEmail) throw new ApiError(403, 'EMAIL_NOT_ALLOWED', 'This email is not approved for the beta yet');
+  if (existingUser) throw new ApiError(409, 'ACCOUNT_EXISTS', 'An account already exists for this email');
 
-        if (!email || !password) {
-            res.status(400).json({ error: "Email and password are required" });
-            return;
-        }
+  const user = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash: await hashPassword(password),
+      name: name?.trim() || null,
+    },
+    select: { id: true, email: true, name: true, role: true },
+  });
 
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) {
-            res.status(400).json({ error: "User already exists" });
-            return;
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = await prisma.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                name
-            }
-        });
-
-        const token = signToken(user.id);
-
-        res.status(201).json({ 
-            message: "User created successfully",
-            token,
-            user: { id: user.id, email: user.email, name: user.name }
-        });
-    } catch (error) {
-        console.error("Signup error:", error);
-        res.status(500).json({ error: "Internal server error" });
-    }
+  const authUser = toAuthUser(user);
+  setSessionCookie(res, authUser);
+  res.status(201).json({ user: authUser });
 };
 
-export const login = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { email, password } = req.body;
+export const login: RequestHandler = async (req, res) => {
+  const { email, password } = loginSchema.parse(req.body);
+  const normalizedEmail = normalizeEmail(email);
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-        if (!email || !password) {
-            res.status(400).json({ error: "Email and password are required" });
-            return;
-        }
+  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password');
+  }
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            res.status(401).json({ error: "Invalid email or password" });
-            return;
-        }
+  const authUser = toAuthUser(user);
+  setSessionCookie(res, authUser);
+  res.json({ user: authUser });
+};
 
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            res.status(401).json({ error: "Invalid email or password" });
-            return;
-        }
+export const logout: RequestHandler = async (_req, res) => {
+  clearSessionCookie(res);
+  res.status(204).end();
+};
 
-        const token = signToken(user.id);
-
-        res.status(200).json({
-            message: "Login successful",
-            token,
-            user: { id: user.id, email: user.email, name: user.name }
-        });
-    } catch (error) {
-        console.error("Login error:", error);
-        res.status(500).json({ error: "Internal server error" });
-    }
+export const me: RequestHandler = async (req, res) => {
+  if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+  res.json({ user: req.user });
 };
