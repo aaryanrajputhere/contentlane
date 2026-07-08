@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 1094,
+    "error": "최소 1개의 이미지 입력이 필요합니다. (image_path / image_url / image_base64 중 하나)",
+    "executionTime": 85,
+    "id": "90076452-419a-4293-ae75-99e30719402f-e1",
+    "status": "FAILED",
+    "workerId": "6zwft34il543ii"
+  }
+}

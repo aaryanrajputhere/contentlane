@@ -1,0 +1,14 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Objective: Demonstrate one concrete product detail in use. Subject: Same character from the character reference image physically interacting with the exact Ellie Lamps - HTTYD – Elie crafts product from the product reference image. Start frame: The shot starts with the referenced product already placed from Scene 3. Action: A hand adjusts, rotates, opens, switches on, or uses the referenced product while the shot reveals one concrete material detail, mechanism, surface texture, or use-case result. Camera: tracking shot. Lighting: Warm directional highlights skim across the product and nearby clean surface. End frame: The shot ends tighter on the useful product detail with the surrounding setup more ordered than before. Continuity: Begins with the product already placed from Scene 3 and ends with the product ready for the final reveal. Use the exact product from the product reference image. Preserve its shape, silhouette, material, texture, color, proportions, and distinctive details. Do not redesign or replace it. Only change its position, rotation, scale within the scene, and lighting. Use the same character from the character reference image. Preserve face, hairstyle, clothing, body proportions, skin tone, glasses/accessories, and overall identity. Only change pose, expression, and movement.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "https://res.cloudinary.com/duwcbwqe5/image/upload/v1782552028/reelswarm_creators/sahpbzkco41bslm6aslk.png",
+    "image_url_2": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

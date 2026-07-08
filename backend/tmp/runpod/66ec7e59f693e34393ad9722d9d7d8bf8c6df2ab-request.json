@@ -1,0 +1,12 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Vertical 9:16 hero reveal of Ellie Lamps as the warm focal point of the room, handcrafted look, strong silhouette, premium composition, clear negative space for captions",
+    "seed": 42,
+    "width": 768,
+    "height": 1024
+  }
+}

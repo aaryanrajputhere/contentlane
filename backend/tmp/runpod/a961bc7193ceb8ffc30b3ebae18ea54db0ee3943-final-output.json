@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[{\"hook\":\"Format: The Mess vs. the Masterpiece. Start with the frustrating mess, then reveal the polished product\",\"templateType\":\"Mess vs. Masterpiece\",\"scenes\":[{\"onScreenText\":\"Cluttered corner. Wrong lamp.\",\"videoPrompt\":\"A dark corner of a living room is seen, filled with books, cords, and an awkwardly placed lamp. The scene ends with the lamp tilting off-center. Slow push-in, cluttered composition, harsh overhead light.\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Ellie Lamps is crowded out.\",\"videoPrompt\":\"The same dark corner is shown from above. A hand tries to place the exact Ellie Lamps product from the product reference image, but books and cords block the spot, forcing the hand to lift the reference product back out. Locked-off shot, hard ceiling light.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Ellie Lamps finally fits.\",\"videoPrompt\":\"The corner is cleared of all clutter. Hands place the exact Ellie Lamps product from the product reference image into the empty spot, then rotate it towards a chair and switch it on. The scene ends with warm light spreading across the wall and chair. Slow push-in, clean composition, soft directional glow replacing harsh light.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Handcrafted detail. Soft glow.\",\"videoPrompt\":\"The scene opens on the Ellie Lamps product already lit. A hand adjusts the shade while the camera moves to reveal texture, edge finish, and light casting. The scene ends tighter on the reference product, showing a more ordered table. Macro tracking shot, shallow depth of field, warm highlights on clean surfaces.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Warm light. Clean corner.\",\"videoPrompt\":\"The improved setup is shown with the Ellie Lamps product already glowing and the corner now clear. A hand sets a book and straightens a small object as the camera slowly pulls back to reveal the full corner now cleared, balanced, and evenly lit. Pull-back reveal, warm ambient lighting, organized final arrangement.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2}],\"cta\":\"Shop Ellie Lamps today\",\"durationSeconds\":10}]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 3670,
+        "output": 485
+      }
+    }
+  ]
+}

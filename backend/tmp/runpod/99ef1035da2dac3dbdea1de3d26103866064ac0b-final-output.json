@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[\n  {\n    \"hook\": \"The mess vs. the masterpiece\",\n    \"templateType\": \"Mess vs. Masterpiece\",\n    \"scenes\": [\n      {\n        \"onScreenText\": \"The mess vs...\",\n        \"videoPrompt\": \"Open inside a real craft workspace; hands actively adding resin and pigment to a fantasy-themed lamp, making the workspace visibly messier\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Still looks rough\",\n        \"videoPrompt\": \"Close-up of a messy handmade process with a craftsperson pouring resin into a lamp mold\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Handmade takes time\",\n        \"videoPrompt\": \"Character Kanda Speaks carefully adjusting a fantasy-themed lamp part by hand\",\n        \"featuresCharacter\": true,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"The masterpiece..\",\n        \"videoPrompt\": \"Cut from the workshop mess to the completed fantasy-themed lamp in a clean display setup, placed on a shelf\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Made to feel magical\",\n        \"videoPrompt\": \"Pull back to reveal the fantasy-themed lamp glowing in a dark room, creating a magical atmosphere\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      }\n    ],\n    \"cta\": \"Discover your masterpiece today\",\n    \"durationSeconds\": 10\n  }\n]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 2363,
+        "output": 375
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[\n  {\n    \"hook\": \"The mess vs. the masterpiece\",\n    \"templateType\": \"Mess vs. Masterpiece\",\n    \"scenes\": [\n      {\n        \"onScreenText\": \"The mess vs...\",\n        \"videoPrompt\": \"Open inside a real craft workspace before the final product exists. Hands actively adding resin, pigment, glue, dust, tools, wires, or scattered parts so the workspace becomes visibly messier.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Still looks rough\",\n        \"videoPrompt\": \"Continue from the same messy handmade process. Show a close-up physical action like pouring, brushing, placing, sanding, trimming, wiring, or holding a tiny fantasy detail.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Handmade takes time\",\n        \"videoPrompt\": \"Reveal the human effort behind the product. Show the character Kanda carefully adjusting or inspecting the product part by hand.\",\n        \"featuresCharacter\": true,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"The masterpiece..\",\n        \"videoPrompt\": \"Cut from the workshop mess to the completed Ellie Lamps - HTTYD in a clean display setup. Place or switch on the exact referenced product so the lamp glow visibly appears.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Made to feel magical\",\n        \"videoPrompt\": \"Pull back or push in to reveal the exact referenced Ellie Lamps - HTTYD glowing in a dark room or shelf setup.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      }\n    ],\n    \"cta\": \"Shop Now\",\n    \"durationSeconds\": 10\n  }\n]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 2363,
+        "output": 432
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "A wide shot of a crowded bedroom, the camera pulls back to reveal a table filled with books, lamps, and cords. One lamp is placed haphazardly, casting uneven light and shadows. A hand moves to pick it up, then sets it down without proper placement. Handheld framing, messy bedroom, harsh lighting.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

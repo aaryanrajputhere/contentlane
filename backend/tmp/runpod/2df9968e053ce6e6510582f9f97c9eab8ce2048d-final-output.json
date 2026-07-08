@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[\n    {\n        \"hook\": \"Frustrating mess of lamps in the living room.\",\n        \"templateType\": \"Mess vs. Masterpiece\",\n        \"scenes\": [\n            {\n                \"onScreenText\": \"Frustrating mess of lamps in the living room.\",\n                \"videoPrompt\": \"Camera starts on a living room corner, cluttered with mismatched lamps and wires. A hand lifts a lamp, the cord gets tangled, and the scene ends with a dark corner. Locked tripod, realistic home interior, soft ambient light highlighting the mess.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Ellie Lamps struggle to fit in.\",\n                \"videoPrompt\": \"The shot begins on a side table with a dark corner. A hand tries to place the exact Ellie Lamps product from the product reference image among the clutter, but the cord gets tangled, and the lamp is placed askew. The camera tilts down, ending on the failed setup. Locked tripod, realistic home interior, soft ambient light with shadows highlighting the failed setup.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Ellie Lamps finally fits.\",\n                \"videoPrompt\": \"Starting from the cleared side table, hands place the exact Ellie Lamps product from the product reference image in the corner, preserving its shape, material, and details. The lamp is positioned and switched on, spreading a warm glow. The scene ends with the same product from the product image, illuminating the space. Slow push-in, clean composition, soft directional glow replacing the ambient light.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Handcrafted detail. Soft glow.\",\n                \"videoPrompt\": \"The shot starts with the exact Ellie Lamps product from the product reference image already lit on the side table. A hand adjusts the shade and reveals the texture and craftsmanship, then the camera moves to show the soft ambient light on the books and the corner. The scene ends tighter on the same product with the table area looking more organized. Macro tracking shot, shallow depth of field, warm highlights on clean surfaces.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Warm light. Clean corner.\",\n                \"videoPrompt\": \"The scene opens on the improved setup with the exact Ellie Lamps product from the product reference image already glowing on the side table. A hand sets down a book neatly, and the camera slowly pulls back to reveal the full corner now cleared, organized, and evenly lit. The shot ends by matching the opening angle with the referenced product anchoring the finished room. Pull-back reveal, warm ambient lighting, organized final arrangement.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            }\n        ],\n        \"cta\": \"Explore Ellie Lamps today\",\n        \"durationSeconds\": 10\n    }\n]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 4000,
+        "output": 668
+      }
+    }
+  ]
+}

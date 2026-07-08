@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 53044,
+    "executionTime": 83167,
+    "id": "ca794bf9-bf4b-4447-9515-8c22eaae1c51-e1",
+    "output": [
+      {
+        "choices": [
+          {
+            "tokens": [
+              "[\n  {\n    \"hook\": \"The mess vs. the masterpiece\",\n    \"templateType\": \"Mess vs. Masterpiece\",\n    \"scenes\": [\n      {\n        \"onScreenText\": \"The mess vs...\",\n        \"imagePrompt\": \"craft workspace with resin, pigment, and scattered parts\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Still looks rough\",\n        \"imagePrompt\": \"close-up of pouring resin into lamp part\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Handmade takes time\",\n        \"imagePrompt\": \"character carefully adjusting lamp part\",\n        \"featuresCharacter\": true,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"The masterpiece\",\n        \"imagePrompt\": \"glowing lamp on display shelf\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Made to feel magical\",\n        \"imagePrompt\": \"glowing lamp in dark room\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      }\n    ],\n    \"cta\": \"Explore Ellie Lamps\",\n    \"durationSeconds\": 10\n  }\n]"
+            ]
+          }
+        ],
+        "usage": {
+          "input": 2311,
+          "output": 313
+        }
+      }
+    ],
+    "status": "COMPLETED",
+    "workerId": "wr9q6iargqkd47"
+  }
+}

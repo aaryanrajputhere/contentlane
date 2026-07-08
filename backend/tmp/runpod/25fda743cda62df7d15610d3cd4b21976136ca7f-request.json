@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Vertical 9:16 closing shot of the transformed room anchored by Ellie Lamps, inviting glow, styled composition, clear product-centered purchase moment",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

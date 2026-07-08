@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 57122,
+    "executionTime": 103049,
+    "id": "3e8f5e37-5dcf-4182-b94f-9bed8b704a8f-e2",
+    "output": [
+      {
+        "choices": [
+          {
+            "tokens": [
+              "[\n  {\n    \"hook\": \"The difference becomes obvious in seconds\",\n    \"templateType\": \"Mess vs. Masterpiece\",\n    \"scenes\": [\n      {\n        \"onScreenText\": \"Cluttered Desk\",\n        \"videoPrompt\": \"A messy desk with scattered books, papers, and a poorly arranged lamp. The reference lamp is visible but misaligned and dim. Locked tripod, low overhead lighting, dark environment, continuity with next scene.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Awkward Fix\",\n        \"videoPrompt\": \"The same messy desk, now with a half-assembled lamp that barely illuminates. The reference lamp is visible but not properly set up. Handheld push-in, slightly brighter lighting, closer focus on the failed attempt.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Introducing Ellie Lamps\",\n        \"videoPrompt\": \"The messy desk is cleared, and the reference Ellie Lamps HTTYD is shown unpacked and ready to be used. Slow push-in, natural light, focusing on the product details. Continuity with next scene.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Unique Handcrafted Design\",\n        \"videoPrompt\": \"The Ellie Lamps HTTYD is adjusted to highlight its unique design and materials. Slow pull-back, ambient lighting, showing the product’s soft glow. Continuity with next scene.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Transform Your Space\",\n        \"videoPrompt\": \"The final scene shows the desk with the Ellie Lamps HTTYD illuminating the space beautifully, creating a calm and cozy atmosphere. Overhead reveal, soft ambient lighting, showing the transformed environment. Continuity and clear payoff of the product’s benefits.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      }\n    ],\n    \"cta\": \"Experience the unique magic of Ellie Lamps today!\",\n    \"durationSeconds\": 10\n  }\n]"
+            ]
+          }
+        ],
+        "usage": {
+          "input": 2512,
+          "output": 499
+        }
+      }
+    ],
+    "status": "COMPLETED",
+    "workerId": "usrjcv02a9xcdu"
+  }
+}

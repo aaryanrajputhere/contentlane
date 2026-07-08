@@ -1,0 +1,45 @@
+[
+  {
+    "hook": "The mess vs. the masterpiece",
+    "templateType": "Mess vs. Masterpiece",
+    "scenes": [
+      {
+        "onScreenText": "The mess vs...",
+        "imagePrompt": "craft workspace with resin, pigment, and scattered parts",
+        "featuresCharacter": false,
+        "featuresProduct": true,
+        "durationSeconds": 2
+      },
+      {
+        "onScreenText": "Still looks rough",
+        "imagePrompt": "close-up of pouring resin into lamp part",
+        "featuresCharacter": false,
+        "featuresProduct": true,
+        "durationSeconds": 2
+      },
+      {
+        "onScreenText": "Handmade takes time",
+        "imagePrompt": "character carefully adjusting lamp part",
+        "featuresCharacter": true,
+        "featuresProduct": true,
+        "durationSeconds": 2
+      },
+      {
+        "onScreenText": "The masterpiece",
+        "imagePrompt": "glowing lamp on display shelf",
+        "featuresCharacter": false,
+        "featuresProduct": true,
+        "durationSeconds": 2
+      },
+      {
+        "onScreenText": "Made to feel magical",
+        "imagePrompt": "glowing lamp in dark room",
+        "featuresCharacter": false,
+        "featuresProduct": true,
+        "durationSeconds": 2
+      }
+    ],
+    "cta": "Explore Ellie Lamps",
+    "durationSeconds": 10
+  }
+]

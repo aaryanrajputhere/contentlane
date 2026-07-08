@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Objective: Show the bad setup through a visible action. Subject: The visible environment and objects around the Ellie Lamps - HTTYD – Elie crafts problem. Start frame: The shot starts on the messy starting setup related to Ellie Lamps - HTTYD – Elie crafts, with clutter, poor placement, or unfinished surroundings visible. Action: A hand moves the wrong item into the setup, nudges clutter aside, and exposes the problem instead of fixing it. Camera: handheld push-in. Lighting: Harsh overhead light creates uneven shadows and makes the clutter easy to read. End frame: The shot ends with the messy setup still visible and more crowded than the first frame. Continuity: Begins the sequence and leaves the bad setup visible for Scene 2.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

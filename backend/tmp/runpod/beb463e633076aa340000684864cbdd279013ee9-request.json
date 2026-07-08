@@ -1,0 +1,14 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "glowing lamp on display shelf. Use the exact product from the product reference image. Preserve shape, color, material, proportions, and distinctive details. Use the same character from the character reference image. Preserve identity, face, hairstyle, clothing, and body proportions.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "https://res.cloudinary.com/duwcbwqe5/image/upload/v1782736204/reelswarm_creators/inmm1vhphl5kdsl9avdw.png",
+    "image_url_2": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

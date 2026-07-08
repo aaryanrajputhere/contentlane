@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 902,
+    "executionTime": 19089,
+    "id": "98779ede-2c63-4fd9-bdba-1c61cafc8508-e1",
+    "output": [
+      {
+        "choices": [
+          {
+            "tokens": [
+              "[\n    {\n        \"hook\": \"The Mess vs the Masterpiece\",\n        \"templateType\": \"Light vs Handcrafted\",\n        \"scenes\": [\n            {\n                \"onScreenText\": \"Room feels flat, lifeless\",\n                \"videoPrompt\": \"Vertical 9:16 opening shot of a dull, lifeless room with weak ambient lighting and no focal point, realistic home setting, no text baked into the image\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Need something unique?\",\n                \"videoPrompt\": \"Vertical 9:16 detail shot emphasizing the uninviting before-state, dark corners, flat surfaces, visually disappointing room mood\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Introducing Ellie Lamps\",\n                \"videoPrompt\": \"Vertical 9:16 hero reveal of Ellie Lamps as the warm focal point of the room, handcrafted look, strong silhouette, premium composition, clear negative space for captions\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Handcrafted detail changes everything\",\n                \"videoPrompt\": \"Vertical 9:16 close-up of the lamp materials, finish, and handmade craftsmanship, warm ambient glow, crisp texture detail, premium lighting\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Transform your space today\",\n                \"videoPrompt\": \"Vertical 9:16 closing shot of the transformed room anchored by Ellie Lamps, inviting glow, styled composition, clear product-centered purchase moment\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            }\n        ],\n        \"cta\": \"Get your Ellie Lamps now\",\n        \"durationSeconds\": 10\n    }\n]"
+            ]
+          }
+        ],
+        "usage": {
+          "input": 1889,
+          "output": 440
+        }
+      }
+    ],
+    "status": "COMPLETED",
+    "workerId": "usrjcv02a9xcdu"
+  }
+}

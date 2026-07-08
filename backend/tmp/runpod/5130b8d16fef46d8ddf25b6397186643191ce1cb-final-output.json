@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[\n  {\n    \"hook\": \"The difference becomes obvious in seconds\",\n    \"templateType\": \"Mess vs. Masterpiece\",\n    \"scenes\": [\n      {\n        \"onScreenText\": \"Cluttered desk\",\n        \"videoPrompt\": \"Close-up of a cluttered desk with various mismatched lamps and toys scattered around. Locking tripod, poor lighting, messy setup, camera slightly above the desk, showing the chaos. Start with a messy desk, end with the same setup.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Try to fix it\",\n        \"videoPrompt\": \"Hand holding a broken lamp trying to fit in, making the mess worse. Handheld push-in, low lighting, camera close to the hand, showing the faulty attempt, end with the lamp still not fitting properly.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Enter Darksider Resin\",\n        \"videoPrompt\": \"Darksider Resin Space Jam Lamp being unpacked and placed on the desk. Overhead reveal, bright lighting, camera from above, showing the product being introduced, end with the lamp in place.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Crystal clear resin\",\n        \"videoPrompt\": \"Close-up of the lamp’s crystal clear resin, highlighting the material quality. Slow push-in, soft diffused lighting, camera focuses on the resin, showing the clear material, end with the resin in focus.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      },\n      {\n        \"onScreenText\": \"Transform your space\",\n        \"videoPrompt\": \"Pull back to show the desk with the new Darksider Resin lamp, desk now clean and organized. Slow pull-back, bright lighting, camera from a distance, showing the difference, end with a clean desk and the lamp center stage.\",\n        \"featuresCharacter\": false,\n        \"featuresProduct\": true,\n        \"durationSeconds\": 2\n      }\n    ],\n    \"cta\": \"Order now and transform your space!\",\n    \"durationSeconds\": 10\n  }\n]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 2542,
+        "output": 503
+      }
+    }
+  ]
+}

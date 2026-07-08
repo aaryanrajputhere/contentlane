@@ -1,0 +1,4 @@
+{
+  "status": "FAILED",
+  "error": "최소 1개의 이미지 입력이 필요합니다. (image_path / image_url / image_base64 중 하나)"
+}

@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[{\"hook\":\"Format: The Mess vs the Masterpiece. Start with the frustrating mess, then reveal the polished product\",\"templateType\":\"Mess vs. Masterpiece\",\"scenes\":[{\"onScreenText\":\"Cluttered corner. Wrong lamp.\",\"videoPrompt\":\"Wide shot of a messy living room corner with a cluttered side table and a mismatched lamp. A hand drops another lamp base, making the corner darker and messier. Realistic home interior, dim lighting, cluttered furniture.\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Three lamps. None fit.\",\"videoPrompt\":\"Medium shot of the side table with three mismatched lamps and tangled cords. A hand rotates one lamp, slides it aside, then removes it. The table is crowded and the corner still feels dark. Cramped composition, harsh overhead light.\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Ellie Lamps finally fits.\",\"videoPrompt\":\"Close-up of hands placing Ellie Lamps onto the cleared side table. The lamp is centered, the old clutter is removed, and a hand switches it on. Warm light spreads, the corner looks organized. Clear table, soft lighting, clean composition.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Handmade detail. Soft glow.\",\"videoPrompt\":\"Macro close-up of Ellie Lamps, showing the handmade texture and soft glow. A hand rotates the base, and the camera tracks over the material texture. Warm light falls, the table surface is clean. Tight framing, shallow depth of field, soft highlights.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Warm light. Clean corner.\",\"videoPrompt\":\"Wide shot of the organized living room corner with Ellie Lamps glowing. A hand sets down a book neatly, then exits. The corner is evenly lit, tidy, and ready for use. Warm ambient lighting, balanced composition, clean and organized space.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2}],\"cta\":\"Discover Ellie Lamps today\",\"durationSeconds\":10}]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 2735,
+        "output": 443
+      }
+    }
+  ]
+}

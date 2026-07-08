@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 69714,
+    "executionTime": 106568,
+    "id": "aa83b4b3-75d6-4f40-841d-affcc6af4903-e2",
+    "output": [
+      {
+        "choices": [
+          {
+            "tokens": [
+              "[{\"hook\":\"Format: The Mess vs the Masterpiece. Start with the frustrating mess, then reveal the polished product.\",\"templateType\":\"Mess vs. Masterpiece\",\"scenes\":[{\"onScreenText\":\"Frustrating clutter. Wrong lamp.\",\"videoPrompt\":\"A wide shot of a crowded bedroom, the camera pulls back to reveal a table filled with books, lamps, and cords. One lamp is placed haphazardly, casting uneven light and shadows. A hand moves to pick it up, then sets it down without proper placement. Handheld framing, messy bedroom, harsh lighting.\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Ellie Lamps in a mess.\",\"videoPrompt\":\"The same table is shown again, but now a hand tries to fit the exact Ellie Lamps from the product reference image into the cluttered space, but the cords and books block the way. The hand lifts the product back out of frame. Locked-off shot, hard ceiling light, cluttered surface.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Ellie Lamps finally fits.\",\"videoPrompt\":\"The camera starts on the cleared space and shows hands placing the exact Ellie Lamps from the product reference image into the spot, preserving its unique shape and material. The lamp is then rotated to face the seating area. Slow push-in, clean composition, warm light spreading.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Handmade detail. Soft glow.\",\"videoPrompt\":\"The scene focuses on the Ellie Lamps product already lit, showing the texture, finish, and the light falling on the books and wall. A hand adjusts the shade, revealing the craftsmanship. Macro tracking shot, shallow depth of field, warm highlights on clean surfaces.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Warm light. Clean room.\",\"videoPrompt\":\"The final shot shows the tidy room with the Ellie Lamps product already on, filling the corner with warm light, the books neatly arranged, and the table looking organized. A hand enters frame and exits, the camera pulls back to reveal the finished setup. Pull-back reveal, warm ambient lighting, organized final arrangement.\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2}],\"cta\":\"Shop Ellie Lamps today\",\"durationSeconds\":10}]"
+            ]
+          }
+        ],
+        "usage": {
+          "input": 3805,
+          "output": 496
+        }
+      }
+    ],
+    "status": "COMPLETED",
+    "workerId": "65rytg849f3e78"
+  }
+}

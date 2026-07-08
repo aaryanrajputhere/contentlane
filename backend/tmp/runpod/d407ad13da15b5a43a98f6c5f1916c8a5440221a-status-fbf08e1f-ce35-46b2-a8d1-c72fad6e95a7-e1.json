@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 888,
+    "executionTime": 27212,
+    "id": "fbf08e1f-ce35-46b2-a8d1-c72fad6e95a7-e1",
+    "output": [
+      {
+        "choices": [
+          {
+            "tokens": [
+              "[\n    {\n        \"hook\": \"Format: The Mess vs the Masterpiece. Start with the frustrating mess, then reveal the polished product.\",\n        \"templateType\": \"Mess vs. Masterpiece\",\n        \"scenes\": [\n            {\n                \"onScreenText\": \"Crowded desk. Mismatched lamps.\",\n                \"videoPrompt\": \"The camera starts wide on a cluttered desk. Hands move a lamp onto a pile of books and papers, the lamp cord catches and hangs loose. The desk looks disorganized, with mismatched lamps and clutter. Slow push-in, chaotic composition, dim overhead light.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Three lamps. None fit.\",\n                \"videoPrompt\": \"The camera tilts down from the desk, showing three mismatched lamps crowded together, cords tangling. A hand tries to adjust a lamp, but it falls back into place. The composition remains cluttered and looks awkward. Locked-off shot, cramped composition, harsh overhead light.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Ellie Lamps finally fits.\",\n                \"videoPrompt\": \"Starting from the cleared desk, the camera tracks in as hands place an Ellie Lamps lamp into the empty space, rotate the base, and switch it on. Warm light spreads, and the lamp base blends into the desk surface. Slow push-in, clean composition, warm directional glow replacing the harsh overhead light.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Handcrafted detail. Soft glow.\",\n                \"videoPrompt\": \"The shot starts with Ellie Lamps already lit on the desk. A hand adjusts the shade and turns the lamp, revealing texture, edge finish, and the light falling across a book. The scene ends tighter on the product with the desk area looking more ordered. Macro tracking shot, shallow depth of field, warm highlights on clean surfaces.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Warm light. Clean desk.\",\n                \"videoPrompt\": \"The scene opens on the improved setup with Ellie Lamps already glowing on the desk. A hand places a final book neatly, and the camera slowly pulls back to reveal the full desk now cleared, balanced, and evenly lit. The shot ends by matching the opening angle but with hidden cords, a clean surface, and a finished room composition. Pull-back reveal, warm ambient lighting, organized final arrangement.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            }\n        ],\n        \"cta\": \"Shop Ellie Lamps today\",\n        \"durationSeconds\": 10\n    }\n]"
+            ]
+          }
+        ],
+        "usage": {
+          "input": 3098,
+          "output": 621
+        }
+      }
+    ],
+    "status": "COMPLETED",
+    "workerId": "usrjcv02a9xcdu"
+  }
+}

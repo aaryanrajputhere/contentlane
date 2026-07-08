@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_bull_board_ui=self.webpackChunk_bull_board_ui||[]).push([["87953"],{97352(e,t){Object.defineProperty(t,"__esModule",{value:!0}),t.default=void 0;var u={lastWeek:"'గత' eeee p",yesterday:"'నిన్న' p",today:"'ఈ రోజు' p",tomorrow:"'రేపు' p",nextWeek:"'తదుపరి' eeee p",other:"P"};t.default=function(e,t,r,a){return u[e]},e.exports=t.default}}]);

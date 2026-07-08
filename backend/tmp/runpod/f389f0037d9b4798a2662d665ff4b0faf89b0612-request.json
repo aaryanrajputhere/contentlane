@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "The final shot shows the tidy room with the Ellie Lamps product already on, filling the corner with warm light, the books neatly arranged, and the table looking organized. A hand enters frame and exits, the camera pulls back to reveal the finished setup. Pull-back reveal, warm ambient lighting, organized final arrangement. Use the exact product from the product reference image, preserving its shape, proportions, material, color, and details.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

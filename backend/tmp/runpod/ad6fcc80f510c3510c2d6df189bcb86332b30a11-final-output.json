@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[{\"hook\":\"The Mess vs the Masterpiece\",\"templateType\":\"Mess vs Masterpiece\",\"scenes\":[{\"onScreenText\":\"Your room feels flat\",\"videoPrompt\":\"Vertical 9:16 opening shot of a dull, lifeless room with weak ambient lighting and no focal point, realistic home setting, no text baked into the image\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"It's just not right\",\"videoPrompt\":\"Vertical 9:16 detail shot emphasizing the uninviting before-state, dark corners, flat surfaces, visually disappointing room mood\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Meet Ellie Lamps\",\"videoPrompt\":\"Vertical 9:16 hero reveal of Ellie Lamps as the warm focal point of the room, handcrafted look, strong silhouette, premium composition, clear negative space for captions\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Handmade detail changes everything\",\"videoPrompt\":\"Vertical 9:16 close-up of the lamp materials, finish, and handmade craftsmanship, warm ambient glow, crisp texture detail, premium lighting\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Transform your space now\",\"videoPrompt\":\"Vertical 9:16 closing shot of the transformed room anchored by Ellie Lamps, inviting glow, styled composition, clear product-centered purchase moment\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2}],\"cta\":\"Shop Ellie Lamps\",\"durationSeconds\":10}]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 1889,
+        "output": 332
+      }
+    }
+  ]
+}

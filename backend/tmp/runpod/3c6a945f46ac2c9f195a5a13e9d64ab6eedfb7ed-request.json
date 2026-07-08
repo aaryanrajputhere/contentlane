@@ -1,0 +1,14 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Objective: Clear space and place the referenced product. Subject: Same character from the character reference image physically interacting with the exact Ellie Lamps - HTTYD – Elie crafts product from the product reference image. Start frame: The shot starts on the failed setup from Scene 2 with space being cleared for the referenced product. Action: Hands remove the blocking objects, wipe the surface, place the exact Ellie Lamps - HTTYD – Elie crafts product from the product reference image, rotate it toward the main use area, and switch it on or set it into working position. Camera: slow push-in. Lighting: Warm product light begins replacing the harsh shadow from the earlier scenes. End frame: The shot ends with the referenced product centered, positioned, and ready for close detail in Scene 4. Continuity: Begins from Scene 2 failed setup and ends with the product placed for Scene 4. Use the exact product from the product reference image. Preserve its shape, silhouette, material, texture, color, proportions, and distinctive details. Do not redesign or replace it. Only change its position, rotation, scale within the scene, and lighting. Use the same character from the character reference image. Preserve face, hairstyle, clothing, body proportions, skin tone, glasses/accessories, and overall identity. Only change pose, expression, and movement.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "https://res.cloudinary.com/duwcbwqe5/image/upload/v1782552028/reelswarm_creators/sahpbzkco41bslm6aslk.png",
+    "image_url_2": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

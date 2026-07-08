@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Objective: Reveal the finished result and contrast the opening mess. Subject: Exact Ellie Lamps - HTTYD – Elie crafts product from the product reference image. Start frame: The shot starts from the improved setup left by Scene 4 with the referenced product already in use. Action: A hand makes one final visible adjustment, straightens or tucks away a remaining object, then exits frame. Camera: slow pull-back. Lighting: Warm ambient product light replaces the harsh overhead shadow from Scene 1. End frame: The shot ends on the same area from Scene 1 now cleared, arranged, and anchored by the referenced product as the main visible focal point. Continuity: Begins from Scene 4 with the product already in use and pulls back to the final payoff. Use the exact product from the product reference image. Preserve its shape, silhouette, material, texture, color, proportions, and distinctive details. Do not redesign or replace it. Only change its position, rotation, scale within the scene, and lighting.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

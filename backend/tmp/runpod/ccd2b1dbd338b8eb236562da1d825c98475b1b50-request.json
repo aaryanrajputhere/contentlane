@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "Objective: Show a failed workaround that makes the setup worse. Subject: Exact Ellie Lamps - HTTYD – Elie crafts product from the product reference image. Start frame: The shot starts from the same messy setup left by Scene 1. Action: Hands try to slide the exact Ellie Lamps - HTTYD – Elie crafts product from the product reference image into the crowded spot, then lift it back or push it aside because the clutter blocks a clean placement. Camera: tilt down. Lighting: Hard ceiling light keeps tangled objects and awkward shadows visible. End frame: The shot ends with the failed workaround visible and the setup looking more blocked than before. Continuity: Begins from Scene 1 mess and ends with the failed setup ready to be cleared in Scene 3. Use the exact product from the product reference image. Preserve its shape, silhouette, material, texture, color, proportions, and distinctive details. Do not redesign or replace it. Only change its position, rotation, scale within the scene, and lighting.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "http://www.eliecrafts.com/cdn/shop/files/1.png?v=1779008170"
+  }
+}

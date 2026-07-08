@@ -1,0 +1,13 @@
+{
+  "endpoint": "eoovaae3wba89l",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/eoovaae3wba89l/run"
+  },
+  "input": {
+    "prompt": "A person sits in a quiet room, holding a notepad, looking determined. The camera captures their focused expression, with soft lighting highlighting their face. Use the same character from the character reference image. Preserve identity, face, hairstyle, clothing, and body proportions.. Keep it natural, creator-made, and native to short-form social video.",
+    "seed": 42,
+    "width": 768,
+    "height": 1024,
+    "image_url": "https://res.cloudinary.com/duwcbwqe5/image/upload/v1782736204/reelswarm_creators/inmm1vhphl5kdsl9avdw.png"
+  }
+}

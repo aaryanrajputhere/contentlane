@@ -1,0 +1,18 @@
+{
+  "status": "COMPLETED",
+  "output": [
+    {
+      "choices": [
+        {
+          "tokens": [
+            "[\n    {\n        \"hook\": \"The Mess vs the Masterpiece. Start with the frustrating mess, then reveal the polished product.\",\n        \"templateType\": \"Mess vs. Masterpiece\",\n        \"scenes\": [\n            {\n                \"onScreenText\": \"Your room feels flat, uninspired.\",\n                \"videoPrompt\": \"Vertical 9:16 wide shot of a dimly lit room with a flat, uninspiring lamp and cluttered surfaces, camera angle showing messy corners and uneven lighting, lack of focal point, composition feels fragmented and disorganized, viewer can sense the frustration.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"It’s hard to find a lamp that fits.\",\n                \"videoPrompt\": \"Vertical 9:16 push-in on a variety of poorly lit rooms with various mass-produced lamps, each one looking generic and uninspiring, contrasting poorly with the surroundings, surfaces and light fall creating an unsatisfying mood, viewer can sense the difficulty in finding the right lamp.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": false,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Introducing Ellie Lamps.\",\n                \"videoPrompt\": \"Vertical 9:16 product reveal of an Ellie Lamps in a room, centered framing with the lamp in focus, warm ambient light beginning to reshape the scene, the lamp stands out as unique and handmade, viewer can sense the turning point.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Unique and handmade, perfect for fans.\",\n                \"videoPrompt\": \"Vertical 9:16 close-up on the Ellie Lamps material texture and finish, showing the unique craftsmanship, camera tracking across the lamp, light casting a soft glow on nearby surfaces, background becoming more intentional and organized, viewer can see the improvement.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            },\n            {\n                \"onScreenText\": \"Transform your room into a masterpiece.\",\n                \"videoPrompt\": \"Vertical 9:16 final wide shot of the room with the Ellie Lamps, warm, balanced lighting creating a visually satisfying composition, surfaces looking polished and intentional, the lamp anchoring the space, viewer can see the contrast with the initial messy state.\",\n                \"featuresCharacter\": false,\n                \"featuresProduct\": true,\n                \"durationSeconds\": 2\n            }\n        ],\n        \"cta\": \"See which Ellie Lamp fits your room\",\n        \"durationSeconds\": 10\n    }\n]"
+          ]
+        }
+      ],
+      "usage": {
+        "input": 2365,
+        "output": 569
+      }
+    }
+  ]
+}

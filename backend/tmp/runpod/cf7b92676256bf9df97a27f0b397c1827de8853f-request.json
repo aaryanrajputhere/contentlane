@@ -1,0 +1,15 @@
+{
+  "endpoint": "zc0k37oovk9pk0",
+  "urls": {
+    "runUrl": "https://api.runpod.ai/v2/zc0k37oovk9pk0/run"
+  },
+  "input": {
+    "prompt": "Add subtle natural creator motion for a 2 second UGC hook. Preserve face identity and composition.",
+    "image_url": "https://res.cloudinary.com/duwcbwqe5/image/upload/v1783243485/reelswarm_images/qsoeyqagaydwr90tjbyx.png",
+    "seed": 42,
+    "width": 480,
+    "height": 832,
+    "length": 16,
+    "steps": 10
+  }
+}

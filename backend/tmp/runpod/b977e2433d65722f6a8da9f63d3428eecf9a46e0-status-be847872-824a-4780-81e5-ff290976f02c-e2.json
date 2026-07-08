@@ -1,0 +1,26 @@
+{
+  "status": 200,
+  "ok": true,
+  "body": {
+    "delayTime": 49648,
+    "executionTime": 83435,
+    "id": "be847872-824a-4780-81e5-ff290976f02c-e2",
+    "output": [
+      {
+        "choices": [
+          {
+            "tokens": [
+              "[{\"hook\":\"The Mess vs the Masterpiece\",\"templateType\":\"Mess vs Masterpiece\",\"scenes\":[{\"onScreenText\":\"Frustrating clutter before a solution\",\"videoPrompt\":\"Vertical 9:16 opening shot showing a messy room, cluttered and chaotic, no text baked into the image\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Here is the real problem\",\"videoPrompt\":\"Vertical 9:16 detail shot emphasizing a specific pain point, realistic texture, fast visual clarity\",\"featuresCharacter\":false,\"featuresProduct\":false,\"durationSeconds\":2},{\"onScreenText\":\"Introducing Ellie Lamps\",\"videoPrompt\":\"Vertical 9:16 hero shot of the product, presented as a polished solution, premium composition, crisp detail, strong negative space for captions\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Unique and handmade quality\",\"videoPrompt\":\"Vertical 9:16 close-up benefit shot showing materials, finish, or function that makes the product stand out, close-up of the product highlighting unique features\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2},{\"onScreenText\":\"Transform your space\",\"videoPrompt\":\"Vertical 9:16 closing product shot with a clear transformation from messy to polished, cinematic motion, product centered, clean background, soft ambient glow light\",\"featuresCharacter\":false,\"featuresProduct\":true,\"durationSeconds\":2}],\"cta\":\"See the product in action\",\"durationSeconds\":10}]"
+            ]
+          }
+        ],
+        "usage": {
+          "input": 1512,
+          "output": 318
+        }
+      }
+    ],
+    "status": "COMPLETED",
+    "workerId": "usrjcv02a9xcdu"
+  }
+}
