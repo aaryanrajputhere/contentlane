@@ -24,7 +24,7 @@ test('export state uses the selected concept as the default overlay text source'
     createdAt: new Date(),
     updatedAt: new Date(),
   };
-  const exportState = buildExportState({ id: 'ckv9z7t7f0000xkqwf3d', website: 'https://example.com', normalizedWebsite: 'https://example.com', status: 'READY', createdAt: new Date(), updatedAt: new Date(), selectedConceptId: null, selectedCharacterId: null, selectedCharacter: null }, concept, null, null);
+  const exportState = buildExportState({ id: 'ckv9z7t7f0000xkqwf3d', website: 'https://example.com', normalizedWebsite: 'https://example.com', status: 'READY', createdAt: new Date(), updatedAt: new Date(), selectedConceptId: null, selectedCharacterId: null, selectedCharacter: null, userId: null }, concept, null, null);
   assert.match(exportState.overlayText, /example\.com/i);
   assert.equal(profile.offer.length > 0, true);
   assert.equal(exportState.selectedConceptId, concept.id);

@@ -23,8 +23,8 @@ const testWebsitePrefix = 'https://lean-';
 
 beforeEach(async () => {
   await prisma.project.deleteMany({ where: { website: { startsWith: testWebsitePrefix } } });
-  await prisma.allowedEmail.deleteMany({ where: { email: { contains: '@example.com' } } });
-  await prisma.user.deleteMany({ where: { email: { contains: '@example.com' } } });
+  await prisma.allowedEmail.deleteMany({ where: { email: { startsWith: 'project-' } } });
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'project-' } } });
 });
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
@@ -47,7 +47,7 @@ function buildBrandDemoFormData() {
 test('project lifecycle is authenticated and scoped to the signed-in beta user', async () => {
   await withServer(async (baseUrl) => {
     const ownerCookie = await signupAndGetCookie(baseUrl, {
-      email: 'owner@example.com',
+      email: 'project-owner@example.com',
       password: 'password123',
       name: 'Owner',
     });
@@ -162,11 +162,11 @@ test('project lifecycle is authenticated and scoped to the signed-in beta user',
     const jobResponse = await fetch(`${baseUrl}/api/v1/jobs/${created.job.id}`, { headers: { cookie: ownerCookie } });
     assert.equal(jobResponse.status, 200);
 
-    await createUserAccount({ email: 'viewer@example.com', password: 'password123', name: 'Viewer' });
+    await createUserAccount({ email: 'project-viewer@example.com', password: 'password123', name: 'Viewer' });
     const viewerCookie = await fetch(`${baseUrl}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'viewer@example.com', password: 'password123' }),
+      body: JSON.stringify({ email: 'project-viewer@example.com', password: 'password123' }),
     }).then(async (response) => {
       assert.equal(response.status, 200);
       return (response.headers.get('set-cookie') ?? '').split(';', 1)[0];

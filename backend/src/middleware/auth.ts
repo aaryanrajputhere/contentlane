@@ -6,7 +6,7 @@ import { config } from '../config';
 
 async function resolveAuthenticatedUser(req: Express.Request) {
   if (req.user) return req.user;
-  const token = req.cookies?.[config.COOKIE_NAME];
+  const token = (req as Express.Request & { cookies?: Record<string, string> }).cookies?.[config.COOKIE_NAME];
   if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
 
   let claims;

@@ -1,12 +1,13 @@
 import { type Project, Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import prisma from './prisma';
-import type { BrandProfile, ConceptCard, CreatorCharacter, ExportState, MediaAsset, ProjectSnapshot } from '../domain/schemas';
+import type { BrandProfile, ConceptCard, CreatorCharacter, ExportState, MediaAsset, ProjectSnapshot, WebsiteAnalysis, WebsiteAnalysisHomepage } from '../domain/schemas';
 
 export type ConceptBlueprint = Pick<ConceptCard, 'angle' | 'hookText' | 'hookImagePrompt' | 'demoOverlayText' | 'videoDirection' | 'targetDurationLabel' | 'targetDurationSeconds' | 'score' | 'scoreLabel' | 'rationale' | 'generatedImageUrl' | 'generatedVideoUrl' | 'sortOrder'>;
 
 export const projectSnapshotInclude = {
   brandProfile: true,
+  websiteAnalysis: true,
   concepts: { orderBy: { sortOrder: 'asc' } },
   mediaAssets: { orderBy: { createdAt: 'asc' } },
   exportState: true,
@@ -24,6 +25,88 @@ const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPE
 
 const titleCase = (value: string) => value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const stripScheme = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
+function readTrimmedString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function toHomepageEvidence(value: unknown, sourceUrl: string, rootDomain: string): WebsiteAnalysisHomepage {
+  const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+  const fallbackText = `Homepage for ${rootDomain}`;
+  const visibleTextSnippet = readTrimmedString(record.visibleTextSnippet) ?? fallbackText;
+  return {
+    url: readTrimmedString(record.url) ?? sourceUrl,
+    title: readTrimmedString(record.title),
+    metaDescription: readTrimmedString(record.metaDescription),
+    visibleTextSnippet,
+    extractedTextSnippet: readTrimmedString(record.extractedTextSnippet),
+    canonicalUrl: readTrimmedString(record.canonicalUrl),
+    extractionStatus: record.extractionStatus === 'success' || record.extractionStatus === 'failed' ? record.extractionStatus : undefined,
+    extractionSource: record.extractionSource === 'firecrawl' || record.extractionSource === 'fallback' ? record.extractionSource : undefined,
+    extractionError: readTrimmedString(record.extractionError),
+  };
+}
+
+function normalizeWebsiteAnalysisRecord(value: unknown): WebsiteAnalysis | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const sourceUrl = readTrimmedString(record.sourceUrl) ?? null;
+  const rootDomain = readTrimmedString(record.rootDomain) ?? (sourceUrl ? new URL(sourceUrl).host.replace(/^www\./i, '') : 'unknown');
+  const homepageSource = (() => {
+    const homepage = record.homepage;
+    if (homepage && typeof homepage === 'object') return homepage;
+    const selectedPages = Array.isArray(record.selectedPages) ? record.selectedPages : null;
+    if (selectedPages && selectedPages.length > 0 && typeof selectedPages[0] === 'object' && selectedPages[0] !== null) return selectedPages[0];
+    const rankedPages = Array.isArray(record.rankedPages) ? record.rankedPages : null;
+    if (rankedPages && rankedPages.length > 0 && typeof rankedPages[0] === 'object' && rankedPages[0] !== null) return rankedPages[0];
+    return record;
+  })();
+  const normalizedSourceUrl = sourceUrl ?? `https://${rootDomain}`;
+  return {
+    id: typeof record.id === 'string' ? record.id : '',
+    projectId: typeof record.projectId === 'string' ? record.projectId : '',
+    sourceUrl: normalizedSourceUrl,
+    rootDomain,
+    homepage: toHomepageEvidence(homepageSource, normalizedSourceUrl, rootDomain),
+    createdAt: record.createdAt instanceof Date ? record.createdAt : new Date(String(record.createdAt ?? Date.now())),
+    updatedAt: record.updatedAt instanceof Date ? record.updatedAt : new Date(String(record.updatedAt ?? Date.now())),
+  };
+}
+
+export function buildWebsiteAnalysisStorageData(analysis: Pick<WebsiteAnalysis, 'sourceUrl' | 'rootDomain' | 'homepage'>) {
+  const homepage = {
+    url: analysis.homepage.url,
+    title: analysis.homepage.title ?? null,
+    metaDescription: analysis.homepage.metaDescription ?? null,
+    visibleTextSnippet: analysis.homepage.visibleTextSnippet,
+    pageTypeHint: 'homepage',
+    crawlDepth: 0,
+    canonicalUrl: analysis.homepage.canonicalUrl ?? null,
+    score: 100,
+    scoreReason: 'Homepage is the only evidence source',
+    ...(analysis.homepage.extractionStatus ? { extractionStatus: analysis.homepage.extractionStatus } : {}),
+    ...(analysis.homepage.extractionSource ? { extractionSource: analysis.homepage.extractionSource } : {}),
+    ...(analysis.homepage.extractionError ? { extractionError: analysis.homepage.extractionError } : {}),
+    ...(analysis.homepage.extractedTextSnippet ? { extractedTextSnippet: analysis.homepage.extractedTextSnippet } : {}),
+  };
+  return {
+    sourceUrl: analysis.sourceUrl,
+    rootDomain: analysis.rootDomain,
+    discoveredUrls: [analysis.homepage.url],
+    rankedPages: [homepage],
+    selectedPages: [homepage],
+    crawlSummary: {
+      rootUrl: analysis.sourceUrl,
+      rootDomain: analysis.rootDomain,
+      discoveredCount: 1,
+      rankedCount: 1,
+      selectedCount: 1,
+      extractedCount: analysis.homepage.extractionStatus === 'failed' ? 0 : 1,
+      failedCount: analysis.homepage.extractionStatus === 'failed' ? 1 : 0,
+      lowSignalFilteredCount: 0,
+    },
+  };
+}
 
 function scoreLabel(score: number) {
   if (score >= 94) return 'Top rank';
@@ -413,8 +496,13 @@ export function buildExportState(project: Project, concept?: Pick<ConceptCard, '
   };
 }
 
-export async function loadProjectSnapshot(projectId: string) {
-  return prisma.project.findUnique({ where: { id: projectId }, include: projectSnapshotInclude });
+export async function loadProjectSnapshot(projectId: string, userId?: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, ...(userId ? { userId } : {}) }, include: projectSnapshotInclude });
+  if (!project) return null;
+  return {
+    ...project,
+    websiteAnalysis: normalizeWebsiteAnalysisRecord(project.websiteAnalysis),
+  };
 }
 
 export async function clearGeneratedContent(projectId: string) {
@@ -427,6 +515,7 @@ export async function clearGeneratedContent(projectId: string) {
     mediaDelete,
     prisma.hookConcept.deleteMany({ where: { projectId } }),
     prisma.projectExport.deleteMany({ where: { projectId } }),
+    prisma.websiteAnalysis.deleteMany({ where: { projectId } }),
     prisma.project.update({ where: { id: projectId }, data: { selectedConceptId: null, selectedCharacterId: null, selectedCharacter: Prisma.JsonNull } }),
   ]);
 }

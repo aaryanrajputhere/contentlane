@@ -79,6 +79,7 @@ model Project {
   selectedCharacter   Json?          @map("selectedCharacter")
   selectedConcept     HookConcept?   @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
   brandProfile        BrandProfile?
+  websiteAnalysis     WebsiteAnalysis?
   concepts            HookConcept[]
   mediaAssets         MediaAsset[]
   exportState         ProjectExport?
@@ -105,6 +106,20 @@ model BrandProfile {
   summary      String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model WebsiteAnalysis {
+  id            String   @id @default(cuid())
+  projectId     String   @unique
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceUrl     String
+  rootDomain    String
+  discoveredUrls Json
+  rankedPages   Json
+  selectedPages Json
+  crawlSummary  Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model HookConcept {

@@ -89,6 +89,31 @@ export interface BrandProfile {
   updatedAt: string;
 }
 
+export type AnalysisExtractionStatus = 'success' | 'failed';
+export type AnalysisExtractionSource = 'firecrawl' | 'fallback';
+
+export interface WebsiteAnalysisHomepage {
+  url: string;
+  title?: string | null;
+  metaDescription?: string | null;
+  visibleTextSnippet: string;
+  extractedTextSnippet?: string | null;
+  canonicalUrl?: string | null;
+  extractionStatus?: AnalysisExtractionStatus;
+  extractionSource?: AnalysisExtractionSource;
+  extractionError?: string | null;
+}
+
+export interface WebsiteAnalysis {
+  id: string;
+  projectId: string;
+  sourceUrl: string;
+  rootDomain: string;
+  homepage: WebsiteAnalysisHomepage;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConceptCard {
   id: string;
   projectId: string;
@@ -166,6 +191,7 @@ export interface ProjectSnapshot {
   createdAt: string;
   updatedAt: string;
   brandProfile: BrandProfile | null;
+  websiteAnalysis: WebsiteAnalysis | null;
   concepts: ConceptCard[];
   mediaAssets: MediaAsset[];
   exportState: ProjectExport | null;

@@ -68,7 +68,7 @@ test('concept prompt builders and export state stay aligned', () => {
   const imagePrompt = buildConceptImagePrompt(profile, concept);
   // @ts-expect-error Local fixture intentionally mirrors only the fields these helpers need.
   const videoPrompt = buildConceptVideoPrompt(profile, concept);
-  const exportState = buildExportState({ id: 'ckv9z7t7f0000xkqwf3proj', website: 'https://reelswarm.dev', normalizedWebsite: 'https://reelswarm.dev', status: 'READY', createdAt: new Date(), updatedAt: new Date(), selectedConceptId: null, selectedCharacterId: null, selectedCharacter: null }, concept, null, null);
+  const exportState = buildExportState({ id: 'ckv9z7t7f0000xkqwf3proj', website: 'https://reelswarm.dev', normalizedWebsite: 'https://reelswarm.dev', status: 'READY', createdAt: new Date(), updatedAt: new Date(), selectedConceptId: null, selectedCharacterId: null, selectedCharacter: null, userId: null }, concept, null, null);
 
   assert.match(imagePrompt, /Hook:/i);
   assert.match(videoPrompt.prompt, /Duration target: 4-5s/i);

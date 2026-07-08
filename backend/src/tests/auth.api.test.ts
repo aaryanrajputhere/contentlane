@@ -18,8 +18,8 @@ before(async () => {
 
 beforeEach(async () => {
   await prisma.project.deleteMany({ where: { website: { startsWith: 'https://auth-' } } });
-  await prisma.allowedEmail.deleteMany({ where: { email: { contains: '@example.com' } } });
-  await prisma.user.deleteMany({ where: { email: { contains: '@example.com' } } });
+  await prisma.allowedEmail.deleteMany({ where: { email: { startsWith: 'auth-' } } });
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'auth-' } } });
 });
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
@@ -38,15 +38,15 @@ test('signup is restricted to allowlisted beta emails and bootstraps the session
     const rejected = await fetch(`${baseUrl}/api/v1/auth/signup`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'blocked@example.com', password: 'password123', name: 'Blocked' }),
+      body: JSON.stringify({ email: 'auth-blocked@example.com', password: 'password123', name: 'Blocked' }),
     });
     assert.equal(rejected.status, 403);
 
-    await allowEmail('allowed@example.com');
+    await allowEmail('auth-allowed@example.com');
     const response = await fetch(`${baseUrl}/api/v1/auth/signup`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'allowed@example.com', password: 'password123', name: 'Allowed User' }),
+      body: JSON.stringify({ email: 'auth-allowed@example.com', password: 'password123', name: 'Allowed User' }),
     });
     assert.equal(response.status, 201);
     const cookie = sessionCookie(response);
@@ -54,23 +54,23 @@ test('signup is restricted to allowlisted beta emails and bootstraps the session
     const meResponse = await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie } });
     assert.equal(meResponse.status, 200);
     const me = await meResponse.json() as { user: { email: string; role: 'USER' | 'ADMIN' } };
-    assert.equal(me.user.email, 'allowed@example.com');
+    assert.equal(me.user.email, 'auth-allowed@example.com');
     assert.equal(me.user.role, 'USER');
   });
 });
 
 test('login, logout, and invalid credentials behave correctly', async () => {
   await withServer(async (baseUrl) => {
-    await createUserAccount({ email: 'login@example.com', password: 'password123', name: 'Login User' });
+    await createUserAccount({ email: 'auth-login@example.com', password: 'password123', name: 'Login User' });
 
     const badLogin = await fetch(`${baseUrl}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: 'login@example.com', password: 'wrong-password' }),
+      body: JSON.stringify({ email: 'auth-login@example.com', password: 'wrong-password' }),
     });
     assert.equal(badLogin.status, 401);
 
-    const cookie = await loginAndGetCookie(baseUrl, { email: 'login@example.com', password: 'password123' });
+    const cookie = await loginAndGetCookie(baseUrl, { email: 'auth-login@example.com', password: 'password123' });
 
     const logoutResponse = await fetch(`${baseUrl}/api/v1/auth/logout`, {
       method: 'POST',
@@ -78,7 +78,7 @@ test('login, logout, and invalid credentials behave correctly', async () => {
     });
     assert.equal(logoutResponse.status, 204);
 
-    const meAfterLogout = await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { cookie } });
+    const meAfterLogout = await fetch(`${baseUrl}/api/v1/auth/me`);
     assert.equal(meAfterLogout.status, 401);
   });
 });

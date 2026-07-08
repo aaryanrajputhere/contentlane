@@ -112,6 +112,8 @@ export const characterSelectionSchema = z.object({
 
 export const userRoleSchema = z.enum(['USER', 'ADMIN']);
 export const projectStatusSchema = z.enum(['DRAFT', 'ANALYZING', 'READY', 'HOOKS_READY', 'SCRIPTS_READY', 'MEDIA_READY', 'EXPORT_READY', 'FAILED']);
+export const analysisExtractionStatusSchema = z.enum(['success', 'failed']);
+export const analysisExtractionSourceSchema = z.enum(['firecrawl', 'fallback']);
 export const jobStatusSchema = z.enum(['QUEUED', 'ACTIVE', 'COMPLETED', 'FAILED', 'CANCELLED']);
 export const jobTypeSchema = z.enum(['ANALYZE_WEBSITE', 'GENERATE_CONCEPTS', 'GENERATE_MEDIA', 'SAVE_EXPORT', 'GENERATE_HOOKS', 'GENERATE_SCRIPTS']);
 export const mediaTypeSchema = z.enum(['IMAGE', 'VIDEO']);
@@ -139,6 +141,44 @@ export const brandProfileSchema = z.object({
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 }).strict();
+export const websiteAnalysisPageSchema = z.object({
+  url: z.string().url(),
+  title: z.string().min(1).nullable().optional(),
+  metaDescription: z.string().min(1).nullable().optional(),
+  visibleTextSnippet: z.string().min(1),
+  pageTypeHint: z.string().min(1),
+  crawlDepth: z.number().int().min(0),
+  canonicalUrl: z.string().url().nullable().optional(),
+  score: z.number().int().min(0).max(100).optional(),
+  scoreReason: z.string().min(1).nullable().optional(),
+  extractionStatus: analysisExtractionStatusSchema.optional(),
+  extractionSource: analysisExtractionSourceSchema.optional(),
+  extractionError: z.string().min(1).nullable().optional(),
+  extractedTextSnippet: z.string().min(1).nullable().optional(),
+}).strict();
+
+export const websiteAnalysisHomepageSchema = z.object({
+  url: z.string().url(),
+  title: z.string().min(1).nullable().optional(),
+  metaDescription: z.string().min(1).nullable().optional(),
+  visibleTextSnippet: z.string().min(1),
+  extractedTextSnippet: z.string().min(1).nullable().optional(),
+  canonicalUrl: z.string().url().nullable().optional(),
+  extractionStatus: analysisExtractionStatusSchema.optional(),
+  extractionSource: analysisExtractionSourceSchema.optional(),
+  extractionError: z.string().min(1).nullable().optional(),
+}).strict();
+
+export const websiteAnalysisSchema = z.object({
+  id: z.string().cuid(),
+  projectId: z.string().cuid(),
+  sourceUrl: z.string().url(),
+  rootDomain: z.string().min(1),
+  homepage: websiteAnalysisHomepageSchema,
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+}).strict();
+
 
 export const conceptCardSchema = z.object({
   id: z.string().cuid(),
@@ -208,6 +248,7 @@ export const projectSchema = z.object({
 
 export const projectSnapshotSchema = projectSchema.extend({
   brandProfile: brandProfileSchema.nullable(),
+  websiteAnalysis: websiteAnalysisSchema.nullable(),
   concepts: z.array(conceptCardSchema),
   mediaAssets: z.array(mediaAssetSchema),
   exportState: projectExportSchema.nullable(),
@@ -223,6 +264,9 @@ export type ConceptStageInput = z.infer<typeof conceptStageInputSchema>;
 export type MediaStageInput = z.infer<typeof mediaStageInputSchema>;
 export type ExportState = z.infer<typeof exportStateSchema>;
 export type BrandProfile = z.infer<typeof brandProfileSchema>;
+export type WebsiteAnalysisPage = z.infer<typeof websiteAnalysisPageSchema>;
+export type WebsiteAnalysisHomepage = z.infer<typeof websiteAnalysisHomepageSchema>;
+export type WebsiteAnalysis = z.infer<typeof websiteAnalysisSchema>;
 export type CreatorCharacter = z.infer<typeof creatorCharacterSchema>;
 export type CreatorRecord = z.infer<typeof creatorSchema>;
 export type CreatorClipRecord = z.infer<typeof creatorClipSchema>;

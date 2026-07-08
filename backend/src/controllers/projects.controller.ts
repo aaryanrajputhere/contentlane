@@ -3,7 +3,8 @@ import { JobStatus, JobType, Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { ApiError } from '../lib/errors';
 import { characterSelectionSchema, conceptSelectionSchema, conceptStageInputSchema, creatorCharacterSchema, exportPayloadSchema, jobIdParamsSchema, mediaStageInputSchema, projectIdParamsSchema, websiteInputSchema } from '../domain/schemas';
-import { buildBrandProfile, buildConceptCards, buildExportState, clearGeneratedContent, generateCharacterImageAssetForConcept, generateCharacterMediaForConcept, generateCharacterVideoAssetForConcept, loadProjectSnapshot, normalizeWebsiteInput, projectSnapshotInclude } from '../lib/workflow';
+import { buildConceptCards, buildExportState, buildWebsiteAnalysisStorageData, clearGeneratedContent, generateCharacterImageAssetForConcept, generateCharacterMediaForConcept, generateCharacterVideoAssetForConcept, loadProjectSnapshot, normalizeWebsiteInput, projectSnapshotInclude } from '../lib/workflow';
+import { runWebsiteIntelligencePipeline } from '../lib/website-intelligence/pipeline';
 import { deleteStoredAsset, storeUploadedAsset } from '../lib/asset-storage';
 
 async function createJob(projectId: string, type: JobType, input: Prisma.InputJsonValue) {
@@ -70,6 +71,7 @@ async function resetProjectForNewFlow(projectId: string) {
     prisma.mediaAsset.deleteMany({ where: { projectId } }),
     prisma.hookConcept.deleteMany({ where: { projectId } }),
     prisma.projectExport.deleteMany({ where: { projectId } }),
+    prisma.websiteAnalysis.deleteMany({ where: { projectId } }),
     prisma.project.update({
       where: { id: projectId },
       data: {
@@ -124,19 +126,38 @@ async function analyzeProjectById(projectId: string, userId: string, options: { 
   if (project.brandProfile && !options.forceRegenerate) {
     return { project, cached: true };
   }
+  await prisma.project.update({ where: { id: project.id }, data: { status: 'ANALYZING' } });
   await clearGeneratedContent(project.id);
-  const { jobId, result } = await runStage(project.id, JobType.ANALYZE_WEBSITE, { website: project.website, forceRegenerate: options.forceRegenerate }, 'Analyzing website', async () => {
-    const profile = buildBrandProfile(project.website);
-    await prisma.brandProfile.upsert({
-      where: { projectId: project.id },
-      update: profile,
-      create: { projectId: project.id, ...profile },
+  try {
+    const { jobId, result } = await runStage(project.id, JobType.ANALYZE_WEBSITE, { website: project.website, forceRegenerate: options.forceRegenerate }, 'Analyzing website', async () => {
+      const analysisResult = await runWebsiteIntelligencePipeline(project.website);
+      await prisma.$transaction([
+        prisma.brandProfile.upsert({
+          where: { projectId: project.id },
+          update: analysisResult.brandProfile,
+          create: { projectId: project.id, ...analysisResult.brandProfile },
+        }),
+        prisma.websiteAnalysis.upsert({
+          where: { projectId: project.id },
+          update: buildWebsiteAnalysisStorageData(analysisResult.analysis),
+          create: { projectId: project.id, ...buildWebsiteAnalysisStorageData(analysisResult.analysis) },
+        }),
+        prisma.project.update({ where: { id: project.id }, data: { status: 'READY' } }),
+      ]);
+      return analysisResult;
     });
-    await prisma.project.update({ where: { id: project.id }, data: { status: 'READY' } });
-    return profile;
-  });
-  const next = assertProject(await loadProjectSnapshot(project.id, userId));
-  return { project: next, job: await prisma.generationJob.findUnique({ where: { id: jobId } }), brandProfile: result, cached: false };
+    const next = assertProject(await loadProjectSnapshot(project.id, userId));
+    return {
+      project: next,
+      job: await prisma.generationJob.findUnique({ where: { id: jobId } }),
+      brandProfile: result.brandProfile,
+      analysis: result.analysis,
+      cached: false,
+    };
+  } catch (error) {
+    await prisma.project.update({ where: { id: project.id }, data: { status: 'FAILED' } });
+    throw error;
+  }
 }
 
 async function writeConceptAsset(projectId: string, conceptId: string, type: 'IMAGE' | 'VIDEO', asset: { provider: string; providerId: string | null; url: string; mimeType: string | null; metadata: Prisma.InputJsonValue }) {

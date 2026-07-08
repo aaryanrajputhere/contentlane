@@ -23,8 +23,8 @@ const testCreatorName = 'Test Creator';
 
 beforeEach(async () => {
   await prisma.creator.deleteMany({ where: { name: testCreatorName } });
-  await prisma.allowedEmail.deleteMany({ where: { email: { contains: '@example.com' } } });
-  await prisma.user.deleteMany({ where: { email: { contains: '@example.com' } } });
+  await prisma.allowedEmail.deleteMany({ where: { email: { startsWith: 'creator-' } } });
+  await prisma.user.deleteMany({ where: { email: { startsWith: 'creator-' } } });
 });
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
@@ -44,10 +44,10 @@ function blob(mimeType: string, content: string) {
 
 test('creator library requires auth for reads and admin rights for writes', async () => {
   await withServer(async (baseUrl) => {
-    await createUserAccount({ email: 'admin@example.com', password: 'password123', name: 'Admin', role: 'ADMIN' });
-    await createUserAccount({ email: 'member@example.com', password: 'password123', name: 'Member' });
-    const adminCookie = await loginAndGetCookie(baseUrl, { email: 'admin@example.com', password: 'password123' });
-    const memberCookie = await loginAndGetCookie(baseUrl, { email: 'member@example.com', password: 'password123' });
+    await createUserAccount({ email: 'creator-admin@example.com', password: 'password123', name: 'Admin', role: 'ADMIN' });
+    await createUserAccount({ email: 'creator-member@example.com', password: 'password123', name: 'Member' });
+    const adminCookie = await loginAndGetCookie(baseUrl, { email: 'creator-admin@example.com', password: 'password123' });
+    const memberCookie = await loginAndGetCookie(baseUrl, { email: 'creator-member@example.com', password: 'password123' });
 
     const creatorForm = new FormData();
     creatorForm.append('name', testCreatorName);
