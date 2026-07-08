@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Header } from './Header';
 import { ArrowRight, Check, Zap } from 'lucide-react';

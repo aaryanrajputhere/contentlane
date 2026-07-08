@@ -74,7 +74,7 @@ interface Props {
   onGoToProjects?: () => void;
 }
 
-const StudioHub: React.FC<Props> = ({ user, onSelectStyle, onCreateProject, onLogout, onGoToLanding, onGoToProjects }) => {
+const StudioHub: React.FC<Props> = ({ user, onCreateProject, onLogout, onGoToLanding, onGoToProjects }) => {
   return (
     <div className="min-h-screen bg-[#000000] text-white selection:bg-blue-500/30 font-sans overflow-x-hidden">
       {/* ── Nav ── */}

@@ -13,7 +13,6 @@ import type { Script, VoiceoverResult, Character, Project, VideoStyle } from './
 import BrandProfile from './components/BrandProfile';
 import HookStrategy from './components/HookStrategy';
 import ScriptReview from './components/ScriptReview';
-import { ChevronLeft } from 'lucide-react';
 import { Header } from './components/Header';
 
 const FPS = 24;
@@ -392,11 +391,12 @@ function App() {
       <Header 
         type="editor"
         user={user}
-        activeProject={activeProject}
+        activeProject={activeProject || undefined}
         onGoToLanding={() => navigate('/')}
         onGoToProjects={handleBackToProjects}
         setActiveProject={setActiveProject as any}
         onSaveProjectName={async (name: string) => {
+          if (!activeProject) return;
           try {
             await fetch(`/api/projects/${activeProject.id}`, {
               method: 'PUT',

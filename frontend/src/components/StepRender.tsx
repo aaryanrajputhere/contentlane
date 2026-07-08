@@ -112,7 +112,7 @@ const StepRender: React.FC<Props> = ({
           defaultProps: inputProps,
         },
         inputProps,
-        onProgress: ({ progress: p }) => {
+        onProgress: ({ progress: p }: { progress: number }) => {
           setProgress(p);
         },
         videoBitrate: 'high',

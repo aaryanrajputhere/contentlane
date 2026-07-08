@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Play, CheckCircle2, Link as LinkIcon, BrainCircuit, Target, Clapperboard, Clock, TrendingUp, Palette, Coins, Star, Layers, Check, Loader2 } from 'lucide-react';
+import { ArrowRight, Play, CheckCircle2, Link as LinkIcon, BrainCircuit, Target, Clapperboard, Clock, TrendingUp, Coins, Star, Layers, Check, Loader2 } from 'lucide-react';
 import { Header } from './Header';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,7 +20,7 @@ const LandingPage: React.FC<Props> = ({ onGetStarted, user }) => {
     initial: { opacity: 0, y: 20 },
     whileInView: { opacity: 1, y: 0 },
     viewport: { once: true, margin: "-50px" },
-    transition: { duration: 0.6, ease: "easeOut" }
+    transition: { duration: 0.6, ease: "easeOut" as const }
   };
 
   const handleAnalyze = async () => {

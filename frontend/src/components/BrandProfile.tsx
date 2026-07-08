@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
-import { Target, Heart, Zap, Package, ArrowRight, Check } from 'lucide-react';
+import { Target, Heart, Zap, Package, Check } from 'lucide-react';
 
 export default function BrandProfile() {
   const location = useLocation();
@@ -17,7 +17,7 @@ export default function BrandProfile() {
     );
   }
 
-  const { brandContext, products, totalProductsFound } = state;
+  const { brandContext, products } = state;
   
   const audienceTags = (brandContext.targetAudience || []).slice(0, 6);
   const whyPeopleBuy = [

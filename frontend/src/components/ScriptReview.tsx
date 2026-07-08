@@ -1,15 +1,14 @@
-import React, { useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
-import { ArrowRight, Check, Clapperboard, RefreshCcw, Edit2 } from 'lucide-react';
+import { Check, Clapperboard, RefreshCcw, Edit2 } from 'lucide-react';
 
 export default function ScriptReview() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { id } = useParams();
   const state = location.state as { scripts?: any[], brandContext?: any, selectedCharacter?: any, product?: any } | null;
 
-  const [scripts, setScripts] = useState<any[]>(state?.scripts || []);
+  const [scripts] = useState<any[]>(state?.scripts || []);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   
   const { selectedCharacter, product } = state || {};

@@ -27,7 +27,7 @@ interface Props {
 
 const getToken = () => localStorage.getItem('reelswarm-jwt') || localStorage.getItem('brainrot-jwt') || '';
 
-const ProjectsPage: React.FC<Props> = ({ onOpenProject, onLogout, user, activeStyle, onGoToLanding, onBackToStudio }) => {
+const ProjectsPage: React.FC<Props> = ({ onOpenProject, onLogout, user, onGoToLanding, onBackToStudio }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
