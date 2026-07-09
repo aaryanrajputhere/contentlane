@@ -21,6 +21,7 @@ import { api, post } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
 import { creatorCharacters } from '../data/creatorCharacters';
 import type { BrandProfile, CreatorCharacter, CreatorClipRecord, CreatorRecord, GenerationJob, MediaAsset, ProjectResponse, ProjectSnapshot } from '../types/domain';
+import { calculateTfIdfCosineSimilarity } from '../lib/similarity';
 
 type InsightCard = {
   title: string;
@@ -217,6 +218,27 @@ export default function ProjectPage({ page = 'workflow' }: ProjectPageProps) {
     () => selectedCreatorRecord?.clips ?? [],
     [selectedCreatorRecord],
   );
+
+  const hookTags = useMemo(() => {
+    if (!selectedConcept?.videoDirection) return [];
+    return selectedConcept.videoDirection.split(',').map((t) => t.trim()).filter(Boolean);
+  }, [selectedConcept]);
+
+  const clipSimilarities = useMemo(() => {
+    if (selectedCreatorClips.length === 0 || hookTags.length === 0) return [];
+    const docsTags = selectedCreatorClips.map((clip) => clip.tags);
+    const scores = calculateTfIdfCosineSimilarity(hookTags, docsTags);
+    return selectedCreatorClips.map((clip, index) => ({
+      clipId: clip.id,
+      score: scores[index],
+    }));
+  }, [selectedCreatorClips, hookTags]);
+
+  const recommendedClipId = useMemo(() => {
+    if (clipSimilarities.length === 0) return null;
+    return clipSimilarities.reduce((prev, current) => (prev.score > current.score ? prev : current)).clipId;
+  }, [clipSimilarities]);
+
   const displayConcepts = useMemo(() => {
     if (!project) return [] as ConceptCard[];
     const sorted = sortConcepts(project.concepts, sortMode, savedConceptSet);
@@ -257,9 +279,9 @@ export default function ProjectPage({ page = 'workflow' }: ProjectPageProps) {
       return;
     }
     if (!selectedCreatorRecord.clips.some((clip) => clip.id === selectedClipId)) {
-      setSelectedClipId(selectedCreatorRecord.clips[0].id);
+      setSelectedClipId(recommendedClipId ?? selectedCreatorRecord.clips[0].id);
     }
-  }, [selectedCreatorRecord, selectedClipId]);
+  }, [selectedCreatorRecord, selectedClipId, recommendedClipId]);
 
   useEffect(() => {
     setClipLoadFailures({});
@@ -1080,10 +1102,15 @@ export default function ProjectPage({ page = 'workflow' }: ProjectPageProps) {
                               onError={() => setClipLoadFailures((current) => ({ ...current, [clip.id]: true }))}
                             />
                           )}
-                          <div className="pointer-events-none absolute left-3 top-3">
+                          <div className="pointer-events-none absolute left-3 top-3 flex items-center">
                             <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur-sm ${active ? 'bg-[#111111] text-white' : 'bg-white/90 text-[#111111]'}`}>
                               {active ? 'Selected' : 'Preview'}
                             </span>
+                            {recommendedClipId === clip.id && (
+                              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#111111] px-2.5 py-1 text-[11px] font-semibold text-white shadow-[0_2px_8px_rgba(0,0,0,0.2)] backdrop-blur-sm">
+                                <Sparkles size={11} className="text-[#a78bfa]" /> Recommended match
+                              </span>
+                            )}
                           </div>
                         </div>
 

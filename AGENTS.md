@@ -1,8 +1,8 @@
-# Agent Context: ReelSwarm
+# Agent Context: ContentLane
 
 ## Project Overview
 
-ReelSwarm is an AI-powered platform that turns a business website into short-form marketing videos.
+ContentLane is an AI-powered platform that turns a business website into short-form marketing videos.
 
 ## Active Workflow
 

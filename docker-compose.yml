@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: reelswarm
-      POSTGRES_USER: reelswarm
-      POSTGRES_PASSWORD: reelswarm
+      POSTGRES_DB: ContentLane
+      POSTGRES_USER: ContentLane
+      POSTGRES_PASSWORD: ContentLane
     ports:
       - "5432:5432"
     volumes:
-      - reelswarm_postgres:/var/lib/postgresql/data
+      - ContentLane_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U reelswarm -d reelswarm"]
+      test: ["CMD-SHELL", "pg_isready -U ContentLane -d ContentLane"]
       interval: 3s
       timeout: 3s
       retries: 20
@@ -20,12 +20,12 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - reelswarm_redis:/data
+      - ContentLane_redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       timeout: 3s
       retries: 20
 volumes:
-  reelswarm_postgres:
-  reelswarm_redis:
+  ContentLane_postgres:
+  ContentLane_redis:

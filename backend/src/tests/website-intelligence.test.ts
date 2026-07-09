@@ -43,9 +43,7 @@ test('website intelligence pipeline scrapes only the homepage and does not rank 
   process.env.FIRECRAWL_API_KEY = 'test-firecrawl';
   process.env.FIRECRAWL_BASE_URL = 'https://firecrawl.test/v2';
   process.env.FIRECRAWL_TIMEOUT_MS = '5000';
-  process.env.RUNPOD_API_KEY = 'test-runpod';
-  process.env.RUNPOD_LLM_ENDPOINT_URL = 'https://runpod.test';
-  process.env.RUNPOD_LLM_TIMEOUT_MS = '5000';
+  process.env.OPENAI_API_KEY = 'test-openai';
 
   const originalFetch = globalThis.fetch;
   let scrapeCalls = 0;
@@ -74,26 +72,32 @@ test('website intelligence pipeline scrapes only the homepage and does not rank 
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
 
-    if (url.includes('runpod.test')) {
+    if (url.includes('api.openai.com')) {
       runpodCalls += 1;
-      const payload = bodyText ? JSON.parse(bodyText) as { input?: { prompt?: string } } : {};
-      const prompt = payload.input?.prompt ?? '';
+      const payload = bodyText ? JSON.parse(bodyText) as { messages?: { role: string; content: string }[] } : {};
+      const prompt = payload.messages?.map(m => m.content).join('\n') ?? '';
       if (prompt.includes('rank website pages') || prompt.includes('selectedPages') || prompt.includes('crawlSummary')) {
         throw new Error('Ranking prompt should not be sent');
       }
       return new Response(JSON.stringify({
-        output: JSON.stringify({
-          brandName: 'Acme',
-          tagline: 'Ship faster with Acme',
-          audience: 'Teams that need a clearer workflow',
-          painPoints: ['Slow launches'],
-          benefits: ['Faster shipping'],
-          voice: 'Direct, practical',
-          offer: 'Workflow software',
-          cta: 'Book a demo',
-          angles: ['Speed to launch', 'Clear positioning'],
-          summary: 'Acme helps teams ship faster with a clearer workflow.',
-        }),
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                brandName: 'Acme',
+                tagline: 'Ship faster with Acme',
+                audience: 'Teams that need a clearer workflow',
+                painPoints: ['Slow launches'],
+                benefits: ['Faster shipping'],
+                voice: 'Direct, practical',
+                offer: 'Workflow software',
+                cta: 'Book a demo',
+                angles: ['Speed to launch', 'Clear positioning'],
+                summary: 'Acme helps teams ship faster with a clearer workflow.',
+              })
+            }
+          }
+        ]
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
 

@@ -1,6 +1,6 @@
-# ReelSwarm Frontend
+# ContentLane Frontend
 
-React and Vite application for the ReelSwarm marketing-video workflow.
+React and Vite application for the ContentLane marketing-video workflow.
 
 The active flow is:
 

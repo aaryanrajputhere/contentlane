@@ -1,1 +1,1 @@
-export const authUnauthorizedEvent = 'reelswarm:auth-unauthorized';
+export const authUnauthorizedEvent = "ContentLane:auth-unauthorized";

@@ -1,4 +1,4 @@
--- Clean rewrite: drop legacy ReelSwarm tables and enum types before creating the new public schema.
+-- Clean rewrite: drop legacy ContentLane tables and enum types before creating the new public schema.
 DROP TABLE IF EXISTS "User" CASCADE;
 DROP TABLE IF EXISTS "AllowedEmail" CASCADE;
 DROP TABLE IF EXISTS "Campaign" CASCADE;

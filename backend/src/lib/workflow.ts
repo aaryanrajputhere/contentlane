@@ -1,39 +1,77 @@
-import { type Project, Prisma } from '@prisma/client';
-import OpenAI from 'openai';
-import prisma from './prisma';
-import type { BrandProfile, ConceptCard, CreatorCharacter, ExportState, MediaAsset, ProjectSnapshot, WebsiteAnalysis, WebsiteAnalysisHomepage } from '../domain/schemas';
+import { type Project, Prisma } from "@prisma/client";
+import OpenAI from "openai";
+import prisma from "./prisma";
+import type {
+  BrandProfile,
+  ConceptCard,
+  CreatorCharacter,
+  ExportState,
+  MediaAsset,
+  ProjectSnapshot,
+  WebsiteAnalysis,
+  WebsiteAnalysisHomepage,
+} from "../domain/schemas";
 
-export type ConceptBlueprint = Pick<ConceptCard, 'angle' | 'hookText' | 'hookImagePrompt' | 'demoOverlayText' | 'videoDirection' | 'targetDurationLabel' | 'targetDurationSeconds' | 'score' | 'scoreLabel' | 'rationale' | 'generatedImageUrl' | 'generatedVideoUrl' | 'sortOrder'>;
+export type ConceptBlueprint = Pick<
+  ConceptCard,
+  | "angle"
+  | "hookText"
+  | "hookImagePrompt"
+  | "demoOverlayText"
+  | "videoDirection"
+  | "targetDurationLabel"
+  | "targetDurationSeconds"
+  | "score"
+  | "scoreLabel"
+  | "rationale"
+  | "generatedImageUrl"
+  | "generatedVideoUrl"
+  | "sortOrder"
+>;
 
 export const projectSnapshotInclude = {
   brandProfile: true,
   websiteAnalysis: true,
-  concepts: { orderBy: { sortOrder: 'asc' } },
-  mediaAssets: { orderBy: { createdAt: 'asc' } },
+  concepts: { orderBy: { sortOrder: "asc" } },
+  mediaAssets: { orderBy: { createdAt: "asc" } },
   exportState: true,
-  jobs: { orderBy: { createdAt: 'desc' }, take: 20 },
+  jobs: { orderBy: { createdAt: "desc" }, take: 20 },
 } satisfies Prisma.ProjectInclude;
 
 const videoSources = [
-  '/assets/landing/demo1.mp4',
-  '/assets/landing/demo2.mp4',
-  '/assets/landing/demo3.mp4',
-  '/assets/landing/demovid.mp4',
+  "/assets/landing/demo1.mp4",
+  "/assets/landing/demo2.mp4",
+  "/assets/landing/demo3.mp4",
+  "/assets/landing/demovid.mp4",
 ];
 
-const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
-const titleCase = (value: string) => value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const stripScheme = (value: string) => value.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+const titleCase = (value: string) =>
+  value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+const stripScheme = (value: string) =>
+  value.replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
 function readTrimmedString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function toHomepageEvidence(value: unknown, sourceUrl: string, rootDomain: string): WebsiteAnalysisHomepage {
-  const record = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+function toHomepageEvidence(
+  value: unknown,
+  sourceUrl: string,
+  rootDomain: string,
+): WebsiteAnalysisHomepage {
+  const record =
+    typeof value === "object" && value !== null
+      ? (value as Record<string, unknown>)
+      : {};
   const fallbackText = `Homepage for ${rootDomain}`;
-  const visibleTextSnippet = readTrimmedString(record.visibleTextSnippet) ?? fallbackText;
+  const visibleTextSnippet =
+    readTrimmedString(record.visibleTextSnippet) ?? fallbackText;
   return {
     url: readTrimmedString(record.url) ?? sourceUrl,
     title: readTrimmedString(record.title),
@@ -41,53 +79,101 @@ function toHomepageEvidence(value: unknown, sourceUrl: string, rootDomain: strin
     visibleTextSnippet,
     extractedTextSnippet: readTrimmedString(record.extractedTextSnippet),
     canonicalUrl: readTrimmedString(record.canonicalUrl),
-    extractionStatus: record.extractionStatus === 'success' || record.extractionStatus === 'failed' ? record.extractionStatus : undefined,
-    extractionSource: record.extractionSource === 'firecrawl' || record.extractionSource === 'fallback' ? record.extractionSource : undefined,
+    extractionStatus:
+      record.extractionStatus === "success" ||
+      record.extractionStatus === "failed"
+        ? record.extractionStatus
+        : undefined,
+    extractionSource:
+      record.extractionSource === "firecrawl" ||
+      record.extractionSource === "fallback"
+        ? record.extractionSource
+        : undefined,
     extractionError: readTrimmedString(record.extractionError),
   };
 }
 
-function normalizeWebsiteAnalysisRecord(value: unknown): WebsiteAnalysis | null {
-  if (!value || typeof value !== 'object') return null;
+function normalizeWebsiteAnalysisRecord(
+  value: unknown,
+): WebsiteAnalysis | null {
+  if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
   const sourceUrl = readTrimmedString(record.sourceUrl) ?? null;
-  const rootDomain = readTrimmedString(record.rootDomain) ?? (sourceUrl ? new URL(sourceUrl).host.replace(/^www\./i, '') : 'unknown');
+  const rootDomain =
+    readTrimmedString(record.rootDomain) ??
+    (sourceUrl ? new URL(sourceUrl).host.replace(/^www\./i, "") : "unknown");
   const homepageSource = (() => {
     const homepage = record.homepage;
-    if (homepage && typeof homepage === 'object') return homepage;
-    const selectedPages = Array.isArray(record.selectedPages) ? record.selectedPages : null;
-    if (selectedPages && selectedPages.length > 0 && typeof selectedPages[0] === 'object' && selectedPages[0] !== null) return selectedPages[0];
-    const rankedPages = Array.isArray(record.rankedPages) ? record.rankedPages : null;
-    if (rankedPages && rankedPages.length > 0 && typeof rankedPages[0] === 'object' && rankedPages[0] !== null) return rankedPages[0];
+    if (homepage && typeof homepage === "object") return homepage;
+    const selectedPages = Array.isArray(record.selectedPages)
+      ? record.selectedPages
+      : null;
+    if (
+      selectedPages &&
+      selectedPages.length > 0 &&
+      typeof selectedPages[0] === "object" &&
+      selectedPages[0] !== null
+    )
+      return selectedPages[0];
+    const rankedPages = Array.isArray(record.rankedPages)
+      ? record.rankedPages
+      : null;
+    if (
+      rankedPages &&
+      rankedPages.length > 0 &&
+      typeof rankedPages[0] === "object" &&
+      rankedPages[0] !== null
+    )
+      return rankedPages[0];
     return record;
   })();
   const normalizedSourceUrl = sourceUrl ?? `https://${rootDomain}`;
   return {
-    id: typeof record.id === 'string' ? record.id : '',
-    projectId: typeof record.projectId === 'string' ? record.projectId : '',
+    id: typeof record.id === "string" ? record.id : "",
+    projectId: typeof record.projectId === "string" ? record.projectId : "",
     sourceUrl: normalizedSourceUrl,
     rootDomain,
-    homepage: toHomepageEvidence(homepageSource, normalizedSourceUrl, rootDomain),
-    createdAt: record.createdAt instanceof Date ? record.createdAt : new Date(String(record.createdAt ?? Date.now())),
-    updatedAt: record.updatedAt instanceof Date ? record.updatedAt : new Date(String(record.updatedAt ?? Date.now())),
+    homepage: toHomepageEvidence(
+      homepageSource,
+      normalizedSourceUrl,
+      rootDomain,
+    ),
+    createdAt:
+      record.createdAt instanceof Date
+        ? record.createdAt
+        : new Date(String(record.createdAt ?? Date.now())),
+    updatedAt:
+      record.updatedAt instanceof Date
+        ? record.updatedAt
+        : new Date(String(record.updatedAt ?? Date.now())),
   };
 }
 
-export function buildWebsiteAnalysisStorageData(analysis: Pick<WebsiteAnalysis, 'sourceUrl' | 'rootDomain' | 'homepage'>) {
+export function buildWebsiteAnalysisStorageData(
+  analysis: Pick<WebsiteAnalysis, "sourceUrl" | "rootDomain" | "homepage">,
+) {
   const homepage = {
     url: analysis.homepage.url,
     title: analysis.homepage.title ?? null,
     metaDescription: analysis.homepage.metaDescription ?? null,
     visibleTextSnippet: analysis.homepage.visibleTextSnippet,
-    pageTypeHint: 'homepage',
+    pageTypeHint: "homepage",
     crawlDepth: 0,
     canonicalUrl: analysis.homepage.canonicalUrl ?? null,
     score: 100,
-    scoreReason: 'Homepage is the only evidence source',
-    ...(analysis.homepage.extractionStatus ? { extractionStatus: analysis.homepage.extractionStatus } : {}),
-    ...(analysis.homepage.extractionSource ? { extractionSource: analysis.homepage.extractionSource } : {}),
-    ...(analysis.homepage.extractionError ? { extractionError: analysis.homepage.extractionError } : {}),
-    ...(analysis.homepage.extractedTextSnippet ? { extractedTextSnippet: analysis.homepage.extractedTextSnippet } : {}),
+    scoreReason: "Homepage is the only evidence source",
+    ...(analysis.homepage.extractionStatus
+      ? { extractionStatus: analysis.homepage.extractionStatus }
+      : {}),
+    ...(analysis.homepage.extractionSource
+      ? { extractionSource: analysis.homepage.extractionSource }
+      : {}),
+    ...(analysis.homepage.extractionError
+      ? { extractionError: analysis.homepage.extractionError }
+      : {}),
+    ...(analysis.homepage.extractedTextSnippet
+      ? { extractedTextSnippet: analysis.homepage.extractedTextSnippet }
+      : {}),
   };
   return {
     sourceUrl: analysis.sourceUrl,
@@ -101,18 +187,18 @@ export function buildWebsiteAnalysisStorageData(analysis: Pick<WebsiteAnalysis, 
       discoveredCount: 1,
       rankedCount: 1,
       selectedCount: 1,
-      extractedCount: analysis.homepage.extractionStatus === 'failed' ? 0 : 1,
-      failedCount: analysis.homepage.extractionStatus === 'failed' ? 1 : 0,
+      extractedCount: analysis.homepage.extractionStatus === "failed" ? 0 : 1,
+      failedCount: analysis.homepage.extractionStatus === "failed" ? 1 : 0,
       lowSignalFilteredCount: 0,
     },
   };
 }
 
 function scoreLabel(score: number) {
-  if (score >= 94) return 'Top rank';
-  if (score >= 90) return 'High rank';
-  if (score >= 86) return 'Strong rank';
-  return 'Solid rank';
+  if (score >= 94) return "Top rank";
+  if (score >= 90) return "High rank";
+  if (score >= 86) return "Strong rank";
+  return "Solid rank";
 }
 
 function clampScore(index: number) {
@@ -120,26 +206,61 @@ function clampScore(index: number) {
 }
 
 function escapeXml(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function conceptDescriptor(profile: BrandProfile, index: number) {
-  const angle = profile.angles[index % profile.angles.length] ?? `Angle ${index + 1}`;
-  const painPoint = profile.painPoints[index % profile.painPoints.length] ?? profile.painPoints[0] ?? 'the main problem';
-  const benefit = profile.benefits[index % profile.benefits.length] ?? profile.benefits[0] ?? 'the key benefit';
+  const angle =
+    profile.angles[index % profile.angles.length] ?? `Angle ${index + 1}`;
+  const painPoint =
+    profile.painPoints[index % profile.painPoints.length] ??
+    profile.painPoints[0] ??
+    "the main problem";
+  const benefit =
+    profile.benefits[index % profile.benefits.length] ??
+    profile.benefits[0] ??
+    "the key benefit";
   return { angle, painPoint, benefit };
 }
 
-function isBrandDemoAsset(asset: { conceptId: string | null; type: string; metadata: Prisma.JsonValue | null }) {
-  if (asset.conceptId !== null || asset.type !== 'VIDEO' || !asset.metadata || typeof asset.metadata !== 'object') {
+function isBrandDemoAsset(asset: {
+  conceptId: string | null;
+  type: string;
+  metadata: Prisma.JsonValue | null;
+}) {
+  if (
+    asset.conceptId !== null ||
+    asset.type !== "VIDEO" ||
+    !asset.metadata ||
+    typeof asset.metadata !== "object"
+  ) {
     return false;
   }
-  return (asset.metadata as Record<string, unknown>).kind === 'brand-demo';
+  return (asset.metadata as Record<string, unknown>).kind === "brand-demo";
 }
 
-function describeCharacter(character?: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt' | 'baseImageUrl' | 'clipCount' | 'clipTags'> | null) {
+function describeCharacter(
+  character?: Pick<
+    CreatorCharacter,
+    | "id"
+    | "source"
+    | "name"
+    | "persona"
+    | "appearance"
+    | "voice"
+    | "prompt"
+    | "baseImageUrl"
+    | "clipCount"
+    | "clipTags"
+  > | null,
+) {
   if (!character) {
-    return 'Character: a premium creator with a clean camera-ready presence.';
+    return "Character: a premium creator with a clean camera-ready presence.";
   }
   const parts = [
     `Character: ${character.name}.`,
@@ -148,43 +269,51 @@ function describeCharacter(character?: Pick<CreatorCharacter, 'id' | 'source' | 
     `Voice: ${character.voice}.`,
     `Prompt note: ${character.prompt}.`,
     character.baseImageUrl ? `Base image: ${character.baseImageUrl}.` : null,
-    character.clipTags?.length ? `Clip tags: ${character.clipTags.slice(0, 6).join(', ')}.` : null,
-    typeof character.clipCount === 'number' ? `Clip count: ${character.clipCount}.` : null,
+    character.clipTags?.length
+      ? `Clip tags: ${character.clipTags.slice(0, 6).join(", ")}.`
+      : null,
+    typeof character.clipCount === "number"
+      ? `Clip count: ${character.clipCount}.`
+      : null,
   ].filter(Boolean);
-  return parts.join(' ');
+  return parts.join(" ");
 }
 
 export function normalizeWebsiteInput(website: string) {
   const trimmed = website.trim();
-  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const candidate = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
   const parsed = new URL(candidate);
-  const normalizedPath = parsed.pathname.replace(/\/+$/, '');
-  return `${parsed.protocol}//${parsed.host}${normalizedPath === '/' ? '' : normalizedPath}`.toLowerCase();
+  const normalizedPath = parsed.pathname.replace(/\/+$/, "");
+  return `${parsed.protocol}//${parsed.host}${normalizedPath === "/" ? "" : normalizedPath}`.toLowerCase();
 }
 
-export function buildBrandProfile(website: string): Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> {
+export function buildBrandProfile(
+  website: string,
+): Omit<BrandProfile, "id" | "projectId" | "createdAt" | "updatedAt"> {
   const normalized = normalizeWebsiteInput(website);
-  const host = stripScheme(normalized).split('/')[0];
-  const base = titleCase(host.replace(/^www\./, '').split('.')[0] || 'brand');
-  const brandName = base || 'Brand';
+  const host = stripScheme(normalized).split("/")[0];
+  const base = titleCase(host.replace(/^www\./, "").split(".")[0] || "brand");
+  const brandName = base || "Brand";
   const audience = `${brandName} visitors who want a faster way to understand the offer`;
   return {
     brandName,
     tagline: `${brandName} turns website attention into short-form content that can actually ship.`,
     audience,
     painPoints: [
-      'Website visitors skim and leave before the value lands',
-      'Marketing teams need hooks before they need a bigger video budget',
-      'The product story gets buried under generic creative',
+      "Website visitors skim and leave before the value lands",
+      "Marketing teams need hooks before they need a bigger video budget",
+      "The product story gets buried under generic creative",
     ],
     benefits: [
-      'Clear website analysis in one pass',
-      'Hook concepts that stay on-message',
-      'Media previews that move into the editor immediately',
+      "Clear website analysis in one pass",
+      "Hook concepts that stay on-message",
+      "Media previews that move into the editor immediately",
     ],
-    voice: 'Direct, confident, practical',
+    voice: "Direct, confident, practical",
     offer: `A lean workflow for ${brandName} to go from URL to publishable video assets`,
-    cta: 'Generate the next ad',
+    cta: "Generate the next ad",
     angles: [
       `What ${brandName} solves in one sentence`,
       `Why ${brandName} is easier than a generic workflow`,
@@ -195,7 +324,13 @@ export function buildBrandProfile(website: string): Omit<BrandProfile, 'id' | 'p
   };
 }
 
-function buildHookImagePrompt(profile: BrandProfile, hookText: string, angle: string, benefit: string, painPoint: string) {
+function buildHookImagePrompt(
+  profile: BrandProfile,
+  hookText: string,
+  angle: string,
+  benefit: string,
+  painPoint: string,
+) {
   return [
     `Create a cinematic vertical 9:16 marketing image for ${profile.brandName}.`,
     `The image should support the hook: "${hookText}".`,
@@ -204,10 +339,14 @@ function buildHookImagePrompt(profile: BrandProfile, hookText: string, angle: st
     `Avoid generic stock-photo energy. Make it crisp, brand-specific, and scroll-stopping.`,
     `Reference the pain point: ${painPoint}.`,
     `No watermark, no mock social UI, no extra logos.`,
-  ].join(' ');
+  ].join(" ");
 }
 
-function buildDemoOverlayText(profile: BrandProfile, benefit: string, index: number) {
+function buildDemoOverlayText(
+  profile: BrandProfile,
+  benefit: string,
+  index: number,
+) {
   const overlays = [
     `${profile.brandName} in 4 seconds`,
     benefit,
@@ -219,7 +358,12 @@ function buildDemoOverlayText(profile: BrandProfile, benefit: string, index: num
   return overlays[index % overlays.length];
 }
 
-function buildVideoDirection(profile: BrandProfile, hookText: string, overlayText: string, angle: string) {
+function buildVideoDirection(
+  profile: BrandProfile,
+  hookText: string,
+  overlayText: string,
+  angle: string,
+) {
   return [
     `Create a 4-5 second demo video for ${profile.brandName}.`,
     `Open with the hook overlay: ${hookText}.`,
@@ -227,10 +371,13 @@ function buildVideoDirection(profile: BrandProfile, hookText: string, overlayTex
     `Use the overlay text: ${overlayText}.`,
     `Keep the motion minimal, clean, and premium.`,
     `The visual angle is ${angle}.`,
-  ].join(' ');
+  ].join(" ");
 }
 
-export function buildConceptCards(profile: BrandProfile, count: number): Array<ConceptBlueprint> {
+export function buildConceptCards(
+  profile: BrandProfile,
+  count: number,
+): Array<ConceptBlueprint> {
   return Array.from({ length: count }, (_, index) => {
     const { angle, painPoint, benefit } = conceptDescriptor(profile, index);
     const hookText = [
@@ -245,15 +392,26 @@ export function buildConceptCards(profile: BrandProfile, count: number): Array<C
     ][index % 8];
     const score = clampScore(index);
     const demoOverlayText = buildDemoOverlayText(profile, benefit, index);
-    const hookImagePrompt = buildHookImagePrompt(profile, hookText, angle, benefit, painPoint);
-    const videoDirection = buildVideoDirection(profile, hookText, demoOverlayText, angle);
+    const hookImagePrompt = buildHookImagePrompt(
+      profile,
+      hookText,
+      angle,
+      benefit,
+      painPoint,
+    );
+    const videoDirection = buildVideoDirection(
+      profile,
+      hookText,
+      demoOverlayText,
+      angle,
+    );
     return {
       angle,
       hookText,
       hookImagePrompt,
       demoOverlayText,
       videoDirection,
-      targetDurationLabel: '4-5s',
+      targetDurationLabel: "4-5s",
       targetDurationSeconds: 5,
       score,
       scoreLabel: scoreLabel(score),
@@ -265,16 +423,32 @@ export function buildConceptCards(profile: BrandProfile, count: number): Array<C
   });
 }
 
-export function buildConceptImagePrompt(profile: BrandProfile, concept: Pick<ConceptCard, 'hookText' | 'hookImagePrompt' | 'demoOverlayText'>) {
+export function buildConceptImagePrompt(
+  profile: BrandProfile,
+  concept: Pick<
+    ConceptCard,
+    "hookText" | "hookImagePrompt" | "demoOverlayText"
+  >,
+) {
   return [
     `Brand: ${profile.brandName}`,
     `Hook: ${concept.hookText}`,
     `Overlay: ${concept.demoOverlayText}`,
     `Prompt: ${concept.hookImagePrompt}`,
-  ].join('\n');
+  ].join("\n");
 }
 
-export function buildConceptVideoPrompt(profile: BrandProfile, concept: Pick<ConceptCard, 'hookText' | 'demoOverlayText' | 'videoDirection' | 'targetDurationLabel' | 'targetDurationSeconds'>) {
+export function buildConceptVideoPrompt(
+  profile: BrandProfile,
+  concept: Pick<
+    ConceptCard,
+    | "hookText"
+    | "demoOverlayText"
+    | "videoDirection"
+    | "targetDurationLabel"
+    | "targetDurationSeconds"
+  >,
+) {
   return {
     prompt: [
       `Brand: ${profile.brandName}`,
@@ -282,12 +456,18 @@ export function buildConceptVideoPrompt(profile: BrandProfile, concept: Pick<Con
       `Overlay: ${concept.demoOverlayText}`,
       `Direction: ${concept.videoDirection}`,
       `Duration target: ${concept.targetDurationLabel} (${concept.targetDurationSeconds} seconds)`,
-    ].join('\n'),
+    ].join("\n"),
     durationSeconds: concept.targetDurationSeconds,
   };
 }
 
-function renderConceptPosterDataUrl(profile: BrandProfile, concept: Pick<ConceptCard, 'hookText' | 'demoOverlayText' | 'scoreLabel' | 'score'>) {
+function renderConceptPosterDataUrl(
+  profile: BrandProfile,
+  concept: Pick<
+    ConceptCard,
+    "hookText" | "demoOverlayText" | "scoreLabel" | "score"
+  >,
+) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600" viewBox="0 0 1200 1600">
       <defs>
@@ -316,26 +496,31 @@ function renderConceptPosterDataUrl(profile: BrandProfile, concept: Pick<Concept
       <text x="96" y="970" fill="white" fill-opacity="0.82" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="500">4-5 second demo</text>
       <rect x="840" y="1140" width="260" height="260" rx="34" fill="url(#glow)" />
     </svg>
-  `.replace(/\s{2,}/g, ' ').trim();
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  `
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
-async function generateConceptImage(profile: BrandProfile, concept: ConceptCard) {
+async function generateConceptImage(
+  profile: BrandProfile,
+  concept: ConceptCard,
+) {
   const prompt = buildConceptImagePrompt(profile, concept);
   if (openai) {
     try {
       const response = await openai.images.generate({
-        model: 'gpt-image-1',
+        model: "gpt-image-1",
         prompt,
-        size: '1024x1536',
+        size: "1024x1536",
       });
       const image = response.data?.[0];
       if (image?.b64_json) {
         return {
-          provider: 'openai',
+          provider: "openai",
           providerId: null,
           url: `data:image/png;base64,${image.b64_json}`,
-          mimeType: 'image/png',
+          mimeType: "image/png",
         };
       }
     } catch {
@@ -343,31 +528,45 @@ async function generateConceptImage(profile: BrandProfile, concept: ConceptCard)
     }
   }
   return {
-    provider: 'svg-composition',
+    provider: "svg-composition",
     providerId: null,
     url: renderConceptPosterDataUrl(profile, concept),
-    mimeType: 'image/svg+xml',
+    mimeType: "image/svg+xml",
   };
 }
 
-async function generateConceptVideo(profile: BrandProfile, concept: ConceptCard, index: number) {
+async function generateConceptVideo(
+  profile: BrandProfile,
+  concept: ConceptCard,
+  index: number,
+) {
   const prompt = buildConceptVideoPrompt(profile, concept);
   if (process.env.CONCEPT_VIDEO_SERVICE_URL) {
     try {
       const response = await fetch(process.env.CONCEPT_VIDEO_SERVICE_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.prompt, durationSeconds: prompt.durationSeconds, conceptId: concept.id, brandName: profile.brandName }),
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt.prompt,
+          durationSeconds: prompt.durationSeconds,
+          conceptId: concept.id,
+          brandName: profile.brandName,
+        }),
       });
       if (response.ok) {
-        const data = await response.json() as { url?: string; videoUrl?: string; secureUrl?: string; providerId?: string };
+        const data = (await response.json()) as {
+          url?: string;
+          videoUrl?: string;
+          secureUrl?: string;
+          providerId?: string;
+        };
         const url = data.url ?? data.videoUrl ?? data.secureUrl;
         if (url) {
           return {
-            provider: 'concept-video-service',
+            provider: "concept-video-service",
             providerId: data.providerId ?? null,
             url,
-            mimeType: 'video/mp4',
+            mimeType: "video/mp4",
           };
         }
       }
@@ -377,18 +576,22 @@ async function generateConceptVideo(profile: BrandProfile, concept: ConceptCard,
   }
   const videoUrl = videoSources[index % videoSources.length];
   return {
-    provider: 'demo-asset',
+    provider: "demo-asset",
     providerId: videoUrl,
     url: videoUrl,
-    mimeType: 'video/mp4',
+    mimeType: "video/mp4",
   };
 }
 
-function buildImageAsset(project: Pick<Project, 'id'>, concept: ConceptCard, image: Awaited<ReturnType<typeof generateConceptImage>>) {
+function buildImageAsset(
+  project: Pick<Project, "id">,
+  concept: ConceptCard,
+  image: Awaited<ReturnType<typeof generateConceptImage>>,
+) {
   return {
     projectId: project.id,
     conceptId: concept.id,
-    type: 'IMAGE' as const,
+    type: "IMAGE" as const,
     provider: image.provider,
     providerId: image.providerId,
     url: image.url,
@@ -397,66 +600,119 @@ function buildImageAsset(project: Pick<Project, 'id'>, concept: ConceptCard, ima
   };
 }
 
-function buildVideoAsset(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard, video: Awaited<ReturnType<typeof generateConceptVideo>>) {
+function buildVideoAsset(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+  video: Awaited<ReturnType<typeof generateConceptVideo>>,
+) {
   return {
     projectId: project.id,
     conceptId: concept.id,
-    type: 'VIDEO' as const,
+    type: "VIDEO" as const,
     provider: video.provider,
     providerId: video.providerId,
     url: video.url,
     mimeType: video.mimeType,
-    metadata: { hookText: concept.hookText, direction: concept.videoDirection, durationSeconds: concept.targetDurationSeconds, prompt: promptSummary(profile, concept) },
+    metadata: {
+      hookText: concept.hookText,
+      direction: concept.videoDirection,
+      durationSeconds: concept.targetDurationSeconds,
+      prompt: promptSummary(profile, concept),
+    },
   };
 }
 
-export async function generateImageAssetForConcept(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard) {
+export async function generateImageAssetForConcept(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+) {
   const image = await generateConceptImage(profile, concept);
   return buildImageAsset(project, concept, image);
 }
 
-export async function generateVideoAssetForConcept(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard, index = 0) {
+export async function generateVideoAssetForConcept(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+  index = 0,
+) {
   const video = await generateConceptVideo(profile, concept, index);
   return buildVideoAsset(project, profile, concept, video);
 }
 
-export function buildMediaAssets(project: Pick<Project, 'id'>, concepts: ConceptCard[]): Array<Omit<MediaAsset, 'id' | 'createdAt'>> {
+export function buildMediaAssets(
+  project: Pick<Project, "id">,
+  concepts: ConceptCard[],
+): Array<Omit<MediaAsset, "id" | "createdAt">> {
   return concepts.flatMap((concept, index) => {
-    const imageUrl = concept.generatedImageUrl ?? renderConceptPosterDataUrl({ brandName: 'ReelSwarm', tagline: '', audience: '', painPoints: [''], benefits: [''], voice: '', offer: '', cta: '', angles: [''], summary: '' } as BrandProfile, concept);
-    const videoUrl = concept.generatedVideoUrl ?? videoSources[index % videoSources.length];
+    const imageUrl =
+      concept.generatedImageUrl ??
+      renderConceptPosterDataUrl(
+        {
+          brandName: "ContentLane",
+          tagline: "",
+          audience: "",
+          painPoints: [""],
+          benefits: [""],
+          voice: "",
+          offer: "",
+          cta: "",
+          angles: [""],
+          summary: "",
+        } as BrandProfile,
+        concept,
+      );
+    const videoUrl =
+      concept.generatedVideoUrl ?? videoSources[index % videoSources.length];
     return [
       {
         projectId: project.id,
         conceptId: concept.id,
-        type: 'IMAGE',
-        provider: concept.generatedImageUrl ? 'persisted' : 'svg-composition',
+        type: "IMAGE",
+        provider: concept.generatedImageUrl ? "persisted" : "svg-composition",
         providerId: null,
         url: imageUrl,
-        mimeType: imageUrl.startsWith('data:image/png') ? 'image/png' : 'image/svg+xml',
-        metadata: { hookText: concept.hookText, prompt: concept.hookImagePrompt },
+        mimeType: imageUrl.startsWith("data:image/png")
+          ? "image/png"
+          : "image/svg+xml",
+        metadata: {
+          hookText: concept.hookText,
+          prompt: concept.hookImagePrompt,
+        },
       },
       {
         projectId: project.id,
         conceptId: concept.id,
-        type: 'VIDEO',
-        provider: concept.generatedVideoUrl ? 'persisted' : 'demo-asset',
+        type: "VIDEO",
+        provider: concept.generatedVideoUrl ? "persisted" : "demo-asset",
         providerId: videoUrl,
         url: videoUrl,
-        mimeType: 'video/mp4',
-        metadata: { hookText: concept.hookText, direction: concept.videoDirection, durationSeconds: concept.targetDurationSeconds },
+        mimeType: "video/mp4",
+        metadata: {
+          hookText: concept.hookText,
+          direction: concept.videoDirection,
+          durationSeconds: concept.targetDurationSeconds,
+        },
       },
     ];
   });
 }
 
-export async function generateMediaForConcept(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard, index = 0) {
+export async function generateMediaForConcept(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+  index = 0,
+) {
   const image = await generateConceptImage(profile, concept);
   const video = await generateConceptVideo(profile, concept, index);
   return [
     {
       projectId: project.id,
       conceptId: concept.id,
-      type: 'IMAGE',
+      type: "IMAGE",
       provider: image.provider,
       providerId: image.providerId,
       url: image.url,
@@ -466,12 +722,17 @@ export async function generateMediaForConcept(project: Pick<Project, 'id'>, prof
     {
       projectId: project.id,
       conceptId: concept.id,
-      type: 'VIDEO',
+      type: "VIDEO",
       provider: video.provider,
       providerId: video.providerId,
       url: video.url,
       mimeType: video.mimeType,
-      metadata: { hookText: concept.hookText, direction: concept.videoDirection, durationSeconds: concept.targetDurationSeconds, prompt: promptSummary(profile, concept) },
+      metadata: {
+        hookText: concept.hookText,
+        direction: concept.videoDirection,
+        durationSeconds: concept.targetDurationSeconds,
+        prompt: promptSummary(profile, concept),
+      },
     },
   ] as const;
 }
@@ -480,7 +741,13 @@ function promptSummary(profile: BrandProfile, concept: ConceptCard) {
   return buildConceptVideoPrompt(profile, concept).prompt;
 }
 
-export function buildExportState(project: Project, concept?: Pick<ConceptCard, 'id' | 'hookText'> | null, character?: Pick<CreatorCharacter, 'id' | 'source' | 'name'> | null, selectedImageId?: string | null, selectedVideoId?: string | null): ExportState {
+export function buildExportState(
+  project: Project,
+  concept?: Pick<ConceptCard, "id" | "hookText" | "demoOverlayText"> | null,
+  character?: Pick<CreatorCharacter, "id" | "source" | "name"> | null,
+  selectedImageId?: string | null,
+  selectedVideoId?: string | null,
+): ExportState {
   return {
     selectedConceptId: concept?.id ?? null,
     selectedCharacterId: character?.id ?? null,
@@ -489,15 +756,20 @@ export function buildExportState(project: Project, concept?: Pick<ConceptCard, '
     selectedCreatorClipId: null,
     selectedImageId: selectedImageId ?? null,
     selectedVideoId: selectedVideoId ?? null,
-    creatorOverlayText: 'If askelexy is this that',
-    brandDemoOverlayText: 'then ASklexy help you do that',
+    creatorOverlayText: concept?.hookText ?? "",
+    brandDemoOverlayText: concept?.demoOverlayText ?? "",
     overlayText: concept?.hookText ?? `Publish ${project.website}`,
-    notes: concept ? `Lean export preset for ${concept.hookText}` : `Lean export preset for ${project.website}`,
+    notes: concept
+      ? `Lean export preset for ${concept.hookText}`
+      : `Lean export preset for ${project.website}`,
   };
 }
 
 export async function loadProjectSnapshot(projectId: string, userId?: string) {
-  const project = await prisma.project.findFirst({ where: { id: projectId, ...(userId ? { userId } : {}) }, include: projectSnapshotInclude });
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, ...(userId ? { userId } : {}) },
+    include: projectSnapshotInclude,
+  });
   if (!project) return null;
   return {
     ...project,
@@ -507,20 +779,51 @@ export async function loadProjectSnapshot(projectId: string, userId?: string) {
 
 export async function clearGeneratedContent(projectId: string) {
   const project = await loadProjectSnapshot(projectId);
-  const preserveIds = project?.mediaAssets.filter(isBrandDemoAsset).map((asset) => asset.id) ?? [];
-  const mediaDelete = preserveIds.length > 0
-    ? prisma.mediaAsset.deleteMany({ where: { projectId, NOT: { id: { in: preserveIds } } } })
-    : prisma.mediaAsset.deleteMany({ where: { projectId } });
+  const preserveIds =
+    project?.mediaAssets.filter(isBrandDemoAsset).map((asset) => asset.id) ??
+    [];
+  const mediaDelete =
+    preserveIds.length > 0
+      ? prisma.mediaAsset.deleteMany({
+          where: { projectId, NOT: { id: { in: preserveIds } } },
+        })
+      : prisma.mediaAsset.deleteMany({ where: { projectId } });
   await prisma.$transaction([
     mediaDelete,
     prisma.hookConcept.deleteMany({ where: { projectId } }),
     prisma.projectExport.deleteMany({ where: { projectId } }),
     prisma.websiteAnalysis.deleteMany({ where: { projectId } }),
-    prisma.project.update({ where: { id: projectId }, data: { selectedConceptId: null, selectedCharacterId: null, selectedCharacter: Prisma.JsonNull } }),
+    prisma.project.update({
+      where: { id: projectId },
+      data: {
+        selectedConceptId: null,
+        selectedCharacterId: null,
+        selectedCharacter: Prisma.JsonNull,
+      },
+    }),
   ]);
 }
 
-export function buildCharacterImagePrompt(profile: BrandProfile, concept: Pick<ConceptCard, 'hookText' | 'hookImagePrompt' | 'demoOverlayText' | 'videoDirection'>, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt' | 'baseImageUrl' | 'clipCount' | 'clipTags'>) {
+export function buildCharacterImagePrompt(
+  profile: BrandProfile,
+  concept: Pick<
+    ConceptCard,
+    "hookText" | "hookImagePrompt" | "demoOverlayText" | "videoDirection"
+  >,
+  character: Pick<
+    CreatorCharacter,
+    | "id"
+    | "source"
+    | "name"
+    | "persona"
+    | "appearance"
+    | "voice"
+    | "prompt"
+    | "baseImageUrl"
+    | "clipCount"
+    | "clipTags"
+  >,
+) {
   return [
     `Brand: ${profile.brandName}`,
     `Hook: ${concept.hookText}`,
@@ -528,10 +831,33 @@ export function buildCharacterImagePrompt(profile: BrandProfile, concept: Pick<C
     `Character: ${describeCharacter(character)}`,
     `Hook image prompt: ${concept.hookImagePrompt}`,
     `Keep the composition editorial, polished, and creator-led.`,
-  ].join(' ');
+  ].join(" ");
 }
 
-export function buildCharacterVideoPrompt(profile: BrandProfile, concept: Pick<ConceptCard, 'hookText' | 'demoOverlayText' | 'videoDirection' | 'targetDurationLabel' | 'targetDurationSeconds'>, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt' | 'baseImageUrl' | 'clipCount' | 'clipTags'>) {
+export function buildCharacterVideoPrompt(
+  profile: BrandProfile,
+  concept: Pick<
+    ConceptCard,
+    | "hookText"
+    | "demoOverlayText"
+    | "videoDirection"
+    | "targetDurationLabel"
+    | "targetDurationSeconds"
+  >,
+  character: Pick<
+    CreatorCharacter,
+    | "id"
+    | "source"
+    | "name"
+    | "persona"
+    | "appearance"
+    | "voice"
+    | "prompt"
+    | "baseImageUrl"
+    | "clipCount"
+    | "clipTags"
+  >,
+) {
   return {
     prompt: [
       `Brand: ${profile.brandName}`,
@@ -540,12 +866,19 @@ export function buildCharacterVideoPrompt(profile: BrandProfile, concept: Pick<C
       `Direction: ${concept.videoDirection}`,
       `Character: ${describeCharacter(character)}`,
       `Duration target: ${concept.targetDurationLabel} (${concept.targetDurationSeconds} seconds)`,
-    ].join('\n'),
+    ].join("\n"),
     durationSeconds: concept.targetDurationSeconds,
   };
 }
 
-function renderCharacterPosterDataUrl(profile: BrandProfile, concept: Pick<ConceptCard, 'hookText' | 'demoOverlayText' | 'scoreLabel' | 'score'>, character: Pick<CreatorCharacter, 'name' | 'persona' | 'appearance'>) {
+function renderCharacterPosterDataUrl(
+  profile: BrandProfile,
+  concept: Pick<
+    ConceptCard,
+    "hookText" | "demoOverlayText" | "scoreLabel" | "score"
+  >,
+  character: Pick<CreatorCharacter, "name" | "persona" | "appearance">,
+) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1600" viewBox="0 0 1200 1600">
       <defs>
@@ -577,26 +910,44 @@ function renderCharacterPosterDataUrl(profile: BrandProfile, concept: Pick<Conce
       <text x="96" y="1190" fill="white" fill-opacity="0.82" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="500">4-5 second demo</text>
       <rect x="840" y="1140" width="260" height="260" rx="34" fill="url(#glow)" />
     </svg>
-  `.replace(/\s{2,}/g, ' ').trim();
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  `
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
 }
 
-async function generateCharacterImage(profile: BrandProfile, concept: ConceptCard, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt' | 'baseImageUrl' | 'clipCount' | 'clipTags'>) {
+async function generateCharacterImage(
+  profile: BrandProfile,
+  concept: ConceptCard,
+  character: Pick<
+    CreatorCharacter,
+    | "id"
+    | "source"
+    | "name"
+    | "persona"
+    | "appearance"
+    | "voice"
+    | "prompt"
+    | "baseImageUrl"
+    | "clipCount"
+    | "clipTags"
+  >,
+) {
   const prompt = buildCharacterImagePrompt(profile, concept, character);
   if (openai) {
     try {
       const response = await openai.images.generate({
-        model: 'gpt-image-1',
+        model: "gpt-image-1",
         prompt,
-        size: '1024x1536',
+        size: "1024x1536",
       });
       const image = response.data?.[0];
       if (image?.b64_json) {
         return {
-          provider: 'openai',
+          provider: "openai",
           providerId: null,
           url: `data:image/png;base64,${image.b64_json}`,
-          mimeType: 'image/png',
+          mimeType: "image/png",
         };
       }
     } catch {
@@ -604,31 +955,58 @@ async function generateCharacterImage(profile: BrandProfile, concept: ConceptCar
     }
   }
   return {
-    provider: 'svg-composition',
+    provider: "svg-composition",
     providerId: null,
     url: renderCharacterPosterDataUrl(profile, concept, character),
-    mimeType: 'image/svg+xml',
+    mimeType: "image/svg+xml",
   };
 }
 
-async function generateCharacterVideo(profile: BrandProfile, concept: ConceptCard, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt' | 'baseImageUrl' | 'clipCount' | 'clipTags'>, index: number) {
+async function generateCharacterVideo(
+  profile: BrandProfile,
+  concept: ConceptCard,
+  character: Pick<
+    CreatorCharacter,
+    | "id"
+    | "source"
+    | "name"
+    | "persona"
+    | "appearance"
+    | "voice"
+    | "prompt"
+    | "baseImageUrl"
+    | "clipCount"
+    | "clipTags"
+  >,
+  index: number,
+) {
   const prompt = buildCharacterVideoPrompt(profile, concept, character);
   if (process.env.CONCEPT_VIDEO_SERVICE_URL) {
     try {
       const response = await fetch(process.env.CONCEPT_VIDEO_SERVICE_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt: prompt.prompt, durationSeconds: prompt.durationSeconds, conceptId: concept.id, brandName: profile.brandName }),
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prompt: prompt.prompt,
+          durationSeconds: prompt.durationSeconds,
+          conceptId: concept.id,
+          brandName: profile.brandName,
+        }),
       });
       if (response.ok) {
-        const data = await response.json() as { url?: string; videoUrl?: string; secureUrl?: string; providerId?: string };
+        const data = (await response.json()) as {
+          url?: string;
+          videoUrl?: string;
+          secureUrl?: string;
+          providerId?: string;
+        };
         const url = data.url ?? data.videoUrl ?? data.secureUrl;
         if (url) {
           return {
-            provider: 'concept-video-service',
+            provider: "concept-video-service",
             providerId: data.providerId ?? null,
             url,
-            mimeType: 'video/mp4',
+            mimeType: "video/mp4",
           };
         }
       }
@@ -638,64 +1016,128 @@ async function generateCharacterVideo(profile: BrandProfile, concept: ConceptCar
   }
   const videoUrl = videoSources[index % videoSources.length];
   return {
-    provider: 'demo-asset',
+    provider: "demo-asset",
     providerId: videoUrl,
     url: videoUrl,
-    mimeType: 'video/mp4',
+    mimeType: "video/mp4",
   };
 }
 
-export async function generateCharacterImageAssetForConcept(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt'>) {
+export async function generateCharacterImageAssetForConcept(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+  character: Pick<
+    CreatorCharacter,
+    "id" | "source" | "name" | "persona" | "appearance" | "voice" | "prompt"
+  >,
+) {
   const image = await generateCharacterImage(profile, concept, character);
   return {
     projectId: project.id,
     conceptId: concept.id,
-    type: 'IMAGE' as const,
+    type: "IMAGE" as const,
     provider: image.provider,
     providerId: image.providerId,
     url: image.url,
     mimeType: image.mimeType,
-    metadata: { hookText: concept.hookText, prompt: concept.hookImagePrompt, characterId: character.id, characterName: character.name, characterSource: character.source },
+    metadata: {
+      hookText: concept.hookText,
+      prompt: concept.hookImagePrompt,
+      characterId: character.id,
+      characterName: character.name,
+      characterSource: character.source,
+    },
   };
 }
 
-export async function generateCharacterVideoAssetForConcept(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt'>, index = 0) {
-  const video = await generateCharacterVideo(profile, concept, character, index);
+export async function generateCharacterVideoAssetForConcept(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+  character: Pick<
+    CreatorCharacter,
+    "id" | "source" | "name" | "persona" | "appearance" | "voice" | "prompt"
+  >,
+  index = 0,
+) {
+  const video = await generateCharacterVideo(
+    profile,
+    concept,
+    character,
+    index,
+  );
   return {
     projectId: project.id,
     conceptId: concept.id,
-    type: 'VIDEO' as const,
+    type: "VIDEO" as const,
     provider: video.provider,
     providerId: video.providerId,
     url: video.url,
     mimeType: video.mimeType,
-    metadata: { hookText: concept.hookText, direction: concept.videoDirection, durationSeconds: concept.targetDurationSeconds, prompt: buildCharacterVideoPrompt(profile, concept, character).prompt, characterId: character.id, characterName: character.name, characterSource: character.source },
+    metadata: {
+      hookText: concept.hookText,
+      direction: concept.videoDirection,
+      durationSeconds: concept.targetDurationSeconds,
+      prompt: buildCharacterVideoPrompt(profile, concept, character).prompt,
+      characterId: character.id,
+      characterName: character.name,
+      characterSource: character.source,
+    },
   };
 }
 
-export async function generateCharacterMediaForConcept(project: Pick<Project, 'id'>, profile: BrandProfile, concept: ConceptCard, character: Pick<CreatorCharacter, 'id' | 'source' | 'name' | 'persona' | 'appearance' | 'voice' | 'prompt'>, index = 0) {
+export async function generateCharacterMediaForConcept(
+  project: Pick<Project, "id">,
+  profile: BrandProfile,
+  concept: ConceptCard,
+  character: Pick<
+    CreatorCharacter,
+    "id" | "source" | "name" | "persona" | "appearance" | "voice" | "prompt"
+  >,
+  index = 0,
+) {
   const image = await generateCharacterImage(profile, concept, character);
-  const video = await generateCharacterVideo(profile, concept, character, index);
+  const video = await generateCharacterVideo(
+    profile,
+    concept,
+    character,
+    index,
+  );
   return [
     {
       projectId: project.id,
       conceptId: concept.id,
-      type: 'IMAGE' as const,
+      type: "IMAGE" as const,
       provider: image.provider,
       providerId: image.providerId,
       url: image.url,
       mimeType: image.mimeType,
-      metadata: { hookText: concept.hookText, prompt: concept.hookImagePrompt, characterId: character.id, characterName: character.name, characterSource: character.source },
+      metadata: {
+        hookText: concept.hookText,
+        prompt: concept.hookImagePrompt,
+        characterId: character.id,
+        characterName: character.name,
+        characterSource: character.source,
+      },
     },
     {
       projectId: project.id,
       conceptId: concept.id,
-      type: 'VIDEO' as const,
+      type: "VIDEO" as const,
       provider: video.provider,
       providerId: video.providerId,
       url: video.url,
       mimeType: video.mimeType,
-      metadata: { hookText: concept.hookText, direction: concept.videoDirection, durationSeconds: concept.targetDurationSeconds, prompt: buildCharacterVideoPrompt(profile, concept, character).prompt, characterId: character.id, characterName: character.name, characterSource: character.source },
+      metadata: {
+        hookText: concept.hookText,
+        direction: concept.videoDirection,
+        durationSeconds: concept.targetDurationSeconds,
+        prompt: buildCharacterVideoPrompt(profile, concept, character).prompt,
+        characterId: character.id,
+        characterName: character.name,
+        characterSource: character.source,
+      },
     },
   ] as const;
 }

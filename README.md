@@ -1,6 +1,6 @@
-# ReelSwarm
+# ContentLane
 
-ReelSwarm turns a business website into short-form marketing videos. This repository is configured for a local private beta: React, the Express API, and the BullMQ worker run as npm processes; PostgreSQL and Redis run in Docker Compose.
+ContentLane turns a business website into short-form marketing videos. This repository is configured for a local private beta: React, the Express API, and the BullMQ worker run as npm processes; PostgreSQL and Redis run in Docker Compose.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ npm run dev
 
 Open `http://localhost:5173`. The seeded local account defaults to:
 
-- Email: `admin@reelswarm.local`
+- Email: `admin@ContentLane.local`
 - Password: `local-admin-password`
 
 Change both values in `backend/.env` before seeding if the machine is shared.

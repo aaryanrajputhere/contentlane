@@ -241,7 +241,8 @@ export default function ProjectRenderPage() {
   const selectedClip = selectedCreator?.clips.find((clip) => clip.id === exportSettings?.selectedCreatorClipId) ?? selectedCreator?.clips[0] ?? null;
   const brandDemoAsset = project?.mediaAssets.find(isBrandDemoAsset) ?? null;
   const selectedConcept = project?.concepts.find((concept) => concept.id === (exportSettings?.selectedConceptId ?? project?.selectedConceptId ?? '')) ?? null;
-  const renderOverlayText = exportSettings?.overlayText ?? selectedConcept?.hookText ?? 'Selected hook preview';
+  const creatorOverlayText = exportSettings?.creatorOverlayText ?? selectedConcept?.hookText ?? 'Selected hook preview';
+  const brandDemoOverlayText = exportSettings?.brandDemoOverlayText ?? selectedConcept?.demoOverlayText ?? 'See the difference';
 
   useEffect(() => {
     if (loading || !project || !selectedClip || !brandDemoAsset || renderStatus !== 'idle' || renderedVideoUrl || autoRenderAttemptedRef.current) {
@@ -313,11 +314,11 @@ export default function ProjectRenderPage() {
 
       recorder.start();
       setRenderMessage('Rendering creator clip');
-      await renderSegment({ canvas, context, video: creatorVideo, overlayText: renderOverlayText, signal: abortController.signal });
+      await renderSegment({ canvas, context, video: creatorVideo, overlayText: creatorOverlayText, signal: abortController.signal });
 
       if (!abortController.signal.aborted) {
         setRenderMessage('Rendering brand demo');
-        await renderSegment({ canvas, context, video: brandDemoVideo, overlayText: renderOverlayText, signal: abortController.signal });
+        await renderSegment({ canvas, context, video: brandDemoVideo, overlayText: brandDemoOverlayText, signal: abortController.signal });
       }
 
       recorder.stop();
@@ -429,7 +430,7 @@ export default function ProjectRenderPage() {
               <div className="mt-4 overflow-hidden rounded-[24px] bg-[#111111]">
                 {selectedClip ? <video src={selectedClip.url} className="aspect-[9/16] w-full object-cover" muted playsInline controls preload="metadata" /> : <div className="grid aspect-[9/16] place-items-center text-sm text-white/70">Missing creator clip</div>}
               </div>
-              <p className="mt-4 rounded-[20px] bg-[#f6f3ee] px-4 py-3 text-sm font-medium text-[#111111]">{renderOverlayText}</p>
+              <p className="mt-4 rounded-[20px] bg-[#f6f3ee] px-4 py-3 text-sm font-medium text-[#111111]">{creatorOverlayText}</p>
             </div>
 
             <div className={`${panelClass} p-5 lg:p-6`}>
@@ -439,7 +440,7 @@ export default function ProjectRenderPage() {
               <div className="mt-4 overflow-hidden rounded-[24px] bg-[#111111]">
                 {brandDemoAsset ? <video src={brandDemoAsset.url} className="aspect-[9/16] w-full object-cover" muted playsInline controls preload="metadata" /> : <div className="grid aspect-[9/16] place-items-center text-sm text-white/70">Missing brand demo</div>}
               </div>
-              <p className="mt-4 rounded-[20px] bg-[#f6f3ee] px-4 py-3 text-sm font-medium text-[#111111]">{renderOverlayText}</p>
+              <p className="mt-4 rounded-[20px] bg-[#f6f3ee] px-4 py-3 text-sm font-medium text-[#111111]">{brandDemoOverlayText}</p>
             </div>
 
             <div className={`${panelClass} p-5 lg:p-6`}>

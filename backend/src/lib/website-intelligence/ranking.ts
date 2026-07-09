@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { buildRunPodPrompt, extractRunPodText, hasRunPodConfig, runPodJson } from './runpod';
+import { hasLLMConfig, callLLM, type LLMPrompt } from './llm';
 import { filterRankablePages, isLowSignalPage, scorePageLocally, sortPagesByScore, truncateText } from './utils';
 import type { WebsitePageCandidate, WebsitePageRank } from './types';
 
@@ -11,8 +11,8 @@ const rankingResponseSchema = z.object({
   }).strict()).min(1),
 }).strict();
 
-function buildRankingPrompt(pages: WebsitePageCandidate[], rootDomain: string) {
-  return buildRunPodPrompt({
+function buildRankingPrompt(pages: WebsitePageCandidate[], rootDomain: string): LLMPrompt {
+  return {
     system: 'You rank website pages for brand analysis. Return strict JSON only.',
     user: JSON.stringify({
       task: 'Score each page by how useful it is for understanding the brand, offer, audience, voice, benefits, and conversion path.',
@@ -35,7 +35,7 @@ function buildRankingPrompt(pages: WebsitePageCandidate[], rootDomain: string) {
         rankedPages: [{ url: 'https://example.com', score: 100, scoreReason: 'Homepage explains the offer.' }],
       },
     }, null, 2),
-  });
+  };
 }
 
 function rankLocally(pages: WebsitePageCandidate[]) {
@@ -47,14 +47,13 @@ function rankLocally(pages: WebsitePageCandidate[]) {
 
 export async function rankWebsitePages(pages: WebsitePageCandidate[], rootDomain: string) {
   const rankablePages = filterRankablePages(pages);
-  if (!hasRunPodConfig()) {
+  if (!hasLLMConfig()) {
     return rankLocally(rankablePages);
   }
   const prompt = buildRankingPrompt(rankablePages, rootDomain);
   try {
-    const payload = await runPodJson<unknown>({ prompt, temperature: 0.1, maxTokens: 1800 });
-    if (!payload) return rankLocally(rankablePages);
-    const text = extractRunPodText(payload);
+    const text = await callLLM(prompt, { temperature: 0.1, maxTokens: 1800 });
+    if (!text) return rankLocally(rankablePages);
     const parsed = rankingResponseSchema.parse(JSON.parse(text));
     const byUrl = new Map(parsed.rankedPages.map((page) => [page.url, page]));
     const rankedPages = rankablePages.map((page) => {

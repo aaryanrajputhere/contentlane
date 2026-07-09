@@ -30,7 +30,7 @@ export async function runWebsiteIntelligencePipeline(website: string): Promise<A
     rootDomain,
     homepage,
   };
-  console.log(`[website-intelligence] homepage scrape complete for ${rootUrl}`);
+  console.log(`[website-intelligence] homepage scrape complete for ${rootUrl}:`, JSON.stringify(homepageScrape, null, 2));
   const brandProfile = await synthesizeBrandProfile(intelligenceResult);
   console.log(`[website-intelligence] completed analysis for ${rootUrl}`);
   return {

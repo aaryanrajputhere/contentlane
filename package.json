@@ -1,10 +1,13 @@
 {
-  "name": "reelswarm",
+  "name": "ContentLane",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
-  "workspaces": ["frontend", "backend"],
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
     "dev": "concurrently -k -n frontend,api,worker -c cyan,green,magenta \"npm run dev -w frontend\" \"npm run dev -w backend\" \"npm run worker:dev -w backend\"",
     "infra:up": "docker compose up -d --wait",

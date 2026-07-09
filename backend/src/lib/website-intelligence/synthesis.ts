@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import { brandProfileSchema } from '../../domain/schemas';
 import { buildBrandProfile } from '../workflow';
-import { buildRunPodPrompt, extractRunPodText, hasRunPodConfig, runPodJson } from './runpod';
+import { hasLLMConfig, callLLM, type LLMPrompt } from './llm';
 import { truncateText } from './utils';
 import type { WebsiteIntelligenceResult } from './types';
 
 const synthesisResponseSchema = brandProfileSchema.omit({ id: true, projectId: true, createdAt: true, updatedAt: true });
 
-function buildSynthesisPrompt(result: WebsiteIntelligenceResult) {
-  return buildRunPodPrompt({
+function buildSynthesisPrompt(result: WebsiteIntelligenceResult): LLMPrompt {
+  return {
     system: 'You synthesize concise brand profiles from homepage evidence. Return strict JSON only.',
     user: JSON.stringify({
       task: 'Create a structured brand profile using only the homepage evidence below.',
@@ -46,7 +46,7 @@ function buildSynthesisPrompt(result: WebsiteIntelligenceResult) {
         summary: 'Short summary',
       },
     }, null, 2),
-  });
+  };
 }
 
 function buildFallbackProfile(result: WebsiteIntelligenceResult) {
@@ -65,14 +65,15 @@ function buildFallbackProfile(result: WebsiteIntelligenceResult) {
 }
 
 export async function synthesizeBrandProfile(result: WebsiteIntelligenceResult) {
-  if (!hasRunPodConfig()) {
+  if (!hasLLMConfig()) {
     return synthesisResponseSchema.parse(buildFallbackProfile(result));
   }
   const prompt = buildSynthesisPrompt(result);
   try {
-    const payload = await runPodJson<unknown>({ prompt, temperature: 0.2, maxTokens: 2200 });
-    if (!payload) return buildFallbackProfile(result);
-    const text = extractRunPodText(payload);
+    const raw = await callLLM(prompt, { temperature: 0.2, maxTokens: 2200 });
+    if (!raw) return buildFallbackProfile(result);
+    // Strip markdown code fences the LLM may wrap around JSON (e.g. ```json ... ```)
+    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     return synthesisResponseSchema.parse(JSON.parse(text));
   } catch {
     return buildFallbackProfile(result);

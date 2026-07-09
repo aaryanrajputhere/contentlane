@@ -1,7 +1,7 @@
-import type { RequestHandler } from 'express';
-import { Prisma } from '@prisma/client';
-import prisma from '../lib/prisma';
-import { ApiError } from '../lib/errors';
+import type { RequestHandler } from "express";
+import { Prisma } from "@prisma/client";
+import prisma from "../lib/prisma";
+import { ApiError } from "../lib/errors";
 import {
   creatorClipParamsSchema,
   creatorClipUpdateSchema,
@@ -9,15 +9,17 @@ import {
   creatorMutationSchema,
   creatorClipMutationSchema,
   creatorParamsSchema,
-} from '../domain/schemas';
-import { creatorToCharacter, parseCreatorTags } from '../lib/creator-library';
-import { deleteStoredAsset, storeUploadedAsset } from '../lib/asset-storage';
+} from "../domain/schemas";
+import { creatorToCharacter, parseCreatorTags } from "../lib/creator-library";
+import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
 
 const creatorInclude = {
-  clips: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+  clips: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
 } satisfies Prisma.CreatorInclude;
 
-type CreatorWithClips = Prisma.CreatorGetPayload<{ include: typeof creatorInclude }>;
+type CreatorWithClips = Prisma.CreatorGetPayload<{
+  include: typeof creatorInclude;
+}>;
 
 function mapCreator(creator: CreatorWithClips) {
   const clips = creator.clips.map((clip) => ({
@@ -53,13 +55,16 @@ function mapCreator(creator: CreatorWithClips) {
 }
 
 async function getCreatorOrFail(id: string) {
-  const creator = await prisma.creator.findUnique({ where: { id }, include: creatorInclude });
-  if (!creator) throw new ApiError(404, 'NOT_FOUND', 'Creator not found');
+  const creator = await prisma.creator.findUnique({
+    where: { id },
+    include: creatorInclude,
+  });
+  if (!creator) throw new ApiError(404, "NOT_FOUND", "Creator not found");
   return creator;
 }
 
 function requireFile(file: Express.Multer.File | undefined, message: string) {
-  if (!file) throw new ApiError(400, 'FILE_REQUIRED', message);
+  if (!file) throw new ApiError(400, "FILE_REQUIRED", message);
   return file;
 }
 
@@ -71,26 +76,33 @@ export const getCreators: RequestHandler = async (req, res) => {
         search
           ? {
               OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: "insensitive" } },
+                { description: { contains: search, mode: "insensitive" } },
                 { clips: { some: { tags: { has: search.toLowerCase() } } } },
               ],
             }
           : undefined,
-        tag ? { clips: { some: { tags: { has: tag.toLowerCase() } } } } : undefined,
+        tag
+          ? { clips: { some: { tags: { has: tag.toLowerCase() } } } }
+          : undefined,
       ].filter(Boolean) as Prisma.CreatorWhereInput[],
     },
     include: creatorInclude,
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
   res.json({ creators: creators.map(mapCreator) });
 };
 
 export const createCreator: RequestHandler = async (req, res) => {
-  const { name, description, sortOrder } = creatorMutationSchema.parse(req.body);
-  const baseImage = requireFile(req.file, 'Upload a base image for the creator');
+  const { name, description, sortOrder } = creatorMutationSchema.parse(
+    req.body,
+  );
+  const baseImage = requireFile(
+    req.file,
+    "Upload a base image for the creator",
+  );
   const asset = await storeUploadedAsset(baseImage.buffer, {
-    folder: 'reelswarm/creators/base-images',
+    folder: "ContentLane/creators/base-images",
     publicId: `${Date.now()}-${baseImage.originalname}`,
     mimeType: baseImage.mimetype,
   });
@@ -112,29 +124,41 @@ export const createCreator: RequestHandler = async (req, res) => {
 
 export const updateCreator: RequestHandler = async (req, res) => {
   const { id } = creatorParamsSchema.parse(req.params);
-  const { name, description, sortOrder } = creatorMutationSchema.partial().parse(req.body);
+  const { name, description, sortOrder } = creatorMutationSchema
+    .partial()
+    .parse(req.body);
   const existing = await getCreatorOrFail(id);
-  const baseImage = req.file ? await storeUploadedAsset(req.file.buffer, {
-    folder: 'reelswarm/creators/base-images',
-    publicId: `${existing.id}-${Date.now()}-${req.file.originalname}`,
-    mimeType: req.file.mimetype,
-  }) : null;
+  const baseImage = req.file
+    ? await storeUploadedAsset(req.file.buffer, {
+        folder: "ContentLane/creators/base-images",
+        publicId: `${existing.id}-${Date.now()}-${req.file.originalname}`,
+        mimeType: req.file.mimetype,
+      })
+    : null;
   if (baseImage) {
-    await deleteStoredAsset({ provider: existing.baseImageProvider, providerId: existing.baseImageProviderId, mimeType: existing.baseImageMimeType });
+    await deleteStoredAsset({
+      provider: existing.baseImageProvider,
+      providerId: existing.baseImageProviderId,
+      mimeType: existing.baseImageMimeType,
+    });
   }
   const creator = await prisma.creator.update({
     where: { id },
     data: {
       ...(name ? { name } : {}),
-      ...(description !== undefined ? { description: description?.trim() || null } : {}),
+      ...(description !== undefined
+        ? { description: description?.trim() || null }
+        : {}),
       ...(sortOrder !== undefined ? { sortOrder } : {}),
-      ...(baseImage ? {
-        baseImageUrl: baseImage.url,
-        baseImageProvider: baseImage.provider,
-        baseImageProviderId: baseImage.providerId,
-        baseImageMimeType: baseImage.mimeType,
-        baseImageMetadata: baseImage.metadata,
-      } : {}),
+      ...(baseImage
+        ? {
+            baseImageUrl: baseImage.url,
+            baseImageProvider: baseImage.provider,
+            baseImageProviderId: baseImage.providerId,
+            baseImageMimeType: baseImage.mimeType,
+            baseImageMetadata: baseImage.metadata,
+          }
+        : {}),
     },
     include: creatorInclude,
   });
@@ -145,8 +169,18 @@ export const deleteCreator: RequestHandler = async (req, res) => {
   const { id } = creatorParamsSchema.parse(req.params);
   const creator = await getCreatorOrFail(id);
   await Promise.allSettled([
-    deleteStoredAsset({ provider: creator.baseImageProvider, providerId: creator.baseImageProviderId, mimeType: creator.baseImageMimeType }),
-    ...creator.clips.map((clip) => deleteStoredAsset({ provider: clip.provider, providerId: clip.providerId, mimeType: clip.mimeType })),
+    deleteStoredAsset({
+      provider: creator.baseImageProvider,
+      providerId: creator.baseImageProviderId,
+      mimeType: creator.baseImageMimeType,
+    }),
+    ...creator.clips.map((clip) =>
+      deleteStoredAsset({
+        provider: clip.provider,
+        providerId: clip.providerId,
+        mimeType: clip.mimeType,
+      }),
+    ),
   ]);
   await prisma.creator.delete({ where: { id } });
   res.status(204).end();
@@ -156,9 +190,9 @@ export const createCreatorClip: RequestHandler = async (req, res) => {
   const { id } = creatorParamsSchema.parse(req.params);
   const creator = await getCreatorOrFail(id);
   const { title, tags, sortOrder } = creatorClipMutationSchema.parse(req.body);
-  const clipFile = requireFile(req.file, 'Upload a clip file');
+  const clipFile = requireFile(req.file, "Upload a clip file");
   const asset = await storeUploadedAsset(clipFile.buffer, {
-    folder: 'reelswarm/creators/clips',
+    folder: "ContentLane/creators/clips",
     publicId: `${creator.id}-${Date.now()}-${clipFile.originalname}`,
     mimeType: clipFile.mimetype,
   });
@@ -182,7 +216,7 @@ export const updateCreatorClip: RequestHandler = async (req, res) => {
   const { clipId } = creatorClipParamsSchema.parse(req.params);
   const { title, tags, sortOrder } = creatorClipUpdateSchema.parse(req.body);
   const clip = await prisma.creatorClip.findUnique({ where: { id: clipId } });
-  if (!clip) throw new ApiError(404, 'NOT_FOUND', 'Clip not found');
+  if (!clip) throw new ApiError(404, "NOT_FOUND", "Clip not found");
   const updated = await prisma.creatorClip.update({
     where: { id: clipId },
     data: {
@@ -197,8 +231,12 @@ export const updateCreatorClip: RequestHandler = async (req, res) => {
 export const deleteCreatorClip: RequestHandler = async (req, res) => {
   const { clipId } = creatorClipParamsSchema.parse(req.params);
   const clip = await prisma.creatorClip.findUnique({ where: { id: clipId } });
-  if (!clip) throw new ApiError(404, 'NOT_FOUND', 'Clip not found');
-  await deleteStoredAsset({ provider: clip.provider, providerId: clip.providerId, mimeType: clip.mimeType });
+  if (!clip) throw new ApiError(404, "NOT_FOUND", "Clip not found");
+  await deleteStoredAsset({
+    provider: clip.provider,
+    providerId: clip.providerId,
+    mimeType: clip.mimeType,
+  });
   await prisma.creatorClip.delete({ where: { id: clipId } });
   res.status(204).end();
 };

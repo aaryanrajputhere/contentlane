@@ -22,7 +22,7 @@ export function createApp() {
     res.setHeader('x-request-id', req.requestId);
     next();
   });
-  app.use(pinoHttp({ logger, customProps: (req) => ({ requestId: req.requestId }) }));
+  app.use(pinoHttp({ logger, autoLogging: false, customProps: (req) => ({ requestId: req.requestId }) }));
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: config.FRONTEND_URL, credentials: true }));
   app.use(express.json({ limit: '1mb' }));

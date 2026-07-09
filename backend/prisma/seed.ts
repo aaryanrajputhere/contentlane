@@ -1,16 +1,18 @@
-import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
-import { hashPassword, normalizeEmail } from '../src/lib/auth';
+import "dotenv/config";
+import { PrismaClient } from "@prisma/client";
+import { hashPassword, normalizeEmail } from "../src/lib/auth";
 
 const prisma = new PrismaClient();
 
 async function main() {
   const email = process.env.SEED_ADMIN_EMAIL?.trim();
   const password = process.env.SEED_ADMIN_PASSWORD?.trim();
-  const name = process.env.SEED_ADMIN_NAME?.trim() || 'ReelSwarm Admin';
+  const name = process.env.SEED_ADMIN_NAME?.trim() || "ContentLane Admin";
 
   if (!email || !password) {
-    console.log('Seed skipped: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are not set.');
+    console.log(
+      "Seed skipped: SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD are not set.",
+    );
     return;
   }
 
@@ -26,13 +28,13 @@ async function main() {
     where: { email: normalizedEmail },
     update: {
       name,
-      role: 'ADMIN',
+      role: "ADMIN",
       passwordHash: await hashPassword(password),
     },
     create: {
       email: normalizedEmail,
       name,
-      role: 'ADMIN',
+      role: "ADMIN",
       passwordHash: await hashPassword(password),
     },
   });
