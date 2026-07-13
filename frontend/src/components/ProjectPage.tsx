@@ -12,6 +12,7 @@ import {
 import { motion } from 'framer-motion';
 import { api, post } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
+import { calculateTfIdfCosineSimilarity } from '../lib/similarity';
 import type { ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
 
 const AI_STEPS = [
@@ -89,6 +90,46 @@ function GenerationExperience({
       </div>
     </div>
   );
+}
+
+function conceptTagsFromDirection(value: string) {
+  return value
+    .split(/[,.]/g)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function selectMatchedClips(concepts: ProjectSnapshot["concepts"], clips: CreatorRecord["clips"]) {
+  const usedClipIds = new Set<string>();
+
+  return concepts.map((concept, index) => {
+    if (clips.length === 0) return null;
+
+    const queryTags = conceptTagsFromDirection(concept.videoDirection);
+    const scores = calculateTfIdfCosineSimilarity(queryTags, clips.map((clip) => clip.tags));
+
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    scores.forEach((score, clipIndex) => {
+      const clip = clips[clipIndex];
+      if (!clip || usedClipIds.has(clip.id)) return;
+      if (bestIndex === -1 || score > bestScore) {
+        bestIndex = clipIndex;
+        bestScore = score;
+      }
+    });
+
+    if (bestIndex === -1 || bestScore === 0) {
+      bestIndex = clips.findIndex((clip, offset) => !usedClipIds.has(clip.id) && offset >= index % clips.length);
+      if (bestIndex === -1) bestIndex = clips.findIndex((clip) => !usedClipIds.has(clip.id));
+      if (bestIndex === -1) bestIndex = index % clips.length;
+    }
+
+    const matchedClip = clips[bestIndex] ?? clips[index % clips.length];
+    if (matchedClip) usedClipIds.add(matchedClip.id);
+    return matchedClip ?? null;
+  });
 }
 
 function ReelPreviewCard({ concept, creator, clip }: { concept: any; creator: any; clip: any }) {
@@ -273,6 +314,7 @@ export default function ProjectPage() {
   const selectedCreatorRecord = creatorLibrary.find(c => c.id === project.selectedCharacter?.id) || creatorLibrary[0];
   const displayConcepts = project.concepts?.length ? project.concepts.slice(0, 3) : [];
   const brandDemoAsset = project.mediaAssets.find(a => a.type === 'VIDEO' && typeof a.metadata === 'object' && (a.metadata as any)?.kind === 'brand-demo');
+  const matchedPreviewClips = selectMatchedClips(displayConcepts, selectedCreatorRecord?.clips ?? []);
 
   return (
     <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
@@ -298,11 +340,14 @@ export default function ProjectPage() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 mb-24">
-          {displayConcepts.map((concept, index) => {
-            const clips = selectedCreatorRecord?.clips ?? [];
-            const clip = clips.length > 0 ? clips[index % clips.length] : null;
-            return <ReelPreviewCard key={concept.id} concept={concept} creator={selectedCreatorRecord} clip={clip} />;
-          })}
+          {displayConcepts.map((concept, index) => (
+            <ReelPreviewCard
+              key={concept.id}
+              concept={concept}
+              creator={selectedCreatorRecord}
+              clip={matchedPreviewClips[index]}
+            />
+          ))}
         </div>
 
         <div className="bg-[#111111] rounded-[40px] p-8 md:p-14 text-white shadow-2xl relative overflow-hidden">
