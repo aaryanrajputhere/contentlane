@@ -24,7 +24,15 @@ export function createApp() {
   });
   app.use(pinoHttp({ logger, autoLogging: false, customProps: (req) => ({ requestId: req.requestId }) }));
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.use(cors({ origin: config.FRONTEND_URL, credentials: true }));
+  app.use(cors({
+    origin: [
+      config.FRONTEND_URL,
+      "https://contentlane.vercel.app",
+      "https://contentlane-aaryanrajputheres-projects.vercel.app",
+      "https://contentlane-git-main-aaryanrajputheres-projects.vercel.app",
+    ],
+    credentials: true,
+  }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
