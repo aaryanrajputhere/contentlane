@@ -189,12 +189,14 @@ export const deleteCreator: RequestHandler = async (req, res) => {
 export const createCreatorClip: RequestHandler = async (req, res) => {
   const { id } = creatorParamsSchema.parse(req.params);
   const creator = await getCreatorOrFail(id);
-  const { title, tags, sortOrder } = creatorClipMutationSchema.parse(req.body);
+  const { title, tags, sortOrder, trimStart, trimEnd } = creatorClipMutationSchema.parse(req.body);
   const clipFile = requireFile(req.file, "Upload a clip file");
   const asset = await storeUploadedAsset(clipFile.buffer, {
     folder: "ContentLane/creators/clips",
     publicId: `${creator.id}-${Date.now()}-${clipFile.originalname}`,
     mimeType: clipFile.mimetype,
+    trimStart,
+    trimEnd,
   });
   const clip = await prisma.creatorClip.create({
     data: {

@@ -20,6 +20,9 @@ const schema = z.object({
     .max(300_000)
     .default(120_000),
   OPENAI_API_KEY: z.string().trim().default(""),
+  OPENAI_SYNTHESIS_MODEL: z.string().trim().default("gpt-4o-mini"),
+  OPENAI_HOOK_MODEL: z.string().trim().default("gpt-5.4-nano"),
+  OPENAI_USE_BATCH_OR_FLEX: z.string().trim().default(""),
   RUNPOD_API_KEY: z.string().trim().default(""),
   RUNPOD_LLM_ENDPOINT_URL: z.string().trim().default(""),
   RUNPOD_LLM_TIMEOUT_MS: z.coerce

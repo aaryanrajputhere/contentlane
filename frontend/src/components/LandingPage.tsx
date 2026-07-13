@@ -267,12 +267,6 @@ export default function LandingPage() {
 
     try {
       const response = await post<ProjectResponse>('/projects', { website: value });
-      if (response.job) {
-        setMessage('Analyzing website');
-        await waitForJob(response.job.id, (_progress, note) => {
-          setMessage(note ?? 'Analyzing website');
-        });
-      }
       navigate(`/projects/${response.project.id}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to start project');
@@ -349,7 +343,7 @@ export default function LandingPage() {
           </div>
 
           <h1 className="mt-7 max-w-[11ch] text-[clamp(3.55rem,7vw,5.15rem)] font-extrabold leading-[0.94] tracking-[-0.06em] text-[#111111] sm:max-w-[12ch]">
-            Make 30 days of content on autopilot
+            Generate your first viral SaaS Reel in under a minute.
           </h1>
 
           <p className="mt-6 max-w-2xl text-[1.04rem] leading-8 text-[#666666] sm:text-[1.08rem]">
@@ -376,7 +370,7 @@ export default function LandingPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#111111] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? <Loader2 className="animate-spin" size={17} /> : <Wand2 size={17} />}
-                {status === 'authenticated' ? 'Generate content' : 'Join beta'}
+                Generate My First Reel
               </button>
             </div>
           </div>
@@ -576,7 +570,7 @@ export default function LandingPage() {
               onClick={scrollToHero}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f4f4f4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
             >
-              Start with your website
+              Generate My First Reel
               <Rocket size={16} />
             </button>
           </div>

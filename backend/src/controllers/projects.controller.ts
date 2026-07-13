@@ -2,6 +2,7 @@ import type { RequestHandler } from "express";
 import { JobStatus, JobType, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiError } from "../lib/errors";
+import type { BrandProfile } from "../domain/schemas";
 import {
   characterSelectionSchema,
   conceptSelectionSchema,
@@ -27,7 +28,39 @@ import {
 } from "../lib/workflow";
 import { runWebsiteIntelligencePipeline } from "../lib/website-intelligence/pipeline";
 import { generateHooksFromLLM } from "../lib/website-intelligence/hooks";
+import { withLLMTelemetry } from "../lib/website-intelligence/llm";
 import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
+
+/**
+ * Convert a brand profile from the pipeline (where campaignStrategy can be null)
+ * into a shape Prisma accepts for JSON fields (null → Prisma.JsonNull).
+ */
+function toBrandProfilePrismaData(
+  profile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
+) {
+  const { campaignStrategy, ...rest } = profile;
+  return {
+    ...rest,
+    campaignStrategy:
+      campaignStrategy === null || campaignStrategy === undefined
+        ? Prisma.JsonNull
+        : (campaignStrategy as Prisma.InputJsonValue),
+  };
+}
+
+/**
+ * Cast a Prisma BrandProfile row (where campaignStrategy is JsonValue)
+ * to the Zod BrandProfile type so it can be passed to workflow functions.
+ */
+function asBrandProfile(prismaProfile: {
+  id: string;
+  projectId: string;
+  brandName: string;
+  campaignStrategy: Prisma.JsonValue;
+  [key: string]: unknown;
+}): BrandProfile {
+  return prismaProfile as unknown as BrandProfile;
+}
 
 async function createJob(
   projectId: string,
@@ -57,12 +90,12 @@ async function runStage<T>(
     progressMessage: label,
   });
   try {
-    const result = await fn();
+    const { result, telemetry } = await withLLMTelemetry(fn);
     await updateJob(job.id, {
       status: JobStatus.COMPLETED,
       progress: 100,
       progressMessage: `${label} complete`,
-      result: result as Prisma.InputJsonValue,
+      result: { data: result, llmTelemetry: telemetry } as unknown as Prisma.InputJsonValue,
     });
     return { jobId: job.id, result };
   } catch (error) {
@@ -262,8 +295,8 @@ async function analyzeProjectById(
         await prisma.$transaction([
           prisma.brandProfile.upsert({
             where: { projectId: project.id },
-            update: analysisResult.brandProfile,
-            create: { projectId: project.id, ...analysisResult.brandProfile },
+            update: toBrandProfilePrismaData(analysisResult.brandProfile),
+            create: { projectId: project.id, ...toBrandProfilePrismaData(analysisResult.brandProfile) },
           }),
           prisma.websiteAnalysis.upsert({
             where: { projectId: project.id },
@@ -489,12 +522,6 @@ export const generateConcepts: RequestHandler = async (req, res) => {
       "PROJECT_INCOMPLETE",
       "Analyze the website before generating concepts",
     );
-  if (!project.mediaAssets.some(isBrandDemoAsset))
-    throw new ApiError(
-      409,
-      "PROJECT_INCOMPLETE",
-      "Upload a brand demo before generating hooks",
-    );
   if (project.concepts.length > 0 && !forceRegenerate) {
     res.json({ project, cached: true });
     return;
@@ -507,8 +534,9 @@ export const generateConcepts: RequestHandler = async (req, res) => {
     "Generating concept cards",
     async () => {
       // Try LLM generation first, fall back to deterministic builder
-      const llmConcepts = await generateHooksFromLLM(project.brandProfile!, count);
-      const concepts = llmConcepts ?? buildConceptCards(project.brandProfile!, count);
+      const profile = asBrandProfile(project.brandProfile!);
+      const llmConcepts = await generateHooksFromLLM(profile, count);
+      const concepts = llmConcepts ?? buildConceptCards(profile, count);
       console.log(`[hooks] generated ${concepts.length} concepts via ${llmConcepts ? 'LLM' : 'fallback'}`);
       await prisma.hookConcept.createMany({
         data: concepts.map((concept) => ({
@@ -590,7 +618,7 @@ export const generateConceptImageAsset: RequestHandler = async (req, res) => {
         );
       const asset = await generateCharacterImageAssetForConcept(
         project,
-        latestProject.brandProfile!,
+        asBrandProfile(latestProject.brandProfile!),
         selectedConcept,
         activeCharacter,
       );
@@ -678,7 +706,7 @@ export const generateConceptVideoAsset: RequestHandler = async (req, res) => {
         );
       const asset = await generateCharacterVideoAssetForConcept(
         project,
-        latestProject.brandProfile!,
+        asBrandProfile(latestProject.brandProfile!),
         selectedConcept,
         activeCharacter,
         selectedConcept.sortOrder,
@@ -764,7 +792,7 @@ export const generateMedia: RequestHandler = async (req, res) => {
         );
       const assets = await generateCharacterMediaForConcept(
         project,
-        latestProject.brandProfile!,
+        asBrandProfile(latestProject.brandProfile!),
         selectedConcept,
         activeCharacter,
         selectedConcept.sortOrder,

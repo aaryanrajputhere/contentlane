@@ -307,6 +307,7 @@ export async function scrapePage(
   options?: { allowFallback?: boolean },
 ) {
   const normalizedUrl = normalizePageUrl(url);
+  console.log(`[scrape] url=${normalizedUrl}`);
   const buildHomepageFallback = async (error?: unknown) => {
     try {
       const htmlFallback = await fetchHtmlFallback(
@@ -327,6 +328,7 @@ export async function scrapePage(
   };
 
   if (!config.FIRECRAWL_API_KEY) {
+    console.log('[scrape] no Firecrawl key, using fallback');
     return buildHomepageFallback();
   }
 
@@ -342,7 +344,8 @@ export async function scrapePage(
       },
       config.FIRECRAWL_TIMEOUT_MS,
     );
-  } catch {
+  } catch (scrapeError) {
+    console.warn('[scrape] firecrawl failed:', scrapeError instanceof Error ? scrapeError.message : scrapeError);
     firecrawlPayload = null;
   }
 
@@ -385,7 +388,7 @@ export async function scrapePage(
     const plainText = markdown
       ? markdownToPlainText(markdown)
       : stripHtml(html ?? "");
-    return {
+    const result = {
       url: canonicalUrl ? normalizePageUrl(canonicalUrl) : normalizedUrl,
       title: title ?? (html ? extractTitle(html) : null),
       metaDescription:
@@ -395,7 +398,10 @@ export async function scrapePage(
       source: "firecrawl" as const,
       rawText: plainText || normalizedUrl,
     };
+    console.log(`[scrape] done source=firecrawl title="${result.title}" text=${result.rawText.length}chars`);
+    return result;
   }
+  console.log('[scrape] no content from firecrawl, trying fallback');
   if (!options?.allowFallback) return null;
   return buildHomepageFallback();
 }

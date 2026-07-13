@@ -1,4 +1,5 @@
 import { normalizeWebsiteInput } from '../workflow';
+import { createHash } from 'node:crypto';
 import { scrapePage } from './firecrawl';
 import { synthesizeBrandProfile } from './synthesis';
 import { buildSelectedTextSnippet } from './utils';
@@ -19,10 +20,27 @@ function toHomepageEvidence(scrape: Awaited<ReturnType<typeof scrapePage>>, webs
   };
 }
 
+function buildSourceContentFingerprint(result: WebsiteIntelligenceResult) {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      sourceUrl: result.sourceUrl,
+      title: result.homepage.title ?? '',
+      metaDescription: result.homepage.metaDescription ?? '',
+      visibleTextSnippet: result.homepage.visibleTextSnippet,
+      extractedTextSnippet: result.homepage.extractedTextSnippet ?? '',
+    }))
+    .digest('hex');
+}
+
 export async function runWebsiteIntelligencePipeline(website: string): Promise<AnalysisPipelineResult> {
   const rootUrl = normalizeWebsiteInput(website);
-  console.log(`[website-intelligence] start analysis for ${rootUrl}`);
+  const t0 = Date.now();
+  console.log(`[pipeline] start url=${rootUrl}`);
+
+  const t1 = Date.now();
   const homepageScrape = await scrapePage(rootUrl, { allowFallback: true });
+  console.log(`[pipeline] scrape done ${Date.now() - t1}ms source=${homepageScrape?.source ?? 'none'}`);
+
   const homepage = toHomepageEvidence(homepageScrape, rootUrl);
   const rootDomain = new URL(rootUrl).host.replace(/^www\./i, '');
   const intelligenceResult: WebsiteIntelligenceResult = {
@@ -30,15 +48,20 @@ export async function runWebsiteIntelligencePipeline(website: string): Promise<A
     rootDomain,
     homepage,
   };
-  console.log(`[website-intelligence] homepage scrape complete for ${rootUrl}:`, JSON.stringify(homepageScrape, null, 2));
-  const brandProfile = await synthesizeBrandProfile(intelligenceResult);
-  console.log(`[website-intelligence] completed analysis for ${rootUrl}`);
+
+  const t2 = Date.now();
+  const finalProfile = await synthesizeBrandProfile(intelligenceResult);
+  console.log(`[pipeline] synthesis done ${Date.now() - t2}ms briefs=${finalProfile.campaignStrategy?.length ?? 0}`);
+
+  console.log(`[pipeline] complete ${Date.now() - t0}ms brand="${finalProfile.brandName}"`);
+
   return {
-    brandProfile,
+    brandProfile: finalProfile,
     analysis: {
       sourceUrl: rootUrl,
       rootDomain,
       homepage,
+      sourceContentFingerprint: buildSourceContentFingerprint(intelligenceResult),
     },
   };
 }

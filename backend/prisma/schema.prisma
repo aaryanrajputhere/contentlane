@@ -91,21 +91,36 @@ model Project {
 }
 
 model BrandProfile {
-  id          String   @id @default(cuid())
-  projectId    String   @unique
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  brandName    String
-  tagline      String
-  audience     String
-  painPoints   String[]
-  benefits     String[]
-  voice        String
-  offer        String
-  cta          String
-  angles       String[]
-  summary      String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String   @id @default(cuid())
+  projectId         String   @unique
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brandName         String
+  product           String
+  audience          String
+  audienceIdentity  String
+  audienceStage     String
+  emotionalDrivers  String[]
+  fears             String[]
+  realThoughts      String[]
+  dailyMoments      String[]
+  dreamOutcomes     String[]
+  misconceptions    String[]
+  objections        String[]
+  proofPoints       String[]
+  socialProofMoments String[]
+  transformation    String
+  uniqueMechanism   String
+  conversationStarters String[]
+  viralTriggers     String[]
+  emotionalLanguage String[]
+  forbiddenClaims   String[]
+  ugcScenarios      String[]
+  testimonials      String[]
+  cta               String
+  summary           String
+  campaignStrategy  Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model WebsiteAnalysis {

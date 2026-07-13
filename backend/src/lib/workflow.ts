@@ -150,7 +150,7 @@ function normalizeWebsiteAnalysisRecord(
 }
 
 export function buildWebsiteAnalysisStorageData(
-  analysis: Pick<WebsiteAnalysis, "sourceUrl" | "rootDomain" | "homepage">,
+  analysis: Pick<WebsiteAnalysis, "sourceUrl" | "rootDomain" | "homepage"> & { sourceContentFingerprint?: string },
 ) {
   const homepage = {
     url: analysis.homepage.url,
@@ -190,6 +190,9 @@ export function buildWebsiteAnalysisStorageData(
       extractedCount: analysis.homepage.extractionStatus === "failed" ? 0 : 1,
       failedCount: analysis.homepage.extractionStatus === "failed" ? 1 : 0,
       lowSignalFilteredCount: 0,
+      ...(analysis.sourceContentFingerprint
+        ? { sourceContentFingerprint: analysis.sourceContentFingerprint }
+        : {}),
     },
   };
 }
@@ -216,14 +219,14 @@ function escapeXml(value: string) {
 
 function conceptDescriptor(profile: BrandProfile, index: number) {
   const angle =
-    profile.angles[index % profile.angles.length] ?? `Angle ${index + 1}`;
+    profile.conversationStarters[index % profile.conversationStarters.length] ?? `Angle ${index + 1}`;
   const painPoint =
-    profile.painPoints[index % profile.painPoints.length] ??
-    profile.painPoints[0] ??
+    profile.realThoughts[index % profile.realThoughts.length] ??
+    profile.realThoughts[0] ??
     "the main problem";
   const benefit =
-    profile.benefits[index % profile.benefits.length] ??
-    profile.benefits[0] ??
+    profile.proofPoints[index % profile.proofPoints.length] ??
+    profile.proofPoints[0] ??
     "the key benefit";
   return { angle, painPoint, benefit };
 }
@@ -299,27 +302,33 @@ export function buildBrandProfile(
   const audience = `${brandName} visitors who want a faster way to understand the offer`;
   return {
     brandName,
-    tagline: `${brandName} turns website attention into short-form content that can actually ship.`,
+    product: brandName,
     audience,
-    painPoints: [
-      "Website visitors skim and leave before the value lands",
-      "Marketing teams need hooks before they need a bigger video budget",
-      "The product story gets buried under generic creative",
+    audienceIdentity: "Founders and Marketers",
+    audienceStage: "Problem aware",
+    emotionalDrivers: ["Need for speed", "Desire for high conversion"],
+    fears: ["Wasting time on bad creatives", "Spending money on ads that don't convert"],
+    realThoughts: ["I spend too much time editing videos", "Why isn't this automated yet?"],
+    dailyMoments: ["Staring at a blank Premiere Pro timeline", "Trying to think of a good hook"],
+    dreamOutcomes: ["Publishing high quality ads without effort", "Getting back hours of time"],
+    misconceptions: ["AI video looks fake", "It's too hard to use"],
+    objections: ["AI video looks fake", "Too expensive"],
+    proofPoints: ["Generates in seconds"],
+    socialProofMoments: ["When they see the final ad quality", "When they realize it took 10 seconds"],
+    transformation: "From blank page to ready-to-publish UGC ad",
+    uniqueMechanism: "URL-to-video AI pipeline",
+    conversationStarters: [
+      `I used to hate making ads for ${brandName}...`,
+      `Here's how ${brandName} is changing the game.`,
+      `Stop wasting time on generic content.`,
+      `I finally found a way to automate my hooks.`
     ],
-    benefits: [
-      "Clear website analysis in one pass",
-      "Hook concepts that stay on-message",
-      "Media previews that move into the editor immediately",
-    ],
-    voice: "Direct, confident, practical",
-    offer: `A lean workflow for ${brandName} to go from URL to publishable video assets`,
+    viralTriggers: ["Speed", "Automation"],
+    emotionalLanguage: ["shocked", "effortless", "instant"],
+    forbiddenClaims: ["Guaranteed virality"],
+    ugcScenarios: ["Reacting to generation speed", "Showing before and after"],
+    testimonials: ["This saved me 10 hours a week."],
     cta: "Generate the next ad",
-    angles: [
-      `What ${brandName} solves in one sentence`,
-      `Why ${brandName} is easier than a generic workflow`,
-      `How ${brandName} turns proof into a hook`,
-      `The fast path from site to scroll-stopping content`,
-    ],
     summary: `${brandName} positions the website as the source of truth and turns it into a content pipeline without a separate admin layer.`,
   };
 }
@@ -374,21 +383,27 @@ function buildVideoDirection(
   ].join(" ");
 }
 
+function brandOrProductName(profile: BrandProfile) {
+  return profile.brandName.trim() || profile.product.trim();
+}
+
 export function buildConceptCards(
   profile: BrandProfile,
   count: number,
 ): Array<ConceptBlueprint> {
   return Array.from({ length: count }, (_, index) => {
     const { angle, painPoint, benefit } = conceptDescriptor(profile, index);
+    const brandName = brandOrProductName(profile);
+    const productCategory = profile.product.toLowerCase();
     const hookText = [
-      `Stop ${painPoint.toLowerCase()} before it costs the next customer.`,
-      `If ${profile.brandName} feels overlooked, this is the better angle.`,
-      `One clean hook for turning ${benefit.toLowerCase()} into action.`,
-      `The fastest way to make ${profile.brandName} feel obvious.`,
-      `This is what ${profile.brandName} looks like when the story lands.`,
-      `A sharper way to show why ${profile.brandName} matters now.`,
-      `The scroll-stopping version of ${profile.brandName}.`,
-      `The hook that makes ${profile.brandName} click in one breath.`,
+      `how to actually use ${brandName} without overthinking it`,
+      `they kept this ${productCategory} SECRET from us 💀`,
+      `i didn't know ${brandName} could fix this in minutes`,
+      `wait... ${brandName} does the hard part??`,
+      `i wasted way too long before trying ${brandName}`,
+      `this ${productCategory} shortcut is actually unfair`,
+      `the ${brandName} workflow i wish i found sooner`,
+      `${brandName} made ${benefit.toLowerCase()} way less painful`,
     ][index % 8];
     const score = clampScore(index);
     const demoOverlayText = buildDemoOverlayText(profile, benefit, index);
@@ -415,7 +430,7 @@ export function buildConceptCards(
       targetDurationSeconds: 5,
       score,
       scoreLabel: scoreLabel(score),
-      rationale: `${profile.tagline} This concept leans on ${angle.toLowerCase()} and the benefit ${benefit.toLowerCase()}.`,
+      rationale: `Angle: ${angle}. Benefit: ${benefit}.`,
       generatedImageUrl: null,
       generatedVideoUrl: null,
       sortOrder: index,
@@ -652,14 +667,28 @@ export function buildMediaAssets(
       renderConceptPosterDataUrl(
         {
           brandName: "ContentLane",
-          tagline: "",
+          product: "",
           audience: "",
-          painPoints: [""],
-          benefits: [""],
-          voice: "",
-          offer: "",
+          audienceIdentity: "",
+          audienceStage: "",
+          emotionalDrivers: [""],
+          fears: [""],
+          realThoughts: [""],
+          dailyMoments: [""],
+          dreamOutcomes: [""],
+          misconceptions: [""],
+          objections: [""],
+          proofPoints: [""],
+          socialProofMoments: [""],
+          transformation: "",
+          uniqueMechanism: "",
+          conversationStarters: [""],
+          viralTriggers: [""],
+          emotionalLanguage: [""],
+          forbiddenClaims: [""],
+          ugcScenarios: [""],
+          testimonials: [""],
           cta: "",
-          angles: [""],
           summary: "",
         } as BrandProfile,
         concept,

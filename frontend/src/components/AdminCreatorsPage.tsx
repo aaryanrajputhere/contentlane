@@ -148,13 +148,15 @@ function ClipModal({
   open: boolean;
   busy: boolean;
   onClose: () => void;
-  onSave: (payload: { title: string; tags: string[]; sortOrder: number; file: File | null }) => Promise<void>;
+  onSave: (payload: { title: string; tags: string[]; sortOrder: number; file: File | null; trimStart?: number; trimEnd?: number }) => Promise<void>;
   onDelete?: (clipId: string) => Promise<void>;
 }) {
   const [title, setTitle] = useState('');
   const [tags, setTags] = useState('');
   const [sortOrder, setSortOrder] = useState('0');
   const [file, setFile] = useState<File | null>(null);
+  const [trimStart, setTrimStart] = useState('');
+  const [trimEnd, setTrimEnd] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -163,12 +165,16 @@ function ClipModal({
       setTags(joinTags(clip.tags));
       setSortOrder(String(clip.sortOrder));
       setFile(null);
+      setTrimStart('');
+      setTrimEnd('');
       return;
     }
     setTitle('');
     setTags('');
     setSortOrder('0');
     setFile(null);
+    setTrimStart('');
+    setTrimEnd('');
   }, [clip, mode, open]);
 
   if (!open || !clip) return null;
@@ -207,14 +213,26 @@ function ClipModal({
               <input value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} type="number" min="0" className={inputClass} />
             </label>
             {mode === 'create' ? (
-              <label className="block">
-                <span className={labelClass}>Clip file</span>
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-dashed border-[#D9D9D9] bg-white px-4 py-4 text-sm text-[#666666] transition hover:border-black hover:text-black">
-                  <Upload size={16} />
-                  <span className="truncate">{file ? file.name : 'Choose a clip'}</span>
-                  <input type="file" accept="video/*,image/*" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+              <>
+                <label className="block">
+                  <span className={labelClass}>Clip file</span>
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-[18px] border border-dashed border-[#D9D9D9] bg-white px-4 py-4 text-sm text-[#666666] transition hover:border-black hover:text-black">
+                    <Upload size={16} />
+                    <span className="truncate">{file ? file.name : 'Choose a clip'}</span>
+                    <input type="file" accept="video/*,image/*" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+                  </label>
                 </label>
-              </label>
+                <div className="flex gap-4">
+                  <label className="block flex-1">
+                    <span className={labelClass}>Trim Start (sec)</span>
+                    <input value={trimStart} onChange={(event) => setTrimStart(event.target.value)} type="number" min="0" step="0.1" className={inputClass} placeholder="Optional" />
+                  </label>
+                  <label className="block flex-1">
+                    <span className={labelClass}>Trim End (sec)</span>
+                    <input value={trimEnd} onChange={(event) => setTrimEnd(event.target.value)} type="number" min="0" step="0.1" className={inputClass} placeholder="Optional" />
+                  </label>
+                </div>
+              </>
             ) : null}
             <div className="flex gap-3 pt-2">
               <button
@@ -222,7 +240,10 @@ function ClipModal({
                 onClick={() => {
                   if (mode === 'create' && !file) return;
                   const clipFile = mode === 'create' ? file : null;
-                  void onSave({ title: title.trim(), tags: toTagList(tags), sortOrder: Number(sortOrder) || 0, file: clipFile });
+                  const payload: Parameters<typeof onSave>[0] = { title: title.trim(), tags: toTagList(tags), sortOrder: Number(sortOrder) || 0, file: clipFile };
+                  if (trimStart) payload.trimStart = Number(trimStart);
+                  if (trimEnd) payload.trimEnd = Number(trimEnd);
+                  void onSave(payload);
                 }}
                 disabled={busy || (mode === 'create' && !file)}
                 className={`${primaryButtonClass} flex-1`}
@@ -557,7 +578,7 @@ export default function AdminCreatorsPage() {
     }
   };
 
-  const uploadClip = async (payload: { title: string; tags: string[]; sortOrder: number; file: File | null }) => {
+  const uploadClip = async (payload: { title: string; tags: string[]; sortOrder: number; file: File | null; trimStart?: number; trimEnd?: number }) => {
     if (!activeCreator || busy || !payload.file) return;
     setBusy('Uploading clip');
     setError('');
@@ -567,6 +588,8 @@ export default function AdminCreatorsPage() {
       formData.append('title', payload.title);
       formData.append('tags', payload.tags.join(','));
       formData.append('sortOrder', String(payload.sortOrder));
+      if (payload.trimStart !== undefined) formData.append('trimStart', String(payload.trimStart));
+      if (payload.trimEnd !== undefined) formData.append('trimEnd', String(payload.trimEnd));
       const response = await api<{ clip: CreatorClipRecord }>(`/creators/${activeCreator.id}/clips`, { method: 'POST', body: formData });
       setCreators((current) =>
         current.map((creator) =>

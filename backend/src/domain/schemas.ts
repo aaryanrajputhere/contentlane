@@ -98,6 +98,8 @@ export const creatorClipMutationSchema = z.object({
   title: z.string().trim().max(120).optional(),
   tags: z.union([z.string(), z.array(z.string())]).optional(),
   sortOrder: z.coerce.number().int().min(0).optional(),
+  trimStart: z.coerce.number().optional(),
+  trimEnd: z.coerce.number().optional(),
 }).strict();
 
 export const creatorClipUpdateSchema = creatorClipMutationSchema.partial();
@@ -125,19 +127,46 @@ export const authUserSchema = z.object({
   role: userRoleSchema,
 }).strict();
 
+export const creativeBriefSchema = z.object({
+  id: z.string().uuid(),
+  pattern: z.string().min(1),
+  moment: z.string().min(1),
+  viewerEmotion: z.string().min(1),
+  creatorEmotion: z.string().min(1),
+  payoff: z.string().min(1),
+  location: z.string().min(1),
+  creatorAction: z.string().min(1),
+  avoid: z.array(z.string()),
+}).strict();
+
 export const brandProfileSchema = z.object({
   id: z.string().cuid(),
   projectId: z.string().cuid(),
   brandName: z.string().min(1),
-  tagline: z.string().min(1),
+  product: z.string().min(1),
   audience: z.string().min(1),
-  painPoints: z.array(z.string().min(1)).min(1),
-  benefits: z.array(z.string().min(1)).min(1),
-  voice: z.string().min(1),
-  offer: z.string().min(1),
+  audienceIdentity: z.string().min(1),
+  audienceStage: z.string().min(1),
+  emotionalDrivers: z.array(z.string().min(1)),
+  fears: z.array(z.string().min(1)),
+  realThoughts: z.array(z.string().min(1)),
+  dailyMoments: z.array(z.string().min(1)),
+  dreamOutcomes: z.array(z.string().min(1)),
+  misconceptions: z.array(z.string().min(1)),
+  objections: z.array(z.string().min(1)),
+  proofPoints: z.array(z.string().min(1)),
+  socialProofMoments: z.array(z.string().min(1)),
+  transformation: z.string().min(1),
+  uniqueMechanism: z.string().min(1),
+  conversationStarters: z.array(z.string().min(1)),
+  viralTriggers: z.array(z.string().min(1)),
+  emotionalLanguage: z.array(z.string().min(1)),
+  forbiddenClaims: z.array(z.string().min(1)),
+  ugcScenarios: z.array(z.string().min(1)),
+  testimonials: z.array(z.string().min(1)),
   cta: z.string().min(1),
-  angles: z.array(z.string().min(1)).min(1),
   summary: z.string().min(1),
+  campaignStrategy: z.array(creativeBriefSchema).nullable().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 }).strict();
@@ -276,3 +305,4 @@ export type ProjectExport = z.infer<typeof projectExportSchema>;
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 export type ProjectSnapshot = z.infer<typeof projectSnapshotSchema>;
 export type CharacterSelection = z.infer<typeof characterSelectionSchema>;
+export type CreativeBrief = z.infer<typeof creativeBriefSchema>;

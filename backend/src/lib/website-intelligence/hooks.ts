@@ -2,8 +2,9 @@ import { z } from 'zod';
 import type { BrandProfile } from '../../domain/schemas';
 import { hasLLMConfig, callLLM, type LLMPrompt } from './llm';
 import type { ConceptBlueprint } from '../workflow';
+import { config } from '../../config';
 
-// Minimal schema — only the 3 fields the LLM needs to generate
+// Minimal overlay schema. Older LLM responses may include spoken_hook; zod ignores it.
 const llmHookSchema = z.object({
   hook_overlay_text: z.coerce.string().min(1),
   demo_vid_overlay_text: z.coerce.string().min(1),
@@ -25,61 +26,92 @@ function clampScore(index: number): number {
 }
 
 function buildHooksPrompt(profile: BrandProfile, count: number): LLMPrompt {
+  const momentsList = profile.campaignStrategy && profile.campaignStrategy.length > 0 
+    ? `\n\nCustomer Moments (use these specific situations as the foundation for your hooks):\n- ${profile.campaignStrategy.map(b => b.moment).join('\n- ')}`
+    : '';
+
   return {
-    system: `You are a senior UGC ad creative strategist.
+    system: `You are a viral short-form content strategist.
 
-Your job is to create viral short-form video concepts that stop scrolling and convert cold audiences.
+Your job is to create hooks that feel like they belong on TikTok, Instagram Reels, or YouTube Shorts.
 
-Think like the top performing TikTok, Instagram Reels and Meta ads.
+These are NOT advertisements.
 
-Every idea should:
-- Start with a powerful hook within the first 3 seconds.
-- Feel authentic, not corporate.
-- Speak directly to one pain point.
-- Build curiosity.
-- Show the product naturally.
-- End with a clear CTA.
+The goal is to make someone stop scrolling.
 
-Never sound like marketing copy.
+A good hook should create immediate curiosity, surprise, tension, or relatability within the first 2-3 seconds.
+
+The overlay text should sound like creator captions typed directly onto a TikTok/Reels video, not a polished campaign line.
+
+Use proven viral hook patterns such as:
+- "how to actually use {app name} without overthinking it"
+- "they kept this {category} SECRET from us 💀"
+- "i didn't know {app name} could actually fix this in minutes"
+- "3 years into {problem} and NOW i find this"
+- "why is nobody talking about this??"
+- "i wasted so much time doing this manually"
+- "this feels like cheating..."
+- "i wish i found this sooner"
+
+Overlay text should:
+- Be under 12 words.
+- Be highly scroll-stopping.
+- Use curiosity, surprise, contradiction or regret.
+- Feel like a real creator's thumbnail, not marketing copy.
+- Be mostly lowercase.
+- Allow one emphasized uppercase word.
+- Allow "...", "??", and occasional emojis like 💀, 😭, 🤯.
+- Mix short direct hooks, curiosity hooks, and longer conversational hooks.
+- Use the actual brand/app name from Brand or Product when naming the product. Never copy placeholder names from examples.
 
 Avoid:
-- Generic buzzwords
-- "Introducing..."
-- "Revolutionary..."
-- "Best platform"
+- Generic feature descriptions.
+- Marketing buzzwords.
+- Corporate language.
+- Obvious CTAs in the hook.
+- Title case.
+- Quotation marks.
+- Polished slogans.
+- Complete corporate sentences.
 
-Output ONLY valid JSON. Do not explain anything.`,
+SELF REVIEW
+
+Before finalizing each hook silently check:
+
+- Would this make someone stop scrolling?
+- Does it sound like a creator rather than a brand?
+- Is there genuine curiosity?
+- Would this fit naturally on TikTok?
+
+Output ONLY valid JSON.`,
     user: `Brand: ${profile.brandName}
-Tagline: ${profile.tagline}
-Audience: ${profile.audience}
-Pain points: ${profile.painPoints.slice(0, 3).join(', ')}
-Benefits: ${profile.benefits.slice(0, 3).join(', ')}
-Voice: ${profile.voice}
+Product: ${profile.product}
+Audience Identity: ${profile.audienceIdentity} (${profile.audienceStage})
+Transformation: ${profile.transformation}
+Fears & Real Thoughts: ${profile.fears.slice(0, 2).concat(profile.realThoughts.slice(0, 2)).join(', ')}
+Objections: ${profile.objections.slice(0, 2).join(', ')}${momentsList}
 
 Generate EXACTLY ${count} distinct hook concepts. 
-Each concept must use a different angle.
+Each concept must use a different creative angle or moment.
 
-Output FORMAT: A single JSON array containing exactly ${count} objects.
+Output FORMAT: A single JSON object with a "hooks" array containing exactly ${count} objects.
 Each object must have exactly these 3 fields:
-- hook_overlay_text: punchy scroll-stopping hook text, under 12 words
-- demo_vid_overlay_text: text shown over the brand demo clip, under 8 words
+- hook_overlay_text: punchy scroll-stopping text shown on screen, under 12 words
+- demo_vid_overlay_text: text shown over the brand demo clip later in the video, under 8 words
 - hook_clip_ugc_tags: 2-4 emotion/action tags for the UGC creator clip (e.g. excited, sad, looking at phone, shocked, confident, thinking, pointing, laughing, nodding)
 
-Example structure (you must return ${count} objects like this):
-[
-  {
-    "hook_overlay_text": "Stop scrolling. ${profile.brandName} changes everything.",
-    "demo_vid_overlay_text": "See the ${profile.brandName} difference",
-    "hook_clip_ugc_tags": ["excited", "pointing at screen", "surprised"]
-  },
-  {
-    "hook_overlay_text": "You've been doing it wrong.",
-    "demo_vid_overlay_text": "The better way",
-    "hook_clip_ugc_tags": ["shocked", "shaking head"]
-  }
-]
+Example structure:
+{
+  "hooks": [
+    {
+      "hook_overlay_text": "i was off by 600 calories 💀",
+      "demo_vid_overlay_text": "no more guessing",
+      "hook_clip_ugc_tags": ["shocked", "looking at phone", "disappointed"]
+    }
+  ]
+}
 
-Output ONLY the JSON array starting with [ and ending with ]:`,
+Output ONLY the JSON object:`,
   };
 }
 
@@ -97,7 +129,7 @@ function normalizeHookItem(raw: unknown): Record<string, unknown> {
 /**
  * Extract complete JSON objects from a potentially truncated JSON array string.
  */
-function extractCompleteObjects(text: string): unknown[] {
+export function extractCompleteObjects(text: string): unknown[] {
   try {
     const parsed = JSON.parse(text);
     if (Array.isArray(parsed)) return parsed;
@@ -143,6 +175,11 @@ function extractCompleteObjects(text: string): unknown[] {
   return results;
 }
 
+export function parseLLMHookItems(rawItems: unknown[]): Array<z.infer<typeof llmHookSchema>> {
+  const normalizedItems = rawItems.map(normalizeHookItem);
+  return z.array(llmHookSchema).min(1).parse(normalizedItems);
+}
+
 /**
  * Convert the LLM's minimal hook output into a full ConceptBlueprint
  * by filling deterministic fields from the brand profile.
@@ -152,9 +189,9 @@ function toConceptBlueprint(
   profile: BrandProfile,
   index: number,
 ): ConceptBlueprint {
-  const angle = profile.angles[index % profile.angles.length] ?? `Angle ${index + 1}`;
-  const painPoint = profile.painPoints[index % profile.painPoints.length] ?? 'the main problem';
-  const benefit = profile.benefits[index % profile.benefits.length] ?? 'the key benefit';
+  const angle = profile.conversationStarters[index % profile.conversationStarters.length] ?? `Angle ${index + 1}`;
+  const painPoint = profile.realThoughts[index % profile.realThoughts.length] ?? 'the main problem';
+  const benefit = profile.proofPoints[index % profile.proofPoints.length] ?? 'the key benefit';
   const score = clampScore(index);
   const ugcTags = hook.hook_clip_ugc_tags;
 
@@ -174,7 +211,7 @@ function toConceptBlueprint(
     targetDurationSeconds: 5,
     score,
     scoreLabel: scoreToLabel(score),
-    rationale: `Uses ${angle.toLowerCase()} to highlight ${benefit.toLowerCase()}. UGC creator clip tags: ${ugcTags.join(', ')}.`,
+    rationale: `Angle: ${angle}. Benefit: ${benefit}. UGC creator clip tags: ${ugcTags.join(', ')}.`,
     generatedImageUrl: null,
     generatedVideoUrl: null,
     sortOrder: index,
@@ -185,38 +222,38 @@ export async function generateHooksFromLLM(
   profile: BrandProfile,
   count: number,
 ): Promise<ConceptBlueprint[] | null> {
-  if (!hasLLMConfig()) return null;
+  console.log(`[hooks] start brand="${profile.brandName}" count=${count}`);
+
+  if (!hasLLMConfig()) {
+    console.log('[hooks] no LLM config, returning null');
+    return null;
+  }
 
   try {
     const prompt = buildHooksPrompt(profile, count);
-    console.log('[hooks-generation] prompt user length:', prompt.user.length);
-
-    const raw = await callLLM(prompt, { temperature: 0.8, maxTokens: 4000, responseFormat: 'text' });
-    if (!raw) return null;
-
-    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-
-    console.log('[hooks-generation] full LLM raw output:\n', raw);
-
-    const rawItems = extractCompleteObjects(text);
-    if (rawItems.length === 0) {
-      console.warn('[hooks-generation] no complete JSON objects found');
+    const raw = await callLLM(prompt, { model: config.OPENAI_HOOK_MODEL, temperature: 0.8, maxTokens: 2200, responseFormat: 'json_object' });
+    if (!raw) {
+      console.log('[hooks] LLM returned null');
       return null;
     }
 
-    console.log('[hooks-generation] extracted', rawItems.length, 'objects, first keys:', Object.keys(rawItems[0] as object ?? {}));
+    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    console.log('[hooks] AI JSON response:\n', text);
+    const rawItems = extractCompleteObjects(text);
+    if (rawItems.length === 0) {
+      console.warn('[hooks] no complete JSON objects found');
+      return null;
+    }
 
-    const normalizedItems = rawItems.map(normalizeHookItem);
-    const validated = z.array(llmHookSchema).min(1).parse(normalizedItems);
-
-    console.log(`[hooks-generation] validated ${validated.length} hooks from LLM`);
-
-    return validated.slice(0, count).map((item, index) =>
+    const validated = parseLLMHookItems(rawItems);
+    const concepts = validated.slice(0, count).map((item, index) =>
       toConceptBlueprint(item, profile, index),
     );
+
+    console.log(`[hooks] done concepts=${concepts.length}`);
+    return concepts;
   } catch (error) {
-    const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    console.warn('[hooks-generation] LLM hook generation failed, using fallback:', msg);
+    console.error('[hooks] failed:', error instanceof Error ? error.message : error);
     return null;
   }
 }

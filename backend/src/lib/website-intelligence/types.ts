@@ -32,5 +32,7 @@ export interface WebsiteIntelligenceResult {
 
 export interface AnalysisPipelineResult {
   brandProfile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>;
-  analysis: Omit<WebsiteAnalysis, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>;
+  analysis: Omit<WebsiteAnalysis, 'id' | 'projectId' | 'createdAt' | 'updatedAt'> & {
+    sourceContentFingerprint?: string;
+  };
 }

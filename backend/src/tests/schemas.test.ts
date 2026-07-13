@@ -32,7 +32,7 @@ test("website input normalizes bare domains and mixed casing", () => {
 test("workflow helpers derive a lean brand profile", () => {
   const profile = buildBrandProfile("https://signal-studio.io");
   assert.equal(profile.brandName.length > 0, true);
-  assert.equal(profile.angles.length >= 3, true);
+  assert.equal(profile.conversationStarters.length >= 3, true);
   assert.match(profile.summary, /signal/i);
 });
 

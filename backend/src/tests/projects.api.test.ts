@@ -80,7 +80,7 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
     assert.ok(created.project.brandProfile);
     assert.ok(created.job.id);
 
-    const gatedConceptsResponse = await fetch(
+    const preDemoConceptsResponse = await fetch(
       `${baseUrl}/api/v1/projects/${created.project.id}/concepts`,
       {
         method: "POST",
@@ -88,7 +88,7 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
         body: JSON.stringify({ count: 4 }),
       },
     );
-    assert.equal(gatedConceptsResponse.status, 409);
+    assert.equal(preDemoConceptsResponse.status, 200);
 
     const brandDemoResponse = await fetch(
       `${baseUrl}/api/v1/projects/${created.project.id}/brand-demo`,
