@@ -5,6 +5,8 @@ import { api } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
 import type { CreatorRecord, MediaAsset, ProjectSnapshot } from '../types/domain';
 
+const placeholderSectionLabel = 'Placeholder Section';
+const placeholderSectionDuration = 3;
 const pageShellClass = 'mx-auto w-full max-w-[1440px] px-6 sm:px-8 lg:px-12';
 const panelClass = 'rounded-[32px] border border-black/8 bg-white shadow-[0_18px_50px_rgba(0,0,0,0.04)]';
 const blackButtonClass =
@@ -102,6 +104,47 @@ function drawPlaceholder(context: CanvasRenderingContext2D, canvas: HTMLCanvasEl
   context.fillText(message, canvas.width / 2, canvas.height / 2);
 }
 
+function drawPlaceholderSection(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+  const { width, height } = canvas;
+  context.clearRect(0, 0, width, height);
+
+  const background = context.createLinearGradient(0, 0, width, height);
+  background.addColorStop(0, '#121212');
+  background.addColorStop(0.55, '#1b1b1b');
+  background.addColorStop(1, '#151515');
+  context.fillStyle = background;
+  context.fillRect(0, 0, width, height);
+
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const iconY = centerY - 76;
+
+  context.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+  context.lineWidth = 7;
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  context.beginPath();
+  context.roundRect(centerX - 28, iconY - 17, 36, 34, 7);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(centerX + 12, iconY - 6);
+  context.lineTo(centerX + 30, iconY - 17);
+  context.lineTo(centerX + 30, iconY + 17);
+  context.lineTo(centerX + 12, iconY + 6);
+  context.closePath();
+  context.stroke();
+
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillStyle = 'rgba(255, 255, 255, 0.78)';
+  context.font = '800 38px ui-sans-serif, system-ui, sans-serif';
+  context.fillText(placeholderSectionLabel, centerX, centerY);
+
+  context.fillStyle = 'rgba(255, 255, 255, 0.42)';
+  context.font = '500 23px ui-sans-serif, system-ui, sans-serif';
+  context.fillText('Your product goes here', centerX, centerY + 46);
+}
+
 async function loadVideo(url: string) {
   const video = document.createElement('video');
   video.crossOrigin = 'anonymous';
@@ -130,6 +173,35 @@ async function loadVideo(url: string) {
   });
 
   return video;
+}
+
+async function renderTimedCanvasScene(options: {
+  durationSeconds: number;
+  draw: () => void;
+  signal: AbortSignal;
+}) {
+  const { durationSeconds, draw, signal } = options;
+  await new Promise<void>((resolve) => {
+    let frameId = 0;
+    const startedAt = performance.now();
+
+    const finish = () => {
+      cancelAnimationFrame(frameId);
+      resolve();
+    };
+
+    const step = () => {
+      draw();
+      const elapsed = (performance.now() - startedAt) / 1000;
+      if (signal.aborted || elapsed >= durationSeconds) {
+        finish();
+        return;
+      }
+      frameId = requestAnimationFrame(step);
+    };
+
+    frameId = requestAnimationFrame(step);
+  });
 }
 
 async function renderSegment(options: {
@@ -287,7 +359,6 @@ export default function ProjectRenderPage() {
     drawPlaceholder(context, canvas, 'Loading render');
 
     let creatorVideo: HTMLVideoElement | null = null;
-    let brandDemoVideo: HTMLVideoElement | null = null;
     let recorder: MediaRecorder | null = null;
     let stopPromise: Promise<void> | null = null;
 
@@ -295,10 +366,6 @@ export default function ProjectRenderPage() {
       creatorVideo = await loadVideo(selectedClip.url).catch((caught) => {
         throw caught instanceof Error ? caught : new Error('Unable to load the selected creator clip');
       });
-      brandDemoVideo = await loadVideo(brandDemoAsset.url).catch((caught) => {
-        throw caught instanceof Error ? caught : new Error('Unable to load the uploaded brand demo');
-      });
-
       const chunks: Blob[] = [];
       const stream = canvas.captureStream(30);
       recorder = new MediaRecorder(stream, { mimeType });
@@ -317,8 +384,12 @@ export default function ProjectRenderPage() {
       await renderSegment({ canvas, context, video: creatorVideo, overlayText: creatorOverlayText, signal: abortController.signal });
 
       if (!abortController.signal.aborted) {
-        setRenderMessage('Rendering brand demo');
-        await renderSegment({ canvas, context, video: brandDemoVideo, overlayText: brandDemoOverlayText, signal: abortController.signal });
+        setRenderMessage('Rendering placeholder section');
+        await renderTimedCanvasScene({
+          durationSeconds: placeholderSectionDuration,
+          draw: () => drawPlaceholderSection(context, canvas),
+          signal: abortController.signal,
+        });
       }
 
       recorder.stop();
@@ -348,11 +419,8 @@ export default function ProjectRenderPage() {
       setError(caught instanceof Error ? caught.message : 'Unable to render the combined video');
     } finally {
       creatorVideo?.pause();
-      brandDemoVideo?.pause();
       creatorVideo?.removeAttribute('src');
-      brandDemoVideo?.removeAttribute('src');
       creatorVideo?.load();
-      brandDemoVideo?.load();
     }
   }
 
@@ -374,7 +442,7 @@ export default function ProjectRenderPage() {
         <div className={`${pageShellClass} flex items-center justify-between gap-4 py-4`}>
           <div>
             <p className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</p>
-            <p className="mt-2 text-sm text-[#666666]">Creator clip first, uploaded brand demo second.</p>
+            <p className="mt-2 text-sm text-[#666666]">Hook first, placeholder section second.</p>
           </div>
           <button onClick={() => navigate(-1)} className={whiteButtonClass}>
             <ArrowLeft size={16} />
@@ -392,7 +460,7 @@ export default function ProjectRenderPage() {
           <h1 className="mx-auto mt-7 max-w-[14ch] text-[clamp(3rem,6vw,5.2rem)] font-black leading-[0.94] tracking-[-0.07em] text-[#111111]">
             Combined video render
           </h1>
-          <p className="mt-4 text-[1.05rem] text-[#666666] sm:text-[1.12rem]">This page records the selected creator clip and the uploaded brand demo into one browser-rendered video.</p>
+          <p className="mt-4 text-[1.05rem] text-[#666666] sm:text-[1.12rem]">This page records the selected hook clip followed by a product placeholder section.</p>
         </div>
 
         <div className="mt-10 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
@@ -435,12 +503,18 @@ export default function ProjectRenderPage() {
 
             <div className={`${panelClass} p-5 lg:p-6`}>
               <p className="text-[11px] uppercase tracking-[0.18em] text-[#8c8c8c]">Segment 2</p>
-              <h2 className="mt-2 text-[1.2rem] font-bold tracking-[-0.03em] text-[#111111]">Brand demo</h2>
-              <p className="mt-3 text-sm leading-6 text-[#666666]">Uploaded brand demo video from the earlier step.</p>
-              <div className="mt-4 overflow-hidden rounded-[24px] bg-[#111111]">
-                {brandDemoAsset ? <video src={brandDemoAsset.url} className="aspect-[9/16] w-full object-cover" muted playsInline controls preload="metadata" /> : <div className="grid aspect-[9/16] place-items-center text-sm text-white/70">Missing brand demo</div>}
+              <h2 className="mt-2 text-[1.2rem] font-bold tracking-[-0.03em] text-[#111111]">Placeholder section</h2>
+              <p className="mt-3 text-sm leading-6 text-[#666666]">A dark placeholder screen appears after the hook for the product demo section.</p>
+              <div className="mt-4 grid aspect-[9/16] place-items-center overflow-hidden rounded-[24px] bg-[#191919] text-center" aria-label={brandDemoOverlayText}>
+                <div>
+                  <div className="mx-auto grid h-12 w-12 place-items-center rounded-[14px] border border-white/10 text-white/35">
+                    <span className="h-3.5 w-5 rounded-sm border-2 border-current" />
+                  </div>
+                  <p className="mt-5 text-lg font-bold text-white/70">{placeholderSectionLabel}</p>
+                  <p className="mt-2 text-sm text-white/40">Your product goes here</p>
+                </div>
               </div>
-              <p className="mt-4 rounded-[20px] bg-[#f6f3ee] px-4 py-3 text-sm font-medium text-[#111111]">{brandDemoOverlayText}</p>
+
             </div>
 
             <div className={`${panelClass} p-5 lg:p-6`}>
