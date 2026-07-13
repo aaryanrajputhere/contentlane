@@ -91,8 +91,7 @@ function GenerationExperience({
   );
 }
 
-function ReelPreviewCard({ concept, creator }: { concept: any; creator: any }) {
-  const clip = creator?.clips?.[0];
+function ReelPreviewCard({ concept, creator, clip }: { concept: any; creator: any; clip: any }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -299,9 +298,11 @@ export default function ProjectPage() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 mb-24">
-          {displayConcepts.map((concept) => (
-            <ReelPreviewCard key={concept.id} concept={concept} creator={selectedCreatorRecord} />
-          ))}
+          {displayConcepts.map((concept, index) => {
+            const clips = selectedCreatorRecord?.clips ?? [];
+            const clip = clips.length > 0 ? clips[index % clips.length] : null;
+            return <ReelPreviewCard key={concept.id} concept={concept} creator={selectedCreatorRecord} clip={clip} />;
+          })}
         </div>
 
         <div className="bg-[#111111] rounded-[40px] p-8 md:p-14 text-white shadow-2xl relative overflow-hidden">
