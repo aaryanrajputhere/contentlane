@@ -28,10 +28,10 @@ export default function App() {
       />
       <Route element={<RequireAuth />}>
         <Route path="/projects/:id" element={<ProjectPage />} />
-        <Route path="/projects/:id/demo" element={<ProjectPage page="brand-demo" />} />
-        <Route path="/projects/:id/hooks" element={<ProjectPage page="hooks" />} />
-        <Route path="/projects/:id/creator" element={<ProjectPage page="creator" />} />
-        <Route path="/projects/:id/export" element={<ProjectPage page="export" />} />
+        <Route path="/projects/:id/demo" element={<ProjectPage />} />
+        <Route path="/projects/:id/hooks" element={<ProjectPage />} />
+        <Route path="/projects/:id/creator" element={<ProjectPage />} />
+        <Route path="/projects/:id/export" element={<ProjectPage />} />
         <Route path="/projects/:id/render" element={<ProjectRenderPage />} />
       </Route>
       <Route element={<RequireAdmin />}>

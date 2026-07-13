@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Clock3, Check, Eye, Gauge, Loader2, Play, Rocket, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useAuth } from '../lib/auth';
-import { post, waitForJob } from '../lib/api';
+import { post } from '../lib/api';
 import type { ProjectResponse } from '../types/domain';
 
 type PreviewCardProps = {
