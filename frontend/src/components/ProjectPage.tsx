@@ -357,7 +357,7 @@ export default function ProjectPage() {
             <div>
               <h2 className="text-[clamp(2rem,4vw,3rem)] font-extrabold mb-5 leading-[1.1] tracking-[-0.04em]">Make it yours.</h2>
               <p className="text-white/70 mb-10 text-[1.1rem] leading-[1.6] max-w-md">
-                Upload your product demo, and we'll automatically replace the placeholder sections in the Reels above. Rendering happens in the background.
+                Upload your product demo to unlock rendering. Your final Reel will play the selected hook first, then a placeholder section for your product demo.
               </p>
               
               <label className={`cursor-pointer inline-flex items-center gap-2 px-8 py-4 rounded-full font-bold transition hover:scale-[1.02] shadow-xl ${busy === 'Uploading demo' ? 'bg-white/20 text-white cursor-wait' : 'bg-white text-[#111111] hover:bg-[#f3f3f3]'}`}>
