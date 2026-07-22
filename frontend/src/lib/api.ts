@@ -1,6 +1,7 @@
 import { authUnauthorizedEvent } from './auth-events';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? '';
+const productionApiBase = 'https://contentlane-backend-aaryanrajputheres-projects.vercel.app';
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? productionApiBase : '');
 
 export class ApiClientError extends Error {
   constructor(
