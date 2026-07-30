@@ -35,7 +35,7 @@ export const login: RequestHandler = async (req, res) => {
   const normalizedEmail = normalizeEmail(email);
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
     throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password');
   }
 

@@ -2,6 +2,14 @@ import { authUnauthorizedEvent } from './auth-events';
 
 const productionApiBase = 'https://contentlane-backend-aaryanrajputheres-projects.vercel.app';
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? productionApiBase : '');
+let getAuthToken: (() => Promise<string | null>) | null = null;
+
+export function setAuthTokenProvider(provider: () => Promise<string | null>) {
+  getAuthToken = provider;
+  return () => {
+    if (getAuthToken === provider) getAuthToken = null;
+  };
+}
 
 export class ApiClientError extends Error {
   constructor(
@@ -18,11 +26,13 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
   const isBinaryBody = typeof Blob !== 'undefined' && init.body instanceof Blob;
   const isUrlSearchParams = typeof URLSearchParams !== 'undefined' && init.body instanceof URLSearchParams;
+  const token = await getAuthToken?.();
   const response = await fetch(`${API_BASE}/api/v1${path}`, {
     ...init,
     credentials: 'include',
     headers: {
       ...(init.body && !isFormData && !isBinaryBody && !isUrlSearchParams ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   });

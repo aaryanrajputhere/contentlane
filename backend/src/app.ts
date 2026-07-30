@@ -4,6 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'node:crypto';
+import { clerkMiddleware } from '@clerk/express';
 import { config } from './config';
 import { errorHandler, notFound } from './lib/errors';
 import { logger } from './lib/logger';
@@ -35,6 +36,7 @@ export function createApp() {
   }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
+  app.use(clerkMiddleware());
   app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
   app.get('/health/ready', async (_req, res) => res.json({ status: 'ready' }));
   app.use('/api/v1/auth', authRouter);

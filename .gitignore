@@ -11,6 +11,7 @@ backend/dist/
 .env
 frontend/.env
 backend/.env
+backend/.env.clerk
 *.log
 
 backend/tmp/

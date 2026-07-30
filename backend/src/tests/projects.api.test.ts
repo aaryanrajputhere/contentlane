@@ -106,6 +106,7 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
       })
     ).json()) as {
       project: {
+        concepts: Array<{ id: string }>;
         selectedConceptId: string | null;
         selectedCharacterId: string | null;
         mediaAssets: Array<{
@@ -119,6 +120,7 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
     };
     assert.equal(brandDemoSnapshot.project.selectedConceptId, null);
     assert.equal(brandDemoSnapshot.project.selectedCharacterId, null);
+    assert.equal(brandDemoSnapshot.project.concepts.length, 4);
     assert.equal(brandDemoSnapshot.project.mediaAssets.length, 1);
     assert.equal(
       brandDemoSnapshot.project.mediaAssets[0]?.metadata?.kind,

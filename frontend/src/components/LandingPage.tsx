@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Clock3, Check, Eye, Gauge, Loader2, Play, Rocket, ShieldCheck, Sparkles, Wand2 } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react';
 import { useAuth } from '../lib/auth';
 import { post } from '../lib/api';
 import type { ProjectResponse } from '../types/domain';
@@ -251,7 +252,7 @@ export default function LandingPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
-  const { status, user, logout } = useAuth();
+  const { status, user } = useAuth();
 
   const startProject = async () => {
     const value = website.trim();
@@ -309,21 +310,21 @@ export default function LandingPage() {
               Creator admin
             </button>
           ) : null}
-          {status === 'authenticated' ? (
-            <button
-              onClick={() => void logout()}
-              className="rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white shadow-[0_10px_26px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcfcfc]"
-            >
-              Sign out
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/login')}
-              className="rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white shadow-[0_10px_26px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcfcfc]"
-            >
-              Sign in
-            </button>
-          )}
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <button className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black">
+                Sign in
+              </button>
+            </SignInButton>
+            <SignUpButton mode="modal">
+              <button className="rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white shadow-[0_10px_26px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcfcfc]">
+                Sign up
+              </button>
+            </SignUpButton>
+          </Show>
+          <Show when="signed-in">
+            <UserButton />
+          </Show>
         </div>
       </header>
 

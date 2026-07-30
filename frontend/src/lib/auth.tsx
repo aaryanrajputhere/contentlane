@@ -1,19 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useAuth as useClerkAuth, useClerk, useUser } from '@clerk/react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { api } from './api';
-import { authUnauthorizedEvent } from './auth-events';
-import type { AuthUser, AuthResponse, LoginRequest, SignupRequest } from '../types/domain';
+import { setAuthTokenProvider } from './api';
+import type { AuthUser } from '../types/domain';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
 type AuthContextValue = {
   status: AuthStatus;
   user: AuthUser | null;
-  login: (input: LoginRequest) => Promise<AuthUser>;
-  signup: (input: SignupRequest) => Promise<AuthUser>;
   logout: () => Promise<void>;
-  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -23,61 +20,30 @@ function LoadingScreen() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>('loading');
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { getToken, isLoaded: isAuthLoaded, isSignedIn } = useClerkAuth();
+  const { signOut } = useClerk();
+  const { user: clerkUser, isLoaded: isUserLoaded } = useUser();
 
-  const refresh = useCallback(async () => {
-    try {
-      const response = await api<AuthResponse>('/auth/me');
-      setUser(response.user);
-      setStatus('authenticated');
-    } catch {
-      setUser(null);
-      setStatus('unauthenticated');
-    }
-  }, []);
+  useEffect(() => setAuthTokenProvider(getToken), [getToken]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const status: AuthStatus = !isAuthLoaded || !isUserLoaded
+    ? 'loading'
+    : isSignedIn
+      ? 'authenticated'
+      : 'unauthenticated';
 
-  useEffect(() => {
-    const handleUnauthorized = () => {
-      setUser(null);
-      setStatus('unauthenticated');
+  const user = useMemo<AuthUser | null>(() => {
+    if (!clerkUser) return null;
+    return {
+      id: clerkUser.id,
+      email: clerkUser.primaryEmailAddress?.emailAddress ?? '',
+      name: clerkUser.fullName,
+      role: clerkUser.publicMetadata.role === 'ADMIN' ? 'ADMIN' : 'USER',
     };
-    window.addEventListener(authUnauthorizedEvent, handleUnauthorized);
-    return () => window.removeEventListener(authUnauthorizedEvent, handleUnauthorized);
-  }, []);
-
-  const login = useCallback(async (input: LoginRequest) => {
-    const response = await api<AuthResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    setUser(response.user);
-    setStatus('authenticated');
-    return response.user;
-  }, []);
-
-  const signup = useCallback(async (input: SignupRequest) => {
-    const response = await api<AuthResponse>('/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
-    setUser(response.user);
-    setStatus('authenticated');
-    return response.user;
-  }, []);
-
-  const logout = useCallback(async () => {
-    await api<void>('/auth/logout', { method: 'POST' });
-    setUser(null);
-    setStatus('unauthenticated');
-  }, []);
+  }, [clerkUser]);
 
   return (
-    <AuthContext.Provider value={{ status, user, login, signup, logout, refresh }}>
+    <AuthContext.Provider value={{ status, user, logout: () => signOut({ redirectUrl: '/' }) }}>
       {children}
     </AuthContext.Provider>
   );

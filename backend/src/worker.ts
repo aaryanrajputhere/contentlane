@@ -1,3 +1,3 @@
-import 'dotenv/config';
+import './load-env';
 
 setInterval(() => undefined, 60_000);

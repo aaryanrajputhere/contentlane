@@ -1,12 +1,30 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
+import { clerkClient, getAuth } from '@clerk/express';
 import prisma from '../lib/prisma';
 import { verifySession } from '../lib/auth';
 import { ApiError } from '../lib/errors';
 import { config } from '../config';
 
-async function resolveAuthenticatedUser(req: Express.Request) {
+async function resolveAuthenticatedUser(req: Request) {
   if (req.user) return req.user;
-  const token = (req as Express.Request & { cookies?: Record<string, string> }).cookies?.[config.COOKIE_NAME];
+  const clerkAuth = getAuth(req);
+  if (clerkAuth.isAuthenticated && clerkAuth.userId) {
+    const clerkUser = await clerkClient.users.getUser(clerkAuth.userId);
+    const email = clerkUser.primaryEmailAddress?.emailAddress.toLowerCase();
+    if (!email) throw new ApiError(401, 'AUTH_REQUIRED', 'Your Clerk account needs an email address');
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: { clerkId: clerkAuth.userId, name: clerkUser.fullName },
+      create: { clerkId: clerkAuth.userId, email, name: clerkUser.fullName },
+      select: { id: true, email: true, name: true, role: true },
+    });
+
+    req.user = user;
+    return user;
+  }
+
+  const token = (req as Request & { cookies?: Record<string, string> }).cookies?.[config.COOKIE_NAME];
   if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
 
   let claims;

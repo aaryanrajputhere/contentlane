@@ -1,4 +1,4 @@
-import "dotenv/config";
+import './load-env';
 import { createApp } from "./app";
 import { config } from "./config";
 import prisma from "./lib/prisma";

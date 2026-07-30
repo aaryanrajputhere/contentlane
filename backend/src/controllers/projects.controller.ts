@@ -412,7 +412,46 @@ export const uploadBrandDemo: RequestHandler = async (req, res) => {
     "Upload a video file for the brand demo",
   );
   const existingDemoAssets = project.mediaAssets.filter(isBrandDemoAsset);
-  await Promise.all(
+  const stored = await storeUploadedAsset(demoFile.buffer, {
+    folder: `ContentLane/projects/${project.id}/brand-demo`,
+    publicId: `${project.id}-${Date.now()}-${demoFile.originalname}`,
+    mimeType: demoFile.mimetype,
+  });
+  try {
+    await prisma.$transaction([
+      prisma.mediaAsset.deleteMany({
+        where: {
+          projectId: project.id,
+          id: { in: existingDemoAssets.map((asset) => asset.id) },
+        },
+      }),
+      prisma.mediaAsset.create({
+        data: {
+          projectId: project.id,
+          conceptId: null,
+          type: "VIDEO",
+          provider: stored.provider,
+          providerId: stored.providerId,
+          url: stored.url,
+          mimeType: stored.mimeType,
+          metadata: {
+            ...(stored.metadata as Record<string, unknown>),
+            kind: "brand-demo",
+            originalName: demoFile.originalname,
+            uploadedAt: new Date().toISOString(),
+          } as Prisma.InputJsonValue,
+        },
+      }),
+    ]);
+  } catch (error) {
+    await deleteStoredAsset({
+      provider: stored.provider,
+      providerId: stored.providerId,
+      mimeType: stored.mimeType,
+    }).catch(() => undefined);
+    throw error;
+  }
+  await Promise.allSettled(
     existingDemoAssets.map((asset) =>
       deleteStoredAsset({
         provider: asset.provider,
@@ -421,41 +460,6 @@ export const uploadBrandDemo: RequestHandler = async (req, res) => {
       }),
     ),
   );
-  await clearGeneratedContent(project.id);
-  if (existingDemoAssets.length > 0) {
-    await prisma.mediaAsset.deleteMany({
-      where: {
-        projectId: project.id,
-        id: { in: existingDemoAssets.map((asset) => asset.id) },
-      },
-    });
-  }
-  const stored = await storeUploadedAsset(demoFile.buffer, {
-    folder: `ContentLane/projects/${project.id}/brand-demo`,
-    publicId: `${project.id}-${Date.now()}-${demoFile.originalname}`,
-    mimeType: demoFile.mimetype,
-  });
-  await prisma.mediaAsset.create({
-    data: {
-      projectId: project.id,
-      conceptId: null,
-      type: "VIDEO",
-      provider: stored.provider,
-      providerId: stored.providerId,
-      url: stored.url,
-      mimeType: stored.mimeType,
-      metadata: {
-        ...(stored.metadata as Record<string, unknown>),
-        kind: "brand-demo",
-        originalName: demoFile.originalname,
-        uploadedAt: new Date().toISOString(),
-      } as Prisma.InputJsonValue,
-    },
-  });
-  await prisma.project.update({
-    where: { id: project.id },
-    data: { status: "HOOKS_READY" },
-  });
   res
     .status(201)
     .json({

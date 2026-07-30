@@ -20,9 +20,14 @@ Open `http://localhost:5173`. The seeded local account defaults to:
 - Email: `admin@ContentLane.local`
 - Password: `local-admin-password`
 
-Change both values in `backend/.env` before seeding if the machine is shared.
+For sharing non-admin beta access, the seed also creates a regular test user:
 
-`npm run setup` creates missing environment files (including a random local JWT secret), installs workspace dependencies, starts PostgreSQL and Redis, applies migrations, and seeds the administrator, allowlist, and local creators. Existing environment files are preserved. PostgreSQL and Redis use named volumes, so data survives `infra:down` and subsequent restarts.
+- Email: `testuser@ContentLane.local`
+- Password: `test-user-password`
+
+Change these values in `backend/.env` before seeding if the machine is shared.
+
+`npm run setup` creates missing environment files (including a random local JWT secret), installs workspace dependencies, starts PostgreSQL and Redis, applies migrations, and seeds the administrator, test user, allowlist, and local creators. Existing environment files are preserved. PostgreSQL and Redis use named volumes, so data survives `infra:down` and subsequent restarts.
 
 If setup reports missing prerequisites, install Node.js 22.13+ and Docker Engine with the Compose plugin first. On Ubuntu, verify them with `node --version` and `docker compose version`.
 

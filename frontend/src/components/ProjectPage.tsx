@@ -12,8 +12,8 @@ import {
 import { motion } from 'framer-motion';
 import { api, post } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
-import { calculateTfIdfCosineSimilarity } from '../lib/similarity';
-import type { ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
+import { selectMatchedClips } from '../lib/clipMatching';
+import type { ConceptCard, CreatorClipRecord, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
 
 const AI_STEPS = [
   'Reading homepage...',
@@ -92,47 +92,15 @@ function GenerationExperience({
   );
 }
 
-function conceptTagsFromDirection(value: string) {
-  return value
-    .split(/[,.]/g)
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-}
-
-function selectMatchedClips(concepts: ProjectSnapshot["concepts"], clips: CreatorRecord["clips"]) {
-  const usedClipIds = new Set<string>();
-
-  return concepts.map((concept, index) => {
-    if (clips.length === 0) return null;
-
-    const queryTags = conceptTagsFromDirection(concept.videoDirection);
-    const scores = calculateTfIdfCosineSimilarity(queryTags, clips.map((clip) => clip.tags));
-
-    let bestIndex = -1;
-    let bestScore = 0;
-
-    scores.forEach((score, clipIndex) => {
-      const clip = clips[clipIndex];
-      if (!clip || usedClipIds.has(clip.id)) return;
-      if (bestIndex === -1 || score > bestScore) {
-        bestIndex = clipIndex;
-        bestScore = score;
-      }
-    });
-
-    if (bestIndex === -1 || bestScore === 0) {
-      bestIndex = clips.findIndex((clip, offset) => !usedClipIds.has(clip.id) && offset >= index % clips.length);
-      if (bestIndex === -1) bestIndex = clips.findIndex((clip) => !usedClipIds.has(clip.id));
-      if (bestIndex === -1) bestIndex = index % clips.length;
-    }
-
-    const matchedClip = clips[bestIndex] ?? clips[index % clips.length];
-    if (matchedClip) usedClipIds.add(matchedClip.id);
-    return matchedClip ?? null;
-  });
-}
-
-function ReelPreviewCard({ concept, creator, clip }: { concept: any; creator: any; clip: any }) {
+function ReelPreviewCard({
+  concept,
+  creator,
+  clip,
+}: {
+  concept: ConceptCard;
+  creator: CreatorRecord | undefined;
+  clip: CreatorClipRecord | null;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -189,6 +157,7 @@ export default function ProjectPage() {
   const [error, setError] = useState('');
   
   const [generationComplete, setGenerationComplete] = useState(false);
+  const [visibleReelCount, setVisibleReelCount] = useState(3);
   const [creatorLibrary, setCreatorLibrary] = useState<CreatorRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -276,6 +245,7 @@ export default function ProjectPage() {
         body: formData,
       });
       setProject(response.project);
+      navigate(`/projects/${id}/render?count=${visibleReelCount}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to upload brand demo');
     } finally {
@@ -312,8 +282,12 @@ export default function ProjectPage() {
   }
 
   const selectedCreatorRecord = creatorLibrary.find(c => c.id === project.selectedCharacter?.id) || creatorLibrary[0];
-  const displayConcepts = project.concepts?.length ? project.concepts.slice(0, 3) : [];
-  const brandDemoAsset = project.mediaAssets.find(a => a.type === 'VIDEO' && typeof a.metadata === 'object' && (a.metadata as any)?.kind === 'brand-demo');
+  const availableReelCount = Math.min(project.concepts?.length ?? 0, 8);
+  const displayConcepts = project.concepts?.length ? project.concepts.slice(0, visibleReelCount) : [];
+  const hasMoreReels = visibleReelCount < availableReelCount;
+  const brandDemoAsset = project.mediaAssets.find(
+    (asset) => asset.type === 'VIDEO' && asset.metadata?.kind === 'brand-demo',
+  );
   const matchedPreviewClips = selectMatchedClips(displayConcepts, selectedCreatorRecord?.clips ?? []);
 
   return (
@@ -335,11 +309,11 @@ export default function ProjectPage() {
             Your viral Reels are ready.
           </h1>
           <p className="text-[1.15rem] leading-[1.6] text-[#666666]">
-            We chose <span className="font-semibold text-[#111111]">{selectedCreatorRecord?.name || 'a creator'}</span> because they match your audience perfectly. Here are 3 concepts ready to go.
+            We chose <span className="font-semibold text-[#111111]">{selectedCreatorRecord?.name || 'a creator'}</span> because they match your audience perfectly. Here are {displayConcepts.length} concepts ready to go.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 mb-24">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayConcepts.map((concept, index) => (
             <ReelPreviewCard
               key={concept.id}
@@ -350,6 +324,27 @@ export default function ProjectPage() {
           ))}
         </div>
 
+        {hasMoreReels ? (
+          <div className="mb-24 mt-10 flex flex-col items-center text-center">
+            <p className="mb-4 text-sm text-[#666666]">
+              {availableReelCount - visibleReelCount} more hooks are ready for this campaign.
+            </p>
+            <button
+              type="button"
+              onClick={() => setVisibleReelCount(availableReelCount)}
+              className="inline-flex items-center gap-2 rounded-full bg-[#111111] px-7 py-3.5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2"
+            >
+              <Sparkles size={17} />
+              Generate more
+            </button>
+          </div>
+        ) : (
+          <div className="mb-24 mt-10 flex items-center justify-center gap-2 text-sm font-medium text-[#666666]">
+            <Check size={16} className="text-[#15803d]" />
+            All {availableReelCount} hooks are ready to render
+          </div>
+        )}
+
         <div className="bg-[#111111] rounded-[40px] p-8 md:p-14 text-white shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
           
@@ -357,19 +352,31 @@ export default function ProjectPage() {
             <div>
               <h2 className="text-[clamp(2rem,4vw,3rem)] font-extrabold mb-5 leading-[1.1] tracking-[-0.04em]">Make it yours.</h2>
               <p className="text-white/70 mb-10 text-[1.1rem] leading-[1.6] max-w-md">
-                Upload your product demo to unlock rendering. Your final Reel will play the selected hook first, then a placeholder section for your product demo.
+                Upload your product demo and we’ll render all {displayConcepts.length} Reels. Each one plays its matched hook first, followed by your full demo.
               </p>
               
-              <label className={`cursor-pointer inline-flex items-center gap-2 px-8 py-4 rounded-full font-bold transition hover:scale-[1.02] shadow-xl ${busy === 'Uploading demo' ? 'bg-white/20 text-white cursor-wait' : 'bg-white text-[#111111] hover:bg-[#f3f3f3]'}`}>
-                 {busy === 'Uploading demo' ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
-                 {busy === 'Uploading demo' ? 'Uploading...' : 'Upload your demo'}
-                 <input type="file" className="hidden" accept="video/*" onChange={e => uploadBrandDemo(e.target.files?.[0])} disabled={busy === 'Uploading demo'} />
-              </label>
+              <div className="flex flex-wrap gap-3">
+                {brandDemoAsset ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/projects/${id}/render?count=${displayConcepts.length}`)}
+                    className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 font-bold text-[#111111] shadow-xl transition hover:scale-[1.02] hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
+                  >
+                    <Play size={20} fill="currentColor" />
+                    Render {displayConcepts.length} Reels
+                  </button>
+                ) : null}
+                <label className={`cursor-pointer inline-flex items-center gap-2 rounded-full px-8 py-4 font-bold transition hover:scale-[1.02] ${brandDemoAsset ? 'border border-white/20 bg-white/5 text-white hover:bg-white/10' : 'bg-white text-[#111111] shadow-xl hover:bg-[#f3f3f3]'} ${busy === 'Uploading demo' ? 'cursor-wait opacity-60' : ''}`}>
+                  {busy === 'Uploading demo' ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
+                  {busy === 'Uploading demo' ? 'Uploading...' : brandDemoAsset ? 'Replace demo' : 'Upload your demo'}
+                  <input type="file" className="hidden" accept="video/*" onChange={e => uploadBrandDemo(e.target.files?.[0])} disabled={busy === 'Uploading demo'} />
+                </label>
+              </div>
               
               {brandDemoAsset && (
                 <div className="mt-6 flex items-center gap-2 text-[#dcfce7]">
                   <Check size={16} />
-                  <span className="text-sm font-medium">Demo uploaded successfully. Campaign finalizing.</span>
+                  <span className="text-sm font-medium">Demo ready. Render your {displayConcepts.length} finished cuts.</span>
                 </div>
               )}
               {error && (
