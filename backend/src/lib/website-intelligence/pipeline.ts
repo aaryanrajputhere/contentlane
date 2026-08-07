@@ -2,8 +2,9 @@ import { normalizeWebsiteInput } from '../workflow';
 import { createHash } from 'node:crypto';
 import { scrapePage } from './firecrawl';
 import { synthesizeBrandProfile } from './synthesis';
-import { buildSelectedTextSnippet } from './utils';
+import { buildSelectedTextSnippet, HOMEPAGE_EVIDENCE_MAX_CHARS } from './utils';
 import type { AnalysisPipelineResult, WebsiteHomepageEvidence, WebsiteIntelligenceResult } from './types';
+import type { AnalysisJsonRecorder } from '../analysis-json';
 
 function toHomepageEvidence(scrape: Awaited<ReturnType<typeof scrapePage>>, website: string): WebsiteHomepageEvidence {
   const sourceUrl = scrape?.url ?? website;
@@ -12,7 +13,9 @@ function toHomepageEvidence(scrape: Awaited<ReturnType<typeof scrapePage>>, webs
     title: scrape?.title ?? null,
     metaDescription: scrape?.metaDescription ?? null,
     visibleTextSnippet: buildSelectedTextSnippet(scrape?.visibleTextSnippet ?? sourceUrl),
-    extractedTextSnippet: scrape?.rawText ? buildSelectedTextSnippet(scrape.rawText) : null,
+    extractedTextSnippet: scrape?.rawText
+      ? buildSelectedTextSnippet(scrape.rawText, HOMEPAGE_EVIDENCE_MAX_CHARS)
+      : null,
     canonicalUrl: scrape?.canonicalUrl ?? null,
     extractionStatus: scrape && 'error' in scrape && scrape.error ? 'failed' : 'success',
     extractionSource: scrape?.source ?? 'fallback',
@@ -32,16 +35,20 @@ function buildSourceContentFingerprint(result: WebsiteIntelligenceResult) {
     .digest('hex');
 }
 
-export async function runWebsiteIntelligencePipeline(website: string): Promise<AnalysisPipelineResult> {
+export async function runWebsiteIntelligencePipeline(
+  website: string,
+  recorder?: AnalysisJsonRecorder,
+): Promise<AnalysisPipelineResult> {
   const rootUrl = normalizeWebsiteInput(website);
   const t0 = Date.now();
   console.log(`[pipeline] start url=${rootUrl}`);
 
   const t1 = Date.now();
-  const homepageScrape = await scrapePage(rootUrl, { allowFallback: true });
+  const homepageScrape = await scrapePage(rootUrl, { allowFallback: true, recorder });
   console.log(`[pipeline] scrape done ${Date.now() - t1}ms source=${homepageScrape?.source ?? 'none'}`);
 
   const homepage = toHomepageEvidence(homepageScrape, rootUrl);
+  await recorder?.write('homepage-evidence', homepage);
   const rootDomain = new URL(rootUrl).host.replace(/^www\./i, '');
   const intelligenceResult: WebsiteIntelligenceResult = {
     sourceUrl: rootUrl,
@@ -50,12 +57,13 @@ export async function runWebsiteIntelligencePipeline(website: string): Promise<A
   };
 
   const t2 = Date.now();
-  const finalProfile = await synthesizeBrandProfile(intelligenceResult);
-  console.log(`[pipeline] synthesis done ${Date.now() - t2}ms briefs=${finalProfile.campaignStrategy?.length ?? 0}`);
+  const finalProfile = await synthesizeBrandProfile(intelligenceResult, recorder);
+  await recorder?.write('brand-profile', finalProfile);
+  console.log(`[pipeline] synthesis done ${Date.now() - t2}ms`);
 
   console.log(`[pipeline] complete ${Date.now() - t0}ms brand="${finalProfile.brandName}"`);
 
-  return {
+  const result = {
     brandProfile: finalProfile,
     analysis: {
       sourceUrl: rootUrl,
@@ -64,4 +72,6 @@ export async function runWebsiteIntelligencePipeline(website: string): Promise<A
       sourceContentFingerprint: buildSourceContentFingerprint(intelligenceResult),
     },
   };
+  await recorder?.write('website-analysis', result.analysis);
+  return result;
 }

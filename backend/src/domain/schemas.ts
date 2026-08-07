@@ -12,6 +12,23 @@ export const creatorListQuerySchema = z.object({
   tag: z.string().trim().min(1).max(80).optional(),
 });
 
+export const supportRequestSchema = z.object({
+  email: emailSchema,
+  message: z.string().trim().min(20).max(4000),
+  website: z.string().max(2048).optional().default(''),
+}).strict();
+export const supportIdParamsSchema = z.object({ id: z.string().cuid() });
+export const supportStatusSchema = z.enum(['NEW', 'OPEN', 'RESOLVED']);
+export const supportListQuerySchema = z.object({
+  search: z.string().trim().max(200).optional(),
+  status: supportStatusSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+});
+export const supportUpdateSchema = z.object({
+  status: z.enum(['OPEN', 'RESOLVED']),
+}).strict();
+
 export const loginSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
@@ -25,7 +42,10 @@ export const signupSchema = z.object({
 
 export const websiteInputSchema = z.object({ website: z.string().trim().min(1).max(2048) });
 export const stageInputSchema = z.object({ forceRegenerate: z.boolean().default(false) });
-export const conceptStageInputSchema = z.object({ count: z.number().int().min(1).max(8).default(8), forceRegenerate: z.boolean().default(false) });
+export const conceptStageInputSchema = z.object({
+  count: z.number().int().min(1).max(8).default(8),
+  forceRegenerate: z.boolean().default(false),
+}).strict();
 export const mediaStageInputSchema = z.object({
   conceptId: z.string().cuid().nullable().optional(),
   forceRegenerate: z.boolean().default(false),
@@ -62,7 +82,7 @@ export const creatorCharacterSchema = z.object({
 export const creatorSchema = z.object({
   id: z.string().cuid(),
   name: z.string().min(1).max(80),
-  description: z.string().min(1).max(280).nullable(),
+  description: z.string().min(1).nullable(),
   baseImageUrl: z.string().min(1),
   baseImageProvider: z.string().min(1),
   baseImageProviderId: z.string().nullable(),
@@ -90,7 +110,7 @@ export const creatorClipSchema = z.object({
 
 export const creatorMutationSchema = z.object({
   name: z.string().trim().min(1).max(80),
-  description: z.string().trim().max(280).optional(),
+  description: z.string().trim().optional(),
   sortOrder: z.coerce.number().int().min(0).optional(),
 }).strict();
 
@@ -127,65 +147,19 @@ export const authUserSchema = z.object({
   role: userRoleSchema,
 }).strict();
 
-export const creativeBriefSchema = z.object({
-  id: z.string().uuid(),
-  pattern: z.string().min(1),
-  moment: z.string().min(1),
-  viewerEmotion: z.string().min(1),
-  creatorEmotion: z.string().min(1),
-  payoff: z.string().min(1),
-  location: z.string().min(1),
-  creatorAction: z.string().min(1),
-  avoid: z.array(z.string()),
-}).strict();
-
 export const brandProfileSchema = z.object({
   id: z.string().cuid(),
   projectId: z.string().cuid(),
   brandName: z.string().min(1),
-  product: z.string().min(1),
-  audience: z.string().min(1),
-  audienceIdentity: z.string().min(1),
-  audienceStage: z.string().min(1),
-  emotionalDrivers: z.array(z.string().min(1)),
-  fears: z.array(z.string().min(1)),
-  realThoughts: z.array(z.string().min(1)),
-  dailyMoments: z.array(z.string().min(1)),
-  dreamOutcomes: z.array(z.string().min(1)),
-  misconceptions: z.array(z.string().min(1)),
-  objections: z.array(z.string().min(1)),
-  proofPoints: z.array(z.string().min(1)),
-  socialProofMoments: z.array(z.string().min(1)),
-  transformation: z.string().min(1),
-  uniqueMechanism: z.string().min(1),
-  conversationStarters: z.array(z.string().min(1)),
-  viralTriggers: z.array(z.string().min(1)),
-  emotionalLanguage: z.array(z.string().min(1)),
-  forbiddenClaims: z.array(z.string().min(1)),
-  ugcScenarios: z.array(z.string().min(1)),
-  testimonials: z.array(z.string().min(1)),
-  cta: z.string().min(1),
-  summary: z.string().min(1),
-  campaignStrategy: z.array(creativeBriefSchema).nullable().optional(),
+  productSummary: z.string().min(1),
+  targetAudience: z.string().min(1),
+  customerProblems: z.array(z.string().min(1)).min(1).max(5),
+  keyBenefits: z.array(z.string().min(1)).min(1).max(5),
+  proofPoints: z.array(z.string().min(1)).max(5),
+  claimConstraints: z.array(z.string().min(1)).max(4),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 }).strict();
-export const websiteAnalysisPageSchema = z.object({
-  url: z.string().url(),
-  title: z.string().min(1).nullable().optional(),
-  metaDescription: z.string().min(1).nullable().optional(),
-  visibleTextSnippet: z.string().min(1),
-  pageTypeHint: z.string().min(1),
-  crawlDepth: z.number().int().min(0),
-  canonicalUrl: z.string().url().nullable().optional(),
-  score: z.number().int().min(0).max(100).optional(),
-  scoreReason: z.string().min(1).nullable().optional(),
-  extractionStatus: analysisExtractionStatusSchema.optional(),
-  extractionSource: analysisExtractionSourceSchema.optional(),
-  extractionError: z.string().min(1).nullable().optional(),
-  extractedTextSnippet: z.string().min(1).nullable().optional(),
-}).strict();
-
 export const websiteAnalysisHomepageSchema = z.object({
   url: z.string().url(),
   title: z.string().min(1).nullable().optional(),
@@ -293,7 +267,6 @@ export type ConceptStageInput = z.infer<typeof conceptStageInputSchema>;
 export type MediaStageInput = z.infer<typeof mediaStageInputSchema>;
 export type ExportState = z.infer<typeof exportStateSchema>;
 export type BrandProfile = z.infer<typeof brandProfileSchema>;
-export type WebsiteAnalysisPage = z.infer<typeof websiteAnalysisPageSchema>;
 export type WebsiteAnalysisHomepage = z.infer<typeof websiteAnalysisHomepageSchema>;
 export type WebsiteAnalysis = z.infer<typeof websiteAnalysisSchema>;
 export type CreatorCharacter = z.infer<typeof creatorCharacterSchema>;
@@ -305,4 +278,3 @@ export type ProjectExport = z.infer<typeof projectExportSchema>;
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 export type ProjectSnapshot = z.infer<typeof projectSnapshotSchema>;
 export type CharacterSelection = z.infer<typeof characterSelectionSchema>;
-export type CreativeBrief = z.infer<typeof creativeBriefSchema>;

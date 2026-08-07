@@ -75,7 +75,15 @@ function recordTelemetry(record: LLMTelemetryRecord) {
 
 export async function callLLM(
   prompt: LLMPrompt,
-  options?: { model?: string; temperature?: number; maxTokens?: number; responseFormat?: 'json_object' | 'text'; projectId?: string; jobId?: string }
+  options?: {
+    model?: string;
+    temperature?: number;
+    maxTokens?: number;
+    responseFormat?: 'json_object' | 'text';
+    projectId?: string;
+    jobId?: string;
+    onRawResponse?: (response: unknown) => void | Promise<void>;
+  }
 ): Promise<string | null> {
   const client = getOpenAIClient();
   if (!client) return null;
@@ -102,6 +110,11 @@ export async function callLLM(
           verbosity: 'low',
         },
       });
+      try {
+        await options?.onRawResponse?.(response);
+      } catch (error) {
+        console.warn('[llm] raw response recorder failed:', error instanceof Error ? error.message : error);
+      }
 
       const content = response.output_text?.trim() || null;
       const usage = response.usage as Record<string, unknown> | undefined;
@@ -133,6 +146,11 @@ export async function callLLM(
       max_tokens: maxTokens,
       response_format: format === 'text' ? undefined : { type: 'json_object' }
     });
+    try {
+      await options?.onRawResponse?.(response);
+    } catch (error) {
+      console.warn('[llm] raw response recorder failed:', error instanceof Error ? error.message : error);
+    }
 
     const content = response.choices[0]?.message?.content ?? null;
     const usage = response.usage as Record<string, unknown> | undefined;

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { CreatorClipRecord, CreatorRecord } from '../types/domain';
+import AdminHeader from './AdminHeader';
 
 type CreatorTab = 'clips' | 'details' | 'usage';
 type ClipTypeFilter = 'all' | 'image' | 'video';
@@ -661,6 +662,7 @@ export default function AdminCreatorsPage() {
 
   return (
     <main className="min-h-screen bg-[#FAFAF8] text-[#111111]">
+      <AdminHeader />
       <div className="border-b border-black/6 bg-white/95 backdrop-blur-xl">
         <div className={`${pageShellClass} flex items-center justify-between gap-4 py-4`}>
           <div className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</div>

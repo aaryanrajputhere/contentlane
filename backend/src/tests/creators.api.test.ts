@@ -71,9 +71,10 @@ test("creator library requires auth for reads and admin rights for writes", asyn
       password: "password123",
     });
 
+    const longDescription = "Detailed creator direction ".repeat(20).trim();
     const creatorForm = new FormData();
     creatorForm.append("name", testCreatorName);
-    creatorForm.append("description", "Creator profile for upload smoke tests");
+    creatorForm.append("description", longDescription);
     creatorForm.append("sortOrder", "0");
     creatorForm.append(
       "baseImage",
@@ -98,11 +99,13 @@ test("creator library requires auth for reads and admin rights for writes", asyn
       creator: {
         id: string;
         name: string;
+        description: string | null;
         clipCount: number;
         baseImageUrl: string;
       };
     };
     assert.equal(created.creator.name, "Test Creator");
+    assert.equal(created.creator.description, longDescription);
     assert.equal(created.creator.clipCount, 0);
     assert.ok(created.creator.baseImageUrl.length > 0);
 

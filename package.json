@@ -9,6 +9,7 @@
     "backend"
   ],
   "scripts": {
+    "predev": "npm run prisma:generate -w backend && npm run db:migrate -w backend",
     "dev": "concurrently -k -n frontend,api,worker -c cyan,green,magenta \"npm run dev -w frontend\" \"npm run dev -w backend\" \"npm run worker:dev -w backend\"",
     "infra:up": "docker compose up -d --wait",
     "infra:down": "docker compose down",
@@ -24,6 +25,10 @@
     "jobs:retry": "npm run jobs:retry -w backend --"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "prisma": "^5.22.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
   }
 }

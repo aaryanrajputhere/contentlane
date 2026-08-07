@@ -25,38 +25,24 @@ import {
   loadProjectSnapshot,
   normalizeWebsiteInput,
   projectSnapshotInclude,
+  type ConceptBlueprint,
 } from "../lib/workflow";
 import { runWebsiteIntelligencePipeline } from "../lib/website-intelligence/pipeline";
 import { generateHooksFromLLM } from "../lib/website-intelligence/hooks";
 import { withLLMTelemetry } from "../lib/website-intelligence/llm";
 import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
+import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
 
-/**
- * Convert a brand profile from the pipeline (where campaignStrategy can be null)
- * into a shape Prisma accepts for JSON fields (null → Prisma.JsonNull).
- */
 function toBrandProfilePrismaData(
   profile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
 ) {
-  const { campaignStrategy, ...rest } = profile;
-  return {
-    ...rest,
-    campaignStrategy:
-      campaignStrategy === null || campaignStrategy === undefined
-        ? Prisma.JsonNull
-        : (campaignStrategy as Prisma.InputJsonValue),
-  };
+  return profile;
 }
 
-/**
- * Cast a Prisma BrandProfile row (where campaignStrategy is JsonValue)
- * to the Zod BrandProfile type so it can be passed to workflow functions.
- */
 function asBrandProfile(prismaProfile: {
   id: string;
   projectId: string;
   brandName: string;
-  campaignStrategy: Prisma.JsonValue;
   [key: string]: unknown;
 }): BrandProfile {
   return prismaProfile as unknown as BrandProfile;
@@ -81,7 +67,7 @@ async function runStage<T>(
   type: JobType,
   input: Prisma.InputJsonValue,
   label: string,
-  fn: () => Promise<T>,
+  fn: (job: { id: string; createdAt: Date }) => Promise<T>,
 ) {
   const job = await createJob(projectId, type, input);
   await updateJob(job.id, {
@@ -90,7 +76,7 @@ async function runStage<T>(
     progressMessage: label,
   });
   try {
-    const { result, telemetry } = await withLLMTelemetry(fn);
+    const { result, telemetry } = await withLLMTelemetry(() => fn(job));
     await updateJob(job.id, {
       status: JobStatus.COMPLETED,
       progress: 100,
@@ -288,30 +274,52 @@ async function analyzeProjectById(
       JobType.ANALYZE_WEBSITE,
       { website: project.website, forceRegenerate: options.forceRegenerate },
       "Analyzing website",
-      async () => {
-        const analysisResult = await runWebsiteIntelligencePipeline(
-          project.website,
-        );
-        await prisma.$transaction([
-          prisma.brandProfile.upsert({
-            where: { projectId: project.id },
-            update: toBrandProfilePrismaData(analysisResult.brandProfile),
-            create: { projectId: project.id, ...toBrandProfilePrismaData(analysisResult.brandProfile) },
-          }),
-          prisma.websiteAnalysis.upsert({
-            where: { projectId: project.id },
-            update: buildWebsiteAnalysisStorageData(analysisResult.analysis),
-            create: {
-              projectId: project.id,
-              ...buildWebsiteAnalysisStorageData(analysisResult.analysis),
-            },
-          }),
-          prisma.project.update({
-            where: { id: project.id },
-            data: { status: "READY" },
-          }),
-        ]);
-        return analysisResult;
+      async (analysisJob) => {
+        const recorder = createAnalysisJsonRecorder({
+          website: project.normalizedWebsite,
+          projectId: project.id,
+          analysisJobId: analysisJob.id,
+          startedAt: analysisJob.createdAt,
+        });
+        await recorder.write('analysis-request', {
+          projectId: project.id,
+          website: project.website,
+          normalizedWebsite: project.normalizedWebsite,
+          forceRegenerate: options.forceRegenerate,
+          analysisJobId: analysisJob.id,
+          startedAt: analysisJob.createdAt,
+        });
+        try {
+          const analysisResult = await runWebsiteIntelligencePipeline(
+            project.website,
+            recorder,
+          );
+          await prisma.$transaction([
+            prisma.brandProfile.upsert({
+              where: { projectId: project.id },
+              update: toBrandProfilePrismaData(analysisResult.brandProfile),
+              create: { projectId: project.id, ...toBrandProfilePrismaData(analysisResult.brandProfile) },
+            }),
+            prisma.websiteAnalysis.upsert({
+              where: { projectId: project.id },
+              update: buildWebsiteAnalysisStorageData(analysisResult.analysis),
+              create: {
+                projectId: project.id,
+                ...buildWebsiteAnalysisStorageData(analysisResult.analysis),
+              },
+            }),
+            prisma.project.update({
+              where: { id: project.id },
+              data: { status: "READY" },
+            }),
+          ]);
+          const snapshot = await loadProjectSnapshot(project.id, userId);
+          await recorder.write('analysis-project-snapshot', snapshot);
+          return analysisResult;
+        } catch (error) {
+          await recorder.write('analysis-error', errorJson(error));
+          throw error;
+        }
       },
     );
     const next = assertProject(await loadProjectSnapshot(project.id, userId));
@@ -526,51 +534,118 @@ export const generateConcepts: RequestHandler = async (req, res) => {
       "PROJECT_INCOMPLETE",
       "Analyze the website before generating concepts",
     );
+  const profile = asBrandProfile(project.brandProfile);
   if (project.concepts.length > 0 && !forceRegenerate) {
-    res.json({ project, cached: true });
+    res.json({
+      project: assertProject(await loadProjectSnapshot(project.id, userId)),
+      cached: true,
+    });
     return;
   }
-  await clearGeneratedContent(project.id);
-  await runStage(
-    project.id,
-    JobType.GENERATE_CONCEPTS,
-    { count, forceRegenerate },
-    "Generating concept cards",
-    async () => {
-      // Try LLM generation first, fall back to deterministic builder
-      const profile = asBrandProfile(project.brandProfile!);
-      const llmConcepts = await generateHooksFromLLM(profile, count);
-      const concepts = llmConcepts ?? buildConceptCards(profile, count);
-      console.log(`[hooks] generated ${concepts.length} concepts via ${llmConcepts ? 'LLM' : 'fallback'}`);
-      await prisma.hookConcept.createMany({
-        data: concepts.map((concept) => ({
-          projectId: project.id,
-          angle: concept.angle,
-          hookText: concept.hookText,
-          hookImagePrompt: concept.hookImagePrompt,
-          demoOverlayText: concept.demoOverlayText,
-          videoDirection: concept.videoDirection,
-          targetDurationLabel: concept.targetDurationLabel,
-          targetDurationSeconds: concept.targetDurationSeconds,
-          score: concept.score,
-          scoreLabel: concept.scoreLabel,
-          rationale: concept.rationale,
-          generatedImageUrl: concept.generatedImageUrl,
-          generatedVideoUrl: concept.generatedVideoUrl,
-          sortOrder: concept.sortOrder,
-        })),
-      });
-      await prisma.project.update({
-        where: { id: project.id },
-        data: { status: "HOOKS_READY" },
-      });
-      return concepts;
+  const staleAssets = project.mediaAssets.filter((asset) => !isBrandDemoAsset(asset));
+  const latestAnalysisJob = await prisma.generationJob.findFirst({
+    where: {
+      projectId: project.id,
+      type: JobType.ANALYZE_WEBSITE,
+      status: JobStatus.COMPLETED,
     },
-  );
-  res.json({
-    project: assertProject(await loadProjectSnapshot(project.id, userId)),
-    cached: false,
+    orderBy: { createdAt: 'desc' },
   });
+  const recorder = latestAnalysisJob
+    ? createAnalysisJsonRecorder({
+        website: project.normalizedWebsite,
+        projectId: project.id,
+        analysisJobId: latestAnalysisJob.id,
+        startedAt: latestAnalysisJob.createdAt,
+      })
+    : null;
+  try {
+    await runStage(
+      project.id,
+      JobType.GENERATE_CONCEPTS,
+      { count, forceRegenerate },
+      "Generating hooks",
+      async (generationJob) => {
+        const previousConcepts = forceRegenerate
+          ? project.concepts.map(({ hookText, demoOverlayText }) => ({ hookText, demoOverlayText }))
+          : [];
+        await recorder?.write('hooks-request', {
+          projectId: project.id,
+          generationJobId: generationJob.id,
+          analysisJobId: latestAnalysisJob?.id ?? null,
+          count,
+          forceRegenerate,
+          brandProfile: profile,
+          previousConcepts,
+        });
+        let source: 'llm' | 'fallback' = 'llm';
+        let concepts: ConceptBlueprint[];
+        try {
+          concepts = await generateHooksFromLLM(
+            profile,
+            count,
+            previousConcepts,
+            recorder ?? undefined,
+          );
+        } catch (error) {
+          if (forceRegenerate) throw error;
+          source = 'fallback';
+          concepts = buildConceptCards(profile, count);
+        }
+        await recorder?.write('hooks', { source, concepts });
+        await prisma.$transaction(async (tx) => {
+          await tx.mediaAsset.deleteMany({
+            where: { projectId: project.id, id: { in: staleAssets.map((asset) => asset.id) } },
+          });
+          await tx.projectExport.deleteMany({ where: { projectId: project.id } });
+          await tx.project.update({
+            where: { id: project.id },
+            data: { selectedConceptId: null },
+          });
+          await tx.hookConcept.deleteMany({ where: { projectId: project.id } });
+          await tx.hookConcept.createMany({
+            data: concepts.map((concept) => ({
+              projectId: project.id,
+              angle: concept.angle,
+              hookText: concept.hookText,
+              hookImagePrompt: concept.hookImagePrompt,
+              demoOverlayText: concept.demoOverlayText,
+              videoDirection: concept.videoDirection,
+              targetDurationLabel: concept.targetDurationLabel,
+              targetDurationSeconds: concept.targetDurationSeconds,
+              score: concept.score,
+              scoreLabel: concept.scoreLabel,
+              rationale: concept.rationale,
+              generatedImageUrl: null,
+              generatedVideoUrl: null,
+              sortOrder: concept.sortOrder,
+            })),
+          });
+          await tx.project.update({
+            where: { id: project.id },
+            data: { status: "HOOKS_READY" },
+          });
+        });
+        await Promise.allSettled(staleAssets.map((asset) => deleteStoredAsset({
+          provider: asset.provider,
+          providerId: asset.providerId,
+          mimeType: asset.mimeType,
+        })));
+        return concepts;
+      },
+    );
+    const snapshot = assertProject(await loadProjectSnapshot(project.id, userId));
+    await recorder?.write('project-snapshot', snapshot);
+    res.json({ project: snapshot, cached: false });
+  } catch (error) {
+    await recorder?.write('hooks-error', errorJson(error));
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      502,
+      "HOOK_GENERATION_FAILED",
+      error instanceof Error ? error.message : "Hook generation failed",
+    );
+  }
 };
 
 export const generateConceptImageAsset: RequestHandler = async (req, res) => {

@@ -1,88 +1,70 @@
-import { z } from 'zod';
-import { brandProfileSchema, creativeBriefSchema } from '../../domain/schemas';
-import { buildBrandProfile } from '../workflow';
-import { hasLLMConfig, callLLM, type LLMPrompt } from './llm';
-import { truncateText } from './utils';
-import type { WebsiteIntelligenceResult } from './types';
-import { buildFallbackBriefs } from './planner';
+import { brandProfileSchema } from '../../domain/schemas';
 import { config } from '../../config';
-import { randomUUID } from 'node:crypto';
+import { buildBrandProfile } from '../workflow';
+import { callLLM, hasLLMConfig, type LLMPrompt } from './llm';
+import { HOMEPAGE_EVIDENCE_MAX_CHARS, truncateText } from './utils';
+import type { WebsiteIntelligenceResult } from './types';
+import type { AnalysisJsonRecorder } from '../analysis-json';
+import { errorJson } from '../analysis-json';
 
-const synthesisResponseSchema = brandProfileSchema.omit({ id: true, projectId: true, createdAt: true, updatedAt: true });
-const creativeBriefInputSchema = creativeBriefSchema.omit({ id: true });
-const creativeIntelligenceSchema = synthesisResponseSchema.extend({
-  campaignStrategy: z.array(z.union([creativeBriefSchema, creativeBriefInputSchema])).min(1).max(5),
+const synthesisResponseSchema = brandProfileSchema.omit({
+  id: true,
+  projectId: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
-function buildSynthesisPrompt(result: WebsiteIntelligenceResult): LLMPrompt {
+export function buildSynthesisPrompt(result: WebsiteIntelligenceResult): LLMPrompt {
+  const contentEvidence = truncateText(
+    result.homepage.extractedTextSnippet ?? result.homepage.visibleTextSnippet,
+    HOMEPAGE_EVIDENCE_MAX_CHARS,
+  );
+
   return {
-    system: 'You are a senior UX researcher and consumer psychology expert.\n\nYour job is not to summarize a website. Your job is to extract customer psychology from the homepage evidence.\n\nThink like a researcher interviewing real users. Capture what they actually think, what they complain about, what they wish existed, what they tell their friends, their daily moments, and their misconceptions.\n\nExtract real insights instead of generic marketing language. Do NOT invent information; infer everything from the evidence. The output should feel like notes from interviewing 100 customers.\n\nReturn strict JSON only.',
+    system: `You extract an evidence-grounded brand profile from website content.
+
+Use only the supplied homepage evidence. Do not invent customers, benefits, proof, guarantees, or product capabilities. Make every array item atomic, distinct, and non-overlapping. Aim for the requested range when the evidence supports it, but return fewer items rather than padding or guessing. Return strict JSON only with exactly the requested fields.`,
     user: JSON.stringify({
-      task: 'Create a Creative Intelligence Report and 5 customer moments using only the homepage evidence below.',
+      task: 'Extract the seven brand-context fields used for short-form hook generation.',
       rootUrl: result.sourceUrl,
       rootDomain: result.rootDomain,
       homepage: {
         url: result.homepage.url,
         title: result.homepage.title,
         metaDescription: result.homepage.metaDescription,
-        visibleTextSnippet: truncateText(result.homepage.visibleTextSnippet, 1000),
-        extractedTextSnippet: truncateText(result.homepage.extractedTextSnippet ?? '', 1000) || null,
+        contentEvidence,
       },
-      outputFields: [
-        'brandName', 'product', 'audience', 'audienceIdentity', 'audienceStage',
-        'emotionalDrivers', 'fears', 'realThoughts', 'dailyMoments', 'dreamOutcomes',
-        'misconceptions', 'objections', 'proofPoints', 'socialProofMoments',
-        'transformation', 'uniqueMechanism', 'conversationStarters',
-        'viralTriggers', 'emotionalLanguage', 'forbiddenClaims', 'ugcScenarios',
-        'testimonials', 'cta', 'summary', 'campaignStrategy'
-      ],
-      guidance: [
-        'Keep the brand name faithful to the site branding when possible.',
-        'Focus on real human insights over generic marketing summaries.',
-        'realThoughts: internal monologue before buying (e.g. "I always forget to log meals").',
-        'dailyMoments: situations where the product naturally appears.',
-        'dreamOutcomes: emotional outcomes rather than product benefits.',
-        'misconceptions: false beliefs users commonly have.',
-        'conversationStarters: phrases a creator could naturally start a Reel with (e.g. "I thought this wasn\'t for me").',
-        'socialProofMoments: moments where testimonials or social proof can naturally be introduced.',
-        'campaignStrategy: exactly 5 realistic short-form video moments. Do not write hooks.',
-        'Do not invent information. Infer everything strictly from the provided homepage text.',
-      ],
+      fieldGuidance: {
+        brandName: 'The brand name shown by the website.',
+        productSummary: 'One concise sentence explaining what the product or service does.',
+        targetAudience: 'The specific customer described or clearly implied by the evidence.',
+        customerProblems: 'Target 3-5 concrete, distinct problems the product addresses. Do not invent fears or objections.',
+        keyBenefits: 'Target 3-5 distinct outcomes or capabilities explicitly supported by the evidence.',
+        proofPoints: 'Target 2-5 verifiable facts, prices, features, testimonials, or claims present in the evidence.',
+        claimConstraints: 'Target 2-4 specific claims hook generation must avoid because the evidence does not support them.',
+      },
       responseShape: {
         brandName: 'ExampleBrand',
-        product: 'ExampleProduct',
-        audience: 'Target demographic',
-        audienceIdentity: 'How they see themselves',
-        audienceStage: 'Problem aware / Solution aware / etc',
-        emotionalDrivers: ['Desire 1'],
-        fears: ['Fear 1'],
-        realThoughts: ['I always forget to...'],
-        dailyMoments: ['Sitting at the desk when...'],
-        dreamOutcomes: ['Stop feeling guilty after...'],
-        misconceptions: ['I thought I had to...'],
-        objections: ['Objection 1'],
-        proofPoints: ['Proof 1'],
-        socialProofMoments: ['When they realize that...'],
-        transformation: 'Before state to after state',
-        uniqueMechanism: 'How the product works uniquely',
-        conversationStarters: ['I finally understand why people...'],
-        viralTriggers: ['Trigger 1'],
-        emotionalLanguage: ['Exact phrase 1'],
-        forbiddenClaims: ['Claim 1'],
-        ugcScenarios: ['Scenario 1'],
-        testimonials: ['Testimonial 1'],
-        cta: 'Book a demo',
-        summary: 'Short summary of the transformation',
-        campaignStrategy: [{
-          pattern: 'Confession',
-          moment: 'A specific situation a real customer experiences',
-          viewerEmotion: 'Relief',
-          creatorEmotion: 'Frustration',
-          payoff: 'What changes after using the product',
-          location: 'Home office',
-          creatorAction: 'Physical action for the opening scene',
-          avoid: ['unlock', 'revolutionary'],
-        }],
+        productSummary: 'A concise description of the product.',
+        targetAudience: 'The intended customer.',
+        customerProblems: [
+          'A concrete customer problem',
+          'A second distinct customer problem',
+          'A third distinct customer problem',
+        ],
+        keyBenefits: [
+          'An evidence-backed benefit',
+          'A second distinct benefit',
+          'A third distinct benefit',
+        ],
+        proofPoints: [
+          'An evidence-backed fact',
+          'A second verifiable fact',
+        ],
+        claimConstraints: [
+          'Do not claim a result the website does not support',
+          'Do not imply a capability absent from the evidence',
+        ],
       },
     }, null, 2),
   };
@@ -90,56 +72,61 @@ function buildSynthesisPrompt(result: WebsiteIntelligenceResult): LLMPrompt {
 
 function buildFallbackProfile(result: WebsiteIntelligenceResult) {
   const fallback = buildBrandProfile(result.sourceUrl);
-  const homepage = result.homepage;
-  const title = homepage.title?.trim();
-  const snippet = truncateText(homepage.extractedTextSnippet ?? homepage.visibleTextSnippet, 120);
-  if (!title && !snippet) return fallback;
-  const profile = {
-    ...fallback,
-    audience: homepage.metaDescription ? truncateText(homepage.metaDescription, 120) : fallback.audience,
-    summary: truncateText(`${fallback.summary} Homepage evidence leaned on ${title ?? 'the site brand'} and ${snippet}.`, 240),
-    conversationStarters: Array.from(new Set([...(title ? [title] : []), ...fallback.conversationStarters])).slice(0, 4),
-  };
+  const title = result.homepage.title?.trim();
+  const description = result.homepage.metaDescription?.trim();
+  const snippet = truncateText(
+    result.homepage.extractedTextSnippet ?? result.homepage.visibleTextSnippet,
+    180,
+  );
+
   return {
-    ...profile,
-    campaignStrategy: buildFallbackBriefs(profile),
+    ...fallback,
+    brandName: title || fallback.brandName,
+    productSummary: description || snippet || fallback.productSummary,
   };
 }
 
 export function parseCreativeIntelligenceJson(text: string) {
   const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-  const parsed = creativeIntelligenceSchema.parse(JSON.parse(clean));
-  return {
-    ...parsed,
-    campaignStrategy: parsed.campaignStrategy.map((brief) => ({
-      id: 'id' in brief ? brief.id : randomUUID(),
-      ...brief,
-    })),
-  };
+  return synthesisResponseSchema.parse(JSON.parse(clean));
 }
 
-export async function synthesizeBrandProfile(result: WebsiteIntelligenceResult) {
+export async function synthesizeBrandProfile(
+  result: WebsiteIntelligenceResult,
+  recorder?: AnalysisJsonRecorder,
+) {
   console.log(`[synthesis] start url=${result.sourceUrl} title="${result.homepage.title ?? ''}" text=${result.homepage.visibleTextSnippet.length}chars`);
+  const prompt = buildSynthesisPrompt(result);
+  await recorder?.write('brand-prompt', prompt);
 
   if (!hasLLMConfig()) {
     console.log('[synthesis] no LLM config, using fallback');
+    await recorder?.write('brand-raw-response', {
+      provider: 'fallback',
+      raw: null,
+      reason: 'No language model is configured',
+    });
     return synthesisResponseSchema.parse(buildFallbackProfile(result));
   }
 
-  const prompt = buildSynthesisPrompt(result);
-
   try {
-    const raw = await callLLM(prompt, { model: config.OPENAI_SYNTHESIS_MODEL, temperature: 0.2, maxTokens: 2800 });
-    if (!raw) {
-      console.log('[synthesis] LLM returned null, using fallback');
-      return buildFallbackProfile(result);
-    }
+    const raw = await callLLM(prompt, {
+      model: config.OPENAI_SYNTHESIS_MODEL,
+      temperature: 0.2,
+      maxTokens: 1400,
+      onRawResponse: async (response) => {
+        await recorder?.write('brand-raw-provider-response', response);
+      },
+    });
+    await recorder?.write('brand-raw-response', { raw });
+    if (!raw) return buildFallbackProfile(result);
 
     const parsed = parseCreativeIntelligenceJson(raw);
-    console.log(`[synthesis] done brand="${parsed.brandName}" angles=${parsed.conversationStarters.length} scenarios=${parsed.ugcScenarios.length} briefs=${parsed.campaignStrategy?.length ?? 0}`);
+    console.log(`[synthesis] done brand="${parsed.brandName}" problems=${parsed.customerProblems.length} benefits=${parsed.keyBenefits.length}`);
     return parsed;
   } catch (error) {
     console.error('[synthesis] failed:', error instanceof Error ? error.message : error);
+    await recorder?.write('brand-error', errorJson(error));
     return buildFallbackProfile(result);
   }
 }

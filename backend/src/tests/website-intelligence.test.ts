@@ -1,60 +1,115 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseCreativeIntelligenceJson } from "../lib/website-intelligence/synthesis";
-import { extractCompleteObjects, parseLLMHookItems } from "../lib/website-intelligence/hooks";
+import {
+  buildSynthesisPrompt,
+  parseCreativeIntelligenceJson,
+} from "../lib/website-intelligence/synthesis";
+import {
+  buildHooksPrompt,
+  extractCompleteObjects,
+  findRepeatedCreativeLines,
+  normalizeCreativeLine,
+  parseLLMHookItems,
+} from "../lib/website-intelligence/hooks";
 import { buildConceptCards } from "../lib/workflow";
+import {
+  buildSelectedTextSnippet,
+  HOMEPAGE_EVIDENCE_MAX_CHARS,
+} from "../lib/website-intelligence/utils";
 import type { BrandProfile } from "../domain/schemas";
 
 const baseProfile = {
   brandName: "ContentLane",
-  product: "URL-to-video creative tool",
-  audience: "Growth teams",
-  audienceIdentity: "Busy marketers",
-  audienceStage: "Problem aware",
-  emotionalDrivers: ["Speed"],
-  fears: ["Wasting ad spend"],
-  realThoughts: ["I need better hooks"],
-  dailyMoments: ["Opening a blank editor"],
-  dreamOutcomes: ["Launch faster"],
-  misconceptions: ["AI ads look fake"],
-  objections: ["Quality concerns"],
+  productSummary: "URL-to-video creative tool",
+  targetAudience: "Busy growth marketers",
+  customerProblems: ["Wasting ad spend", "I need better hooks", "Quality concerns"],
+  keyBenefits: ["Launch creative faster"],
   proofPoints: ["Creates hooks quickly"],
-  socialProofMoments: ["Seeing the first usable draft"],
-  transformation: "From blank page to ready creative",
-  uniqueMechanism: "Website evidence becomes creative direction",
-  conversationStarters: ["I used to hate making ads"],
-  viralTriggers: ["Regret"],
-  emotionalLanguage: ["Finally"],
-  forbiddenClaims: ["Guaranteed ROAS"],
-  ugcScenarios: ["Creator at desk"],
-  testimonials: ["Saved us hours"],
-  cta: "Start now",
-  summary: "Turns a website into creative direction.",
+  claimConstraints: ["Guaranteed ROAS"],
 };
 
-test("creative intelligence parser accepts valid merged output", () => {
-  const parsed = parseCreativeIntelligenceJson(JSON.stringify({
-    ...baseProfile,
-    campaignStrategy: [{
-      pattern: "Confession",
-      moment: "I am staring at a blank timeline again.",
-      viewerEmotion: "Relief",
-      creatorEmotion: "Frustration",
-      payoff: "Now the first draft is ready in minutes.",
-      location: "Desk",
-      creatorAction: "Looks at laptop, exhales, clicks generate.",
-      avoid: ["unlock", "revolutionary"],
-    }],
-  }));
+test("creative intelligence parser accepts exactly the lean brand context", () => {
+  const parsed = parseCreativeIntelligenceJson(JSON.stringify(baseProfile));
 
   assert.equal(parsed.brandName, "ContentLane");
-  assert.equal(parsed.campaignStrategy?.length, 1);
-  assert.match(parsed.campaignStrategy?.[0]?.id ?? "", /^[0-9a-f-]{36}$/i);
+  assert.deepEqual(Object.keys(parsed).sort(), Object.keys(baseProfile).sort());
 });
 
 test("creative intelligence parser rejects missing and malformed JSON", () => {
-  assert.throws(() => parseCreativeIntelligenceJson(JSON.stringify(baseProfile)));
+  const { targetAudience: _targetAudience, ...incomplete } = baseProfile;
+  assert.throws(() => parseCreativeIntelligenceJson(JSON.stringify(incomplete)));
   assert.throws(() => parseCreativeIntelligenceJson("{not-json"));
+});
+
+test("creative intelligence parser permits evidence-limited arrays and rejects excessive output", () => {
+  const evidenceLimited = {
+    ...baseProfile,
+    customerProblems: ["One supported problem"],
+    keyBenefits: ["One supported benefit"],
+    proofPoints: [],
+    claimConstraints: [],
+  };
+  assert.deepEqual(
+    parseCreativeIntelligenceJson(JSON.stringify(evidenceLimited)),
+    evidenceLimited,
+  );
+
+  assert.throws(() => parseCreativeIntelligenceJson(JSON.stringify({
+    ...baseProfile,
+    customerProblems: Array.from({ length: 6 }, (_, index) => `Problem ${index + 1}`),
+  })));
+  assert.throws(() => parseCreativeIntelligenceJson(JSON.stringify({
+    ...baseProfile,
+    keyBenefits: Array.from({ length: 6 }, (_, index) => `Benefit ${index + 1}`),
+  })));
+  assert.throws(() => parseCreativeIntelligenceJson(JSON.stringify({
+    ...baseProfile,
+    proofPoints: Array.from({ length: 6 }, (_, index) => `Proof ${index + 1}`),
+  })));
+  assert.throws(() => parseCreativeIntelligenceJson(JSON.stringify({
+    ...baseProfile,
+    claimConstraints: Array.from({ length: 5 }, (_, index) => `Constraint ${index + 1}`),
+  })));
+});
+
+test("brand synthesis uses one expanded evidence block and requests useful array depth", () => {
+  const laterEvidence = "Later proof: customers can publish without paying until launch.";
+  const extractedText = `${"Homepage detail. ".repeat(120)}${laterEvidence}`;
+  const prompt = buildSynthesisPrompt({
+    sourceUrl: "https://example.com",
+    rootDomain: "example.com",
+    homepage: {
+      url: "https://example.com",
+      title: "Example",
+      metaDescription: "Example description",
+      visibleTextSnippet: "Short duplicate preview",
+      extractedTextSnippet: extractedText,
+    },
+  });
+  const payload = JSON.parse(prompt.user) as {
+    homepage: Record<string, unknown> & { contentEvidence: string };
+    fieldGuidance: Record<string, string>;
+    responseShape: Record<string, unknown[]>;
+  };
+
+  assert.match(payload.homepage.contentEvidence, /Later proof/);
+  assert.equal("visibleTextSnippet" in payload.homepage, false);
+  assert.equal("extractedTextSnippet" in payload.homepage, false);
+  assert.match(prompt.system, /atomic, distinct, and non-overlapping/i);
+  assert.match(payload.fieldGuidance.customerProblems, /3-5/);
+  assert.match(payload.fieldGuidance.keyBenefits, /3-5/);
+  assert.match(payload.fieldGuidance.proofPoints, /2-5/);
+  assert.match(payload.fieldGuidance.claimConstraints, /2-4/);
+  assert.equal(payload.responseShape.customerProblems.length, 3);
+  assert.equal(payload.responseShape.keyBenefits.length, 3);
+  assert.equal(payload.responseShape.proofPoints.length, 2);
+  assert.equal(payload.responseShape.claimConstraints.length, 2);
+});
+
+test("homepage evidence snippets retain up to 3000 characters", () => {
+  const snippet = buildSelectedTextSnippet("x".repeat(4000), HOMEPAGE_EVIDENCE_MAX_CHARS);
+  assert.equal(snippet.length, HOMEPAGE_EVIDENCE_MAX_CHARS);
+  assert.equal(snippet.endsWith("…"), true);
 });
 
 test("hook parser extracts wrapped arrays and salvages truncated objects", () => {
@@ -101,12 +156,44 @@ const persistedProfile: BrandProfile = {
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
+test("hook prompt applies automatic styles and brand constraints", () => {
+  const prompt = buildHooksPrompt(persistedProfile, 8);
+
+  assert.match(prompt.user, /Create an information gap/);
+  assert.match(prompt.user, /Challenge a familiar assumption/);
+  assert.match(prompt.user, /candid first-person admission/);
+  assert.match(prompt.user, /Wasting ad spend/);
+  assert.match(prompt.user, /Guaranteed ROAS/);
+  assert.match(prompt.user, /exactly these 3 fields/i);
+  assert.match(prompt.system, /Output ONLY valid JSON/);
+});
+
+test("regeneration prompt excludes previous copy", () => {
+  const prompt = buildHooksPrompt(persistedProfile, 8, [{
+    hookText: "i kept forgetting our best moments 😭",
+    demoOverlayText: "save every memory",
+  }], true);
+
+  assert.match(prompt.user, /i kept forgetting our best moments/);
+  assert.match(prompt.user, /save every memory/);
+  assert.match(prompt.user, /previous attempt reused existing copy/i);
+});
+
+test("creative line comparison ignores casing, punctuation, and whitespace", () => {
+  assert.equal(normalizeCreativeLine("  Save EVERY memory!!! "), "save every memory");
+  assert.deepEqual(findRepeatedCreativeLines([
+    { hookText: "A genuinely new hook", demoOverlayText: "SAVE every memory..." },
+  ], [
+    { hookText: "An old hook", demoOverlayText: "save every memory" },
+  ]), ["SAVE every memory..."]);
+});
+
 test("fallback hooks use actual profile names and creator-native casing", () => {
   const concepts = buildConceptCards(persistedProfile, 8);
   const hooks = concepts.map((concept) => concept.hookText);
 
   assert.equal(hooks.some((hook) => hook.includes("ContentLane")), true);
-  assert.equal(hooks.some((hook) => hook.includes(baseProfile.product.toLowerCase())), true);
+  assert.equal(hooks.some((hook) => hook.includes("url-to-video creative tool")), true);
   assert.equal(hooks.some((hook) => hook.includes("SECRET") || hook.includes("...") || hook.includes("??")), true);
   assert.equal(hooks.some((hook) => hook.startsWith("how to ") || hook.startsWith("i ")), true);
   assert.equal(hooks.every((hook) => !/\{app name\}|\{category\}|Notion|Acme|Example/i.test(hook)), true);

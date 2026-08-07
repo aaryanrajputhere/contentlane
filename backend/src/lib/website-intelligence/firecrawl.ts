@@ -1,14 +1,10 @@
 import { config } from "../../config";
-import { normalizeWebsiteInput } from "../workflow";
 import {
   buildSelectedTextSnippet,
   normalizePageUrl,
-  pageTypeHintFromUrl,
-  rootDomainFromUrl,
-  toPageCandidate,
-  truncateText,
 } from "./utils";
-import type { WebsitePageCandidate } from "./types";
+import type { AnalysisJsonRecorder } from "../analysis-json";
+import { errorJson } from "../analysis-json";
 
 function withTimeout(timeoutMs: number) {
   const controller = new AbortController();
@@ -49,16 +45,6 @@ async function firecrawlRequest<T>(
   } finally {
     clearTimeout(timer);
   }
-}
-
-function extractArray(payload: unknown, keys: string[]) {
-  if (typeof payload !== "object" || payload === null) return null;
-  const record = payload as Record<string, unknown>;
-  for (const key of keys) {
-    const value = record[key];
-    if (Array.isArray(value)) return value;
-  }
-  return null;
 }
 
 function extractText(payload: unknown, keys: string[]) {
@@ -115,12 +101,11 @@ async function syntheticPage(url: string, error?: string) {
   const normalizedUrl = normalizePageUrl(url);
   const parsed = new URL(normalizedUrl);
   const domain = parsed.host.replace(/^www\./i, "");
-  const hint = pageTypeHintFromUrl(normalizedUrl);
   const title =
     parsed.pathname === "/"
       ? domain
       : `${domain} ${parsed.pathname.replace(/\//g, " ").trim()}`.trim();
-  const description = `${hint} for ${domain}`;
+  const description = `Homepage for ${domain}`;
   return {
     url: normalizedUrl,
     title,
@@ -169,154 +154,30 @@ function homepageFromHtml(
   };
 }
 
-export async function discoverWebsitePages(website: string) {
-  const normalizedWebsite = normalizeWebsiteInput(website);
-  const rootDomain = rootDomainFromUrl(normalizedWebsite);
-  if (!config.FIRECRAWL_API_KEY) {
-    return {
-      rootDomain,
-      normalizedWebsite,
-      candidates: [
-        toPageCandidate(
-          {
-            url: normalizedWebsite,
-            title: rootDomain,
-            metaDescription: `Homepage for ${rootDomain}`,
-            visibleTextSnippet: `Homepage for ${rootDomain}`,
-            pageTypeHint: "homepage",
-            crawlDepth: 0,
-            canonicalUrl: normalizedWebsite,
-          },
-          normalizedWebsite,
-        ),
-      ].filter((candidate): candidate is WebsitePageCandidate =>
-        Boolean(candidate),
-      ),
-    };
-  }
-
-  let links: unknown[] = [];
-  try {
-    const mapPayload = await firecrawlRequest<Record<string, unknown>>(
-      "/map",
-      {
-        url: normalizedWebsite,
-        ignoreSitemap: false,
-        includeSubdomains: false,
-        limit: 60,
-      },
-      config.FIRECRAWL_TIMEOUT_MS,
-    );
-    links = extractArray(mapPayload, ["links", "data", "urls"]) ?? [];
-  } catch (error) {
-    console.warn(
-      `[website-intelligence] Firecrawl /map failed for ${normalizedWebsite}; falling back to homepage discovery`,
-      error instanceof Error ? error.message : error,
-    );
-    links = [];
-  }
-
-  const homepageCandidate = toPageCandidate(
-    {
-      url: normalizedWebsite,
-      title: rootDomain,
-      metaDescription: `Homepage for ${rootDomain}`,
-      visibleTextSnippet: `Homepage for ${rootDomain}`,
-      pageTypeHint: "homepage",
-      crawlDepth: 0,
-      canonicalUrl: normalizedWebsite,
-    },
-    normalizedWebsite,
-  );
-  const rootPage = await scrapePage(normalizedWebsite, { allowFallback: true });
-  const candidates: WebsitePageCandidate[] = homepageCandidate
-    ? [homepageCandidate]
-    : [];
-  if (rootPage) {
-    candidates.push({
-      url: rootPage.url,
-      title: rootPage.title,
-      metaDescription: rootPage.metaDescription,
-      visibleTextSnippet: rootPage.visibleTextSnippet,
-      pageTypeHint: "homepage",
-      crawlDepth: 0,
-      canonicalUrl: rootPage.canonicalUrl,
-    });
-  }
-  for (const link of links) {
-    if (typeof link === "string") {
-      const candidate = toPageCandidate(
-        {
-          url: link,
-          visibleTextSnippet: link,
-          pageTypeHint: pageTypeHintFromUrl(link),
-        },
-        normalizedWebsite,
-      );
-      if (candidate) candidates.push(candidate);
-      continue;
-    }
-    if (typeof link !== "object" || link === null) continue;
-    const record = link as Record<string, unknown>;
-    const candidate = toPageCandidate(
-      {
-        url: String(record.url ?? record.loc ?? record.link ?? ""),
-        title:
-          typeof record.title === "string"
-            ? record.title
-            : typeof record.name === "string"
-              ? record.name
-              : null,
-        metaDescription:
-          typeof record.description === "string"
-            ? record.description
-            : typeof record.metaDescription === "string"
-              ? record.metaDescription
-              : null,
-        visibleTextSnippet:
-          typeof record.description === "string"
-            ? record.description
-            : typeof record.text === "string"
-              ? record.text
-              : typeof record.title === "string"
-                ? record.title
-                : null,
-        pageTypeHint:
-          typeof record.pageTypeHint === "string"
-            ? record.pageTypeHint
-            : pageTypeHintFromUrl(
-                String(record.url ?? ""),
-                typeof record.title === "string" ? record.title : null,
-              ),
-        canonicalUrl:
-          typeof record.canonical === "string"
-            ? record.canonical
-            : typeof record.canonicalUrl === "string"
-              ? record.canonicalUrl
-              : null,
-      },
-      normalizedWebsite,
-    );
-    if (candidate) candidates.push(candidate);
-  }
-  return { rootDomain, normalizedWebsite, candidates };
-}
-
 export async function scrapePage(
   url: string,
-  options?: { allowFallback?: boolean },
+  options?: { allowFallback?: boolean; recorder?: AnalysisJsonRecorder },
 ) {
   const normalizedUrl = normalizePageUrl(url);
+  const recorder = options?.recorder;
   console.log(`[scrape] url=${normalizedUrl}`);
   const buildHomepageFallback = async (error?: unknown) => {
     try {
+      await recorder?.write('html-fallback-request', { url: normalizedUrl });
       const htmlFallback = await fetchHtmlFallback(
         normalizedUrl,
         config.FIRECRAWL_TIMEOUT_MS,
       );
-      return homepageFromHtml(normalizedUrl, htmlFallback, "fallback");
+      await recorder?.write('html-fallback-response', {
+        url: normalizedUrl,
+        html: htmlFallback,
+      });
+      const page = homepageFromHtml(normalizedUrl, htmlFallback, "fallback");
+      await recorder?.write('normalized-scrape-result', page);
+      return page;
     } catch (fallbackError) {
-      return syntheticPage(
+      await recorder?.write('html-fallback-error', errorJson(fallbackError));
+      const page = await syntheticPage(
         normalizedUrl,
         error instanceof Error
           ? error.message
@@ -324,28 +185,43 @@ export async function scrapePage(
             ? fallbackError.message
             : "Unable to extract page content",
       );
+      await recorder?.write('synthetic-fallback', page);
+      return page;
     }
   };
 
   if (!config.FIRECRAWL_API_KEY) {
     console.log('[scrape] no Firecrawl key, using fallback');
+    await recorder?.write('firecrawl-request', {
+      skipped: true,
+      url: normalizedUrl,
+      reason: 'No Firecrawl API key is configured',
+    });
     return buildHomepageFallback();
   }
 
   let firecrawlPayload: Record<string, unknown> | null = null;
+  const firecrawlBody = {
+    url: normalizedUrl,
+    formats: ["markdown", "html"],
+    onlyMainContent: true,
+    waitFor: 2000,
+  };
+  await recorder?.write('firecrawl-request', {
+    path: '/scrape',
+    body: firecrawlBody,
+    timeoutMs: config.FIRECRAWL_TIMEOUT_MS,
+  });
   try {
     firecrawlPayload = await firecrawlRequest<Record<string, unknown>>(
       "/scrape",
-      {
-        url: normalizedUrl,
-        formats: ["markdown", "html"],
-        onlyMainContent: true,
-        waitFor: 2000,
-      },
+      firecrawlBody,
       config.FIRECRAWL_TIMEOUT_MS,
     );
+    await recorder?.write('firecrawl-response', firecrawlPayload);
   } catch (scrapeError) {
     console.warn('[scrape] firecrawl failed:', scrapeError instanceof Error ? scrapeError.message : scrapeError);
+    await recorder?.write('firecrawl-error', errorJson(scrapeError));
     firecrawlPayload = null;
   }
 
@@ -399,17 +275,10 @@ export async function scrapePage(
       rawText: plainText || normalizedUrl,
     };
     console.log(`[scrape] done source=firecrawl title="${result.title}" text=${result.rawText.length}chars`);
+    await recorder?.write('normalized-scrape-result', result);
     return result;
   }
   console.log('[scrape] no content from firecrawl, trying fallback');
   if (!options?.allowFallback) return null;
   return buildHomepageFallback();
-}
-
-export async function scrapeSelectedPages(urls: string[]) {
-  const results = [] as Array<Awaited<ReturnType<typeof scrapePage>>>;
-  for (const url of urls) {
-    results.push(await scrapePage(url, { allowFallback: true }));
-  }
-  return results;
 }

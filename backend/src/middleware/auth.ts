@@ -5,18 +5,19 @@ import { verifySession } from '../lib/auth';
 import { ApiError } from '../lib/errors';
 import { config } from '../config';
 
-async function resolveAuthenticatedUser(req: Request) {
+export async function resolveAuthenticatedUser(req: Request) {
   if (req.user) return req.user;
   const clerkAuth = getAuth(req);
   if (clerkAuth.isAuthenticated && clerkAuth.userId) {
     const clerkUser = await clerkClient.users.getUser(clerkAuth.userId);
     const email = clerkUser.primaryEmailAddress?.emailAddress.toLowerCase();
     if (!email) throw new ApiError(401, 'AUTH_REQUIRED', 'Your Clerk account needs an email address');
+    const clerkRole = clerkUser.publicMetadata.role === 'ADMIN' ? 'ADMIN' : 'USER';
 
     const user = await prisma.user.upsert({
       where: { email },
-      update: { clerkId: clerkAuth.userId, name: clerkUser.fullName },
-      create: { clerkId: clerkAuth.userId, email, name: clerkUser.fullName },
+      update: { clerkId: clerkAuth.userId, name: clerkUser.fullName, role: clerkRole },
+      create: { clerkId: clerkAuth.userId, email, name: clerkUser.fullName, role: clerkRole },
       select: { id: true, email: true, name: true, role: true },
     });
 
@@ -48,6 +49,15 @@ async function resolveAuthenticatedUser(req: Request) {
     role: user.role,
   };
   return req.user;
+}
+
+export async function resolveOptionalUser(req: Request) {
+  if (req.user) return req.user;
+  const clerkAuth = getAuth(req);
+  const token = (req as Request & { cookies?: Record<string, string> }).cookies?.[config.COOKIE_NAME];
+  const hasBearer = req.header('authorization')?.startsWith('Bearer ') ?? false;
+  if (!clerkAuth.isAuthenticated && !token && !hasBearer) return null;
+  return resolveAuthenticatedUser(req);
 }
 
 export const requireAuth: RequestHandler = async (req, _res, next) => {

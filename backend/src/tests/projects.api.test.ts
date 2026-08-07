@@ -89,6 +89,12 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
       },
     );
     assert.equal(preDemoConceptsResponse.status, 200);
+    const automaticallyGenerated = (await preDemoConceptsResponse.json()) as {
+      project: {
+        concepts: Array<{ id: string }>;
+      };
+    };
+    assert.equal(automaticallyGenerated.project.concepts.length, 4);
 
     const brandDemoResponse = await fetch(
       `${baseUrl}/api/v1/projects/${created.project.id}/brand-demo`,

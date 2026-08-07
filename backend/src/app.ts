@@ -14,6 +14,11 @@ import projectsRouter from './routes/projects.router';
 import jobsRouter from './routes/jobs.router';
 import creatorsRouter from './routes/creators.router';
 import clipsRouter from './routes/clips.router';
+import billingRouter from './routes/billing.router';
+import { handleDodoWebhook } from './controllers/dodo-webhook.controller';
+import { requireSubscription } from './middleware/subscription';
+import supportRouter from './routes/support.router';
+import adminSupportRouter from './routes/admin-support.router';
 
 export function createApp() {
   const app = express();
@@ -34,16 +39,20 @@ export function createApp() {
     ],
     credentials: true,
   }));
+  app.post('/api/v1/webhooks/dodo', express.raw({ type: 'application/json', limit: '1mb' }), handleDodoWebhook);
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(clerkMiddleware());
   app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
   app.get('/health/ready', async (_req, res) => res.json({ status: 'ready' }));
   app.use('/api/v1/auth', authRouter);
-  app.use('/api/v1/projects', requireAuth, projectsRouter);
-  app.use('/api/v1/jobs', requireAuth, jobsRouter);
-  app.use('/api/v1/creators', requireAuth, creatorsRouter);
-  app.use('/api/v1/clips', requireAuth, clipsRouter);
+  app.use('/api/v1/support', supportRouter);
+  app.use('/api/v1/admin/support', adminSupportRouter);
+  app.use('/api/v1/billing', requireAuth, billingRouter);
+  app.use('/api/v1/projects', requireAuth, requireSubscription, projectsRouter);
+  app.use('/api/v1/jobs', requireAuth, requireSubscription, jobsRouter);
+  app.use('/api/v1/creators', requireAuth, requireSubscription, creatorsRouter);
+  app.use('/api/v1/clips', requireAuth, requireSubscription, clipsRouter);
   app.use(notFound);
   app.use(errorHandler);
   return app;

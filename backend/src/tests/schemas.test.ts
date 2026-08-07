@@ -7,6 +7,7 @@ import {
   creatorCharacterSchema,
   creatorClipMutationSchema,
   creatorListQuerySchema,
+  creatorMutationSchema,
   exportPayloadSchema,
   mediaStageInputSchema,
   websiteInputSchema,
@@ -32,12 +33,22 @@ test("website input normalizes bare domains and mixed casing", () => {
 test("workflow helpers derive a lean brand profile", () => {
   const profile = buildBrandProfile("https://signal-studio.io");
   assert.equal(profile.brandName.length > 0, true);
-  assert.equal(profile.conversationStarters.length >= 3, true);
-  assert.match(profile.summary, /signal/i);
+  assert.equal(profile.customerProblems.length > 0, true);
+  assert.equal(profile.keyBenefits.length > 0, true);
+  assert.deepEqual(Object.keys(profile).sort(), [
+    "brandName",
+    "claimConstraints",
+    "customerProblems",
+    "keyBenefits",
+    "productSummary",
+    "proofPoints",
+    "targetAudience",
+  ]);
 });
 
 test("generation payload schemas set sane defaults", () => {
   assert.equal(conceptStageInputSchema.parse({}).count, 8);
+  assert.throws(() => conceptStageInputSchema.parse({ brief: {} }));
   assert.equal(mediaStageInputSchema.parse({}).forceRegenerate, false);
   const exportValue = exportPayloadSchema.parse({
     settings: { overlayText: "Publish now" },
@@ -50,6 +61,14 @@ test("generation payload schemas set sane defaults", () => {
 });
 
 test("creator library schemas normalize editor payloads", () => {
+  const unrestrictedDescription = "Creator description ".repeat(20);
+  assert.equal(
+    creatorMutationSchema.parse({
+      name: "Test",
+      description: unrestrictedDescription,
+    }).description,
+    unrestrictedDescription.trim(),
+  );
   assert.equal(
     creatorListQuerySchema.parse({ tag: " founder " }).tag,
     "founder",
@@ -116,16 +135,7 @@ test("concept prompt builders and export state stay aligned", () => {
   const videoPrompt = buildConceptVideoPrompt(profile, concept);
   const exportState = buildExportState(
     {
-      id: "ckv9z7t7f0000xkqwf3proj",
       website: "https://ContentLane.dev",
-      normalizedWebsite: "https://ContentLane.dev",
-      status: "READY",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      selectedConceptId: null,
-      selectedCharacterId: null,
-      selectedCharacter: null,
-      userId: null,
     },
     concept,
     null,

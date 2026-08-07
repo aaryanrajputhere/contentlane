@@ -42,7 +42,8 @@ const videoSources = [
   "/assets/landing/demo1.mp4",
   "/assets/landing/demo2.mp4",
   "/assets/landing/demo3.mp4",
-  "/assets/landing/demovid.mp4",
+  "/assets/landing/demo4.mp4",
+  "/assets/landing/demo5.mp4"
 ];
 
 const openai = process.env.OPENAI_API_KEY
@@ -102,31 +103,10 @@ function normalizeWebsiteAnalysisRecord(
   const rootDomain =
     readTrimmedString(record.rootDomain) ??
     (sourceUrl ? new URL(sourceUrl).host.replace(/^www\./i, "") : "unknown");
-  const homepageSource = (() => {
-    const homepage = record.homepage;
-    if (homepage && typeof homepage === "object") return homepage;
-    const selectedPages = Array.isArray(record.selectedPages)
-      ? record.selectedPages
-      : null;
-    if (
-      selectedPages &&
-      selectedPages.length > 0 &&
-      typeof selectedPages[0] === "object" &&
-      selectedPages[0] !== null
-    )
-      return selectedPages[0];
-    const rankedPages = Array.isArray(record.rankedPages)
-      ? record.rankedPages
-      : null;
-    if (
-      rankedPages &&
-      rankedPages.length > 0 &&
-      typeof rankedPages[0] === "object" &&
-      rankedPages[0] !== null
-    )
-      return rankedPages[0];
-    return record;
-  })();
+  const homepageSource =
+    record.homepage && typeof record.homepage === "object"
+      ? record.homepage
+      : record;
   const normalizedSourceUrl = sourceUrl ?? `https://${rootDomain}`;
   return {
     id: typeof record.id === "string" ? record.id : "",
@@ -152,48 +132,11 @@ function normalizeWebsiteAnalysisRecord(
 export function buildWebsiteAnalysisStorageData(
   analysis: Pick<WebsiteAnalysis, "sourceUrl" | "rootDomain" | "homepage"> & { sourceContentFingerprint?: string },
 ) {
-  const homepage = {
-    url: analysis.homepage.url,
-    title: analysis.homepage.title ?? null,
-    metaDescription: analysis.homepage.metaDescription ?? null,
-    visibleTextSnippet: analysis.homepage.visibleTextSnippet,
-    pageTypeHint: "homepage",
-    crawlDepth: 0,
-    canonicalUrl: analysis.homepage.canonicalUrl ?? null,
-    score: 100,
-    scoreReason: "Homepage is the only evidence source",
-    ...(analysis.homepage.extractionStatus
-      ? { extractionStatus: analysis.homepage.extractionStatus }
-      : {}),
-    ...(analysis.homepage.extractionSource
-      ? { extractionSource: analysis.homepage.extractionSource }
-      : {}),
-    ...(analysis.homepage.extractionError
-      ? { extractionError: analysis.homepage.extractionError }
-      : {}),
-    ...(analysis.homepage.extractedTextSnippet
-      ? { extractedTextSnippet: analysis.homepage.extractedTextSnippet }
-      : {}),
-  };
   return {
     sourceUrl: analysis.sourceUrl,
     rootDomain: analysis.rootDomain,
-    discoveredUrls: [analysis.homepage.url],
-    rankedPages: [homepage],
-    selectedPages: [homepage],
-    crawlSummary: {
-      rootUrl: analysis.sourceUrl,
-      rootDomain: analysis.rootDomain,
-      discoveredCount: 1,
-      rankedCount: 1,
-      selectedCount: 1,
-      extractedCount: analysis.homepage.extractionStatus === "failed" ? 0 : 1,
-      failedCount: analysis.homepage.extractionStatus === "failed" ? 1 : 0,
-      lowSignalFilteredCount: 0,
-      ...(analysis.sourceContentFingerprint
-        ? { sourceContentFingerprint: analysis.sourceContentFingerprint }
-        : {}),
-    },
+    homepage: analysis.homepage as unknown as Prisma.InputJsonValue,
+    sourceContentFingerprint: analysis.sourceContentFingerprint ?? null,
   };
 }
 
@@ -219,14 +162,14 @@ function escapeXml(value: string) {
 
 function conceptDescriptor(profile: BrandProfile, index: number) {
   const angle =
-    profile.conversationStarters[index % profile.conversationStarters.length] ?? `Angle ${index + 1}`;
+    profile.customerProblems[index % profile.customerProblems.length] ?? `Angle ${index + 1}`;
   const painPoint =
-    profile.realThoughts[index % profile.realThoughts.length] ??
-    profile.realThoughts[0] ??
+    profile.customerProblems[index % profile.customerProblems.length] ??
+    profile.customerProblems[0] ??
     "the main problem";
   const benefit =
+    profile.keyBenefits[index % profile.keyBenefits.length] ??
     profile.proofPoints[index % profile.proofPoints.length] ??
-    profile.proofPoints[0] ??
     "the key benefit";
   return { angle, painPoint, benefit };
 }
@@ -299,37 +242,14 @@ export function buildBrandProfile(
   const host = stripScheme(normalized).split("/")[0];
   const base = titleCase(host.replace(/^www\./, "").split(".")[0] || "brand");
   const brandName = base || "Brand";
-  const audience = `${brandName} visitors who want a faster way to understand the offer`;
   return {
     brandName,
-    product: brandName,
-    audience,
-    audienceIdentity: "Founders and Marketers",
-    audienceStage: "Problem aware",
-    emotionalDrivers: ["Need for speed", "Desire for high conversion"],
-    fears: ["Wasting time on bad creatives", "Spending money on ads that don't convert"],
-    realThoughts: ["I spend too much time editing videos", "Why isn't this automated yet?"],
-    dailyMoments: ["Staring at a blank Premiere Pro timeline", "Trying to think of a good hook"],
-    dreamOutcomes: ["Publishing high quality ads without effort", "Getting back hours of time"],
-    misconceptions: ["AI video looks fake", "It's too hard to use"],
-    objections: ["AI video looks fake", "Too expensive"],
-    proofPoints: ["Generates in seconds"],
-    socialProofMoments: ["When they see the final ad quality", "When they realize it took 10 seconds"],
-    transformation: "From blank page to ready-to-publish UGC ad",
-    uniqueMechanism: "URL-to-video AI pipeline",
-    conversationStarters: [
-      `I used to hate making ads for ${brandName}...`,
-      `Here's how ${brandName} is changing the game.`,
-      `Stop wasting time on generic content.`,
-      `I finally found a way to automate my hooks.`
-    ],
-    viralTriggers: ["Speed", "Automation"],
-    emotionalLanguage: ["shocked", "effortless", "instant"],
-    forbiddenClaims: ["Guaranteed virality"],
-    ugcScenarios: ["Reacting to generation speed", "Showing before and after"],
-    testimonials: ["This saved me 10 hours a week."],
-    cta: "Generate the next ad",
-    summary: `${brandName} positions the website as the source of truth and turns it into a content pipeline without a separate admin layer.`,
+    productSummary: `${brandName} provides a product or service described on its website.`,
+    targetAudience: `${brandName} website visitors`,
+    customerProblems: ["Finding a suitable way to solve the problem described by the website"],
+    keyBenefits: ["Use the product for its stated purpose"],
+    proofPoints: [],
+    claimConstraints: ["Do not make claims that are not supported by the website"],
   };
 }
 
@@ -384,7 +304,7 @@ function buildVideoDirection(
 }
 
 function brandOrProductName(profile: BrandProfile) {
-  return profile.brandName.trim() || profile.product.trim();
+  return profile.brandName.trim();
 }
 
 export function buildConceptCards(
@@ -394,7 +314,11 @@ export function buildConceptCards(
   return Array.from({ length: count }, (_, index) => {
     const { angle, painPoint, benefit } = conceptDescriptor(profile, index);
     const brandName = brandOrProductName(profile);
-    const productCategory = profile.product.toLowerCase();
+    const productCategory = profile.productSummary
+      .split(/\s+/)
+      .slice(0, 4)
+      .join(" ")
+      .toLowerCase();
     const hookText = [
       `how to actually use ${brandName} without overthinking it`,
       `they kept this ${productCategory} SECRET from us 💀`,
@@ -667,29 +591,12 @@ export function buildMediaAssets(
       renderConceptPosterDataUrl(
         {
           brandName: "ContentLane",
-          product: "",
-          audience: "",
-          audienceIdentity: "",
-          audienceStage: "",
-          emotionalDrivers: [""],
-          fears: [""],
-          realThoughts: [""],
-          dailyMoments: [""],
-          dreamOutcomes: [""],
-          misconceptions: [""],
-          objections: [""],
+          productSummary: "Website-to-video creative platform",
+          targetAudience: "Marketing teams",
+          customerProblems: ["Creating effective short-form videos"],
+          keyBenefits: ["Generate short-form creative faster"],
           proofPoints: [""],
-          socialProofMoments: [""],
-          transformation: "",
-          uniqueMechanism: "",
-          conversationStarters: [""],
-          viralTriggers: [""],
-          emotionalLanguage: [""],
-          forbiddenClaims: [""],
-          ugcScenarios: [""],
-          testimonials: [""],
-          cta: "",
-          summary: "",
+          claimConstraints: [""],
         } as BrandProfile,
         concept,
       );
@@ -771,7 +678,7 @@ function promptSummary(profile: BrandProfile, concept: ConceptCard) {
 }
 
 export function buildExportState(
-  project: Project,
+  project: Pick<Project, "website">,
   concept?: Pick<ConceptCard, "id" | "hookText" | "demoOverlayText"> | null,
   character?: Pick<CreatorCharacter, "id" | "source" | "name"> | null,
   selectedImageId?: string | null,

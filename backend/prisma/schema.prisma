@@ -45,6 +45,12 @@ enum MediaType {
   VIDEO
 }
 
+enum SupportRequestStatus {
+  NEW
+  OPEN
+  RESOLVED
+}
+
 model User {
   id                String         @id @default(cuid())
   clerkId           String?        @unique
@@ -56,6 +62,51 @@ model User {
   updatedAt         DateTime       @updatedAt
   projects          Project[]
   allowedEmailsMade AllowedEmail[] @relation("AllowedEmailCreatedBy")
+  dodoCustomerId    String?        @unique
+  subscriptions     Subscription[]
+  supportRequests   SupportRequest[]
+}
+
+model SupportRequest {
+  id         String               @id @default(cuid())
+  email      String
+  message    String
+  userId     String?
+  user       User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status     SupportRequestStatus @default(NEW)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  resolvedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@index([userId])
+}
+
+model Subscription {
+  id                       String   @id @default(cuid())
+  userId                   String
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dodoCustomerId           String
+  dodoSubscriptionId       String   @unique
+  dodoProductId            String
+  status                   String
+  currentPeriodStart       DateTime?
+  currentPeriodEnd         DateTime?
+  cancelAtNextBillingDate  Boolean  @default(false)
+  latestProviderEventAt    DateTime
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([userId, dodoProductId, status])
+  @@index([dodoCustomerId])
+}
+
+model DodoWebhookEvent {
+  webhookId String   @id
+  eventType String
+  eventAt   DateTime
+  createdAt DateTime @default(now())
 }
 
 model AllowedEmail {
@@ -92,50 +143,30 @@ model Project {
 }
 
 model BrandProfile {
-  id                String   @id @default(cuid())
-  projectId         String   @unique
-  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  brandName         String
-  product           String
-  audience          String
-  audienceIdentity  String
-  audienceStage     String
-  emotionalDrivers  String[]
-  fears             String[]
-  realThoughts      String[]
-  dailyMoments      String[]
-  dreamOutcomes     String[]
-  misconceptions    String[]
-  objections        String[]
-  proofPoints       String[]
-  socialProofMoments String[]
-  transformation    String
-  uniqueMechanism   String
-  conversationStarters String[]
-  viralTriggers     String[]
-  emotionalLanguage String[]
-  forbiddenClaims   String[]
-  ugcScenarios      String[]
-  testimonials      String[]
-  cta               String
-  summary           String
-  campaignStrategy  Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(cuid())
+  projectId        String   @unique
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brandName        String
+  productSummary   String
+  targetAudience   String
+  customerProblems String[]
+  keyBenefits      String[]
+  proofPoints      String[]
+  claimConstraints String[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model WebsiteAnalysis {
-  id            String   @id @default(cuid())
-  projectId     String   @unique
-  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sourceUrl     String
-  rootDomain    String
-  discoveredUrls Json
-  rankedPages   Json
-  selectedPages Json
-  crawlSummary  Json
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                       String   @id @default(cuid())
+  projectId                String   @unique
+  project                  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceUrl                String
+  rootDomain               String
+  homepage                 Json
+  sourceContentFingerprint String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 model HookConcept {

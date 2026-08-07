@@ -31,6 +31,10 @@ const schema = z.object({
     .min(1_000)
     .max(300_000)
     .default(120_000),
+  DODO_PAYMENTS_API_KEY: z.string().trim().default(""),
+  DODO_PAYMENTS_WEBHOOK_KEY: z.string().trim().default(""),
+  DODO_PAYMENTS_PRODUCT_ID: z.string().trim().default(""),
+  DODO_PAYMENTS_ENVIRONMENT: z.enum(["test_mode", "live_mode"]).default("test_mode"),
 });
 
 const parsed = schema.safeParse(process.env);

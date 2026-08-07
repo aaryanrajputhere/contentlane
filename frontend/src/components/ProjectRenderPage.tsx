@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { selectMatchedClips } from '../lib/clipMatching';
 import { creatorToCharacter } from '../lib/creatorLibrary';
+import { getCaptionStyle, type CaptionStyle } from '../lib/captionStyle';
 import type { ConceptCard, CreatorClipRecord, CreatorRecord, MediaAsset, ProjectSnapshot } from '../types/domain';
 
 const pageShellClass = 'mx-auto w-full max-w-[1440px] px-6 sm:px-8 lg:px-12';
@@ -72,7 +73,13 @@ function drawVideoCover(context: CanvasRenderingContext2D, video: HTMLVideoEleme
   context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
-function drawFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, video: HTMLVideoElement, overlayText: string) {
+function drawFrame(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  video: HTMLVideoElement,
+  overlayText: string,
+  captionStyle: CaptionStyle,
+) {
   const { width, height } = canvas;
   context.clearRect(0, 0, width, height);
   context.fillStyle = '#050505';
@@ -85,15 +92,35 @@ function drawFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement,
   context.fillStyle = gradient;
   context.fillRect(0, 0, width, height);
 
-  context.font = '700 42px ui-sans-serif, system-ui, sans-serif';
   context.textAlign = 'center';
-  context.textBaseline = 'top';
+  context.textBaseline = 'middle';
   context.lineJoin = 'round';
+  context.fillStyle = '#ffffff';
+
+  if (captionStyle === 'SNAPCHAT') {
+    context.font = '500 28px ui-sans-serif, system-ui, sans-serif';
+    const lines = wrapText(context, overlayText, width - 144);
+    const lineHeight = 34;
+    const verticalPadding = 8;
+    const captionHeight = lines.length * lineHeight + verticalPadding * 2;
+    context.fillStyle = 'rgba(0, 0, 0, 0.62)';
+    context.fillRect(0, (height - captionHeight) / 2, width, captionHeight);
+    context.fillStyle = '#ffffff';
+    const firstLineY = height / 2 - ((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, index) => {
+      context.fillText(line, width / 2, firstLineY + index * lineHeight);
+    });
+    return;
+  }
+
+  context.font = '700 42px ui-sans-serif, system-ui, sans-serif';
   context.strokeStyle = 'rgba(0, 0, 0, 0.92)';
   context.lineWidth = 8;
-  context.fillStyle = '#ffffff';
-  wrapText(context, overlayText, width - 104).forEach((line, index) => {
-    const y = Math.max(92, height * 0.13) + index * 50;
+  const lines = wrapText(context, overlayText, width - 104);
+  const lineHeight = 50;
+  const firstLineY = height / 2 - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((line, index) => {
+    const y = firstLineY + index * lineHeight;
     context.strokeText(line, width / 2, y);
     context.fillText(line, width / 2, y);
   });
@@ -141,6 +168,7 @@ async function renderSegment(
   context: CanvasRenderingContext2D,
   video: HTMLVideoElement,
   overlayText: string,
+  captionStyle: CaptionStyle,
   signal: AbortSignal,
 ) {
   const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 3;
@@ -160,7 +188,7 @@ async function renderSegment(
         return;
       }
       try {
-        drawFrame(context, canvas, video, overlayText);
+        drawFrame(context, canvas, video, overlayText, captionStyle);
       } catch (error) {
         cancelAnimationFrame(frameId);
         video.pause();
@@ -218,11 +246,12 @@ async function recordReel(options: {
       throw new DOMException('Audio playback requires a user gesture.', 'NotAllowedError');
     }
     recorder.start(1000);
+    const captionStyle = getCaptionStyle(item.concept.sortOrder);
     onMessage('Rendering creator hook');
-    await renderSegment(canvas, context, hookVideo, item.concept.hookText, signal);
+    await renderSegment(canvas, context, hookVideo, item.concept.hookText, captionStyle, signal);
     if (!signal.aborted) {
       onMessage('Rendering product demo');
-      await renderSegment(canvas, context, demoVideo, item.concept.demoOverlayText, signal);
+      await renderSegment(canvas, context, demoVideo, item.concept.demoOverlayText, captionStyle, signal);
     }
     recorder.stop();
     await stopped;

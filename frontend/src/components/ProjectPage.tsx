@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import { motion } from 'framer-motion';
 import { api, post } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
 import { selectMatchedClips } from '../lib/clipMatching';
+import { getCaptionStyle } from '../lib/captionStyle';
 import type { ConceptCard, CreatorClipRecord, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
 
 const AI_STEPS = [
@@ -21,10 +22,7 @@ const AI_STEPS = [
   'Finding competitors',
   'Detecting strongest pain point',
   'Choosing creator',
-  'Generating viral hooks',
-  'Creating Reel #1',
-  'Creating Reel #2',
-  'Creating Reel #3'
+  'Building your brand profile'
 ];
 
 function GenerationExperience({
@@ -101,6 +99,9 @@ function ReelPreviewCard({
   creator: CreatorRecord | undefined;
   clip: CreatorClipRecord | null;
 }) {
+  const captionStyle = getCaptionStyle(concept.sortOrder);
+  const usesSnapchatCaptions = captionStyle === 'SNAPCHAT';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -140,8 +141,8 @@ function ReelPreviewCard({
         </button>
       </div>
 
-      <div className="absolute left-6 right-6 top-1/2 -translate-y-1/2 text-center">
-        <p className="text-white text-[1.35rem] font-bold leading-[1.15] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+      <div className={`absolute top-1/2 -translate-y-1/2 text-center ${usesSnapchatCaptions ? 'left-0 right-0 bg-black/60 px-5 py-1.5' : 'left-6 right-6'}`}>
+        <p className={`text-white ${usesSnapchatCaptions ? 'text-[0.95rem] font-medium leading-[1.25]' : 'text-[1.35rem] font-bold leading-[1.15] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]'}`}>
           {concept.hookText}
         </p>
       </div>
@@ -160,6 +161,8 @@ export default function ProjectPage() {
   const [visibleReelCount, setVisibleReelCount] = useState(3);
   const [creatorLibrary, setCreatorLibrary] = useState<CreatorRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [regenerationMessage, setRegenerationMessage] = useState('');
+  const automaticGenerationAttempt = useRef<string | null>(null);
 
   const handleGenerationComplete = useCallback(() => {
     setGenerationComplete(true);
@@ -180,7 +183,7 @@ export default function ProjectPage() {
   // Poll project state while jobs are running
   useEffect(() => {
     if (!project) return;
-    const hasPendingJobs = project.jobs.some(j => ['PENDING', 'RUNNING'].includes(j.status));
+    const hasPendingJobs = project.jobs.some(j => ['QUEUED', 'ACTIVE'].includes(j.status));
     if (!hasPendingJobs) return;
 
     const interval = setInterval(() => {
@@ -201,28 +204,53 @@ export default function ProjectPage() {
     return () => { active = false; };
   }, []);
 
-  const generateHooks = async () => {
+  const generateHooks = useCallback(async (forceRegenerate: boolean) => {
     if (busy) return;
+    const hasDependentWork = Boolean(
+      project?.exportState
+      || project?.mediaAssets.some((asset) => asset.metadata?.kind !== 'brand-demo')
+      || project?.concepts.some((concept) => concept.generatedImageUrl || concept.generatedVideoUrl),
+    );
+    if (forceRegenerate && hasDependentWork && !window.confirm('Regenerating will remove hook media and export settings. Your website analysis, creator, and product demo will stay. Continue?')) {
+      return;
+    }
     setBusy('Generating hooks');
+    setError('');
+    setRegenerationMessage('');
     try {
-      const response = await post<ProjectResponse>(`/projects/${id}/concepts`, { count: 8, forceRegenerate: false });
+      const response = await post<ProjectResponse>(`/projects/${id}/concepts`, {
+        count: 8,
+        forceRegenerate,
+      });
       setProject(response.project);
+      setGenerationComplete(true);
+      setRegenerationMessage(
+        forceRegenerate && !response.cached
+          ? `${response.project.concepts.length} hooks regenerated.`
+          : '',
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to generate hooks');
     } finally {
       setBusy(null);
     }
-  };
+  }, [busy, id, project]);
 
   useEffect(() => {
-    if (project && !project.concepts?.length && !busy && !error) {
-      const analyzeJob = project.jobs.find(j => j.type === 'ANALYZE_WEBSITE' && ['PENDING', 'RUNNING'].includes(j.status));
-      if (!analyzeJob) {
-        generateHooks();
-      }
+    if (
+      !project?.brandProfile
+      || project.concepts.length > 0
+      || busy
+      || project.jobs.some((job) => job.type === 'GENERATE_CONCEPTS' && ['QUEUED', 'ACTIVE'].includes(job.status))
+      || automaticGenerationAttempt.current === project.id
+    ) {
+      return;
     }
-  }, [project, busy, error]);
-  
+
+    automaticGenerationAttempt.current = project.id;
+    void generateHooks(false);
+  }, [busy, generateHooks, project]);
+
   // Set selected character if none
   useEffect(() => {
     if (project && !project.selectedCharacter && creatorLibrary.length > 0 && !busy) {
@@ -261,14 +289,14 @@ export default function ProjectPage() {
     return <div className="min-h-screen bg-[#fafaf8] p-8 text-[#111111]">{error || 'Project not found.'}</div>;
   }
 
-  const isAnalyzing = project.jobs.some(j => j.type === 'ANALYZE_WEBSITE' && ['PENDING', 'RUNNING'].includes(j.status));
-  const isGeneratingHooks = busy === 'Generating hooks' || project.jobs.some(j => j.type === 'GENERATE_CONCEPTS' && ['PENDING', 'RUNNING'].includes(j.status));
+  const isAnalyzing = project.jobs.some(j => j.type === 'ANALYZE_WEBSITE' && ['QUEUED', 'ACTIVE'].includes(j.status));
+  const isGeneratingHooks = busy === 'Generating hooks' || project.jobs.some(j => j.type === 'GENERATE_CONCEPTS' && ['QUEUED', 'ACTIVE'].includes(j.status));
   
-  if (!generationComplete) {
+  if (isAnalyzing && !generationComplete) {
     return (
       <main className="min-h-screen bg-[#fafaf8] text-[#111111] flex flex-col">
-        <header className="px-8 py-6">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.3em] text-[#111111]">ContentLane</p>
+        <header className="mx-auto flex w-full max-w-[1400px] items-center px-6 pt-5 sm:px-8 lg:px-12">
+          <p className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</p>
         </header>
         <div className="flex-1 flex items-center">
           <GenerationExperience 
@@ -277,6 +305,38 @@ export default function ProjectPage() {
             isGeneratingHooks={isGeneratingHooks} 
           />
         </div>
+      </main>
+    );
+  }
+
+  if (!project.concepts.length) {
+    return (
+      <main className="min-h-screen bg-[#fafaf8] text-[#111111] flex flex-col">
+        <header className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 pt-5 sm:px-8 lg:px-12">
+          <p className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</p>
+          <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium hover:bg-[#f3f3f3]">
+            <ArrowLeft size={16} /> Back
+          </button>
+        </header>
+        {error ? (
+          <div className="grid flex-1 place-items-center px-6 py-16">
+            <div className="w-full max-w-lg rounded-[28px] border border-black/8 bg-white p-8 text-center shadow-[0_24px_70px_rgba(36,29,77,0.08)]">
+              <h1 className="text-3xl font-extrabold tracking-[-0.04em]">We couldn’t generate your hooks.</h1>
+              <p role="alert" className="mt-4 text-sm leading-6 text-[#686868]">{error}</p>
+              <button type="button" onClick={() => void generateHooks(false)} disabled={isGeneratingHooks} className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-[#111] px-7 py-3.5 text-sm font-bold text-white disabled:opacity-50">
+                <Sparkles size={16} /> {isGeneratingHooks ? 'Generating…' : 'Try again'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center">
+            <GenerationExperience
+              onComplete={handleGenerationComplete}
+              isAnalyzing={isAnalyzing}
+              isGeneratingHooks={isGeneratingHooks || !project.concepts.length}
+            />
+          </div>
+        )}
       </main>
     );
   }
@@ -292,26 +352,49 @@ export default function ProjectPage() {
 
   return (
     <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
-      <header className="px-6 sm:px-12 py-6 flex justify-between items-center bg-white/50 backdrop-blur-md sticky top-0 z-50 border-b border-black/5">
-        <p className="text-[13px] font-semibold uppercase tracking-[0.3em] text-[#111111]">ContentLane</p>
-        <button
-          onClick={() => navigate('/')}
-          className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[#111111] hover:bg-[#f3f3f3] transition"
-        >
-          <ArrowLeft size={16} />
-          Back
-        </button>
+      <header className="sticky top-0 z-50 border-b border-black/5 bg-white/50 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 py-5 sm:px-8 lg:px-12">
+          <p className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</p>
+          <button
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[#111111] transition hover:bg-[#f3f3f3]"
+          >
+            <ArrowLeft size={16} />
+            Back
+          </button>
+        </div>
       </header>
 
       <section className="mx-auto w-full max-w-[1200px] px-6 sm:px-12 pt-16 pb-24">
-        <div className="max-w-2xl mb-12">
-          <h1 className="text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold leading-[1.05] tracking-[-0.05em] text-[#111111] mb-4">
-            Your viral Reels are ready.
-          </h1>
-          <p className="text-[1.15rem] leading-[1.6] text-[#666666]">
-            We chose <span className="font-semibold text-[#111111]">{selectedCreatorRecord?.name || 'a creator'}</span> because they match your audience perfectly. Here are {displayConcepts.length} concepts ready to go.
-          </p>
+        <div className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-2xl">
+            <h1 className="mb-4 text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold leading-[1.05] tracking-[-0.05em] text-[#111111]">
+              Your viral Reels are ready.
+            </h1>
+            <p className="text-[1.15rem] leading-[1.6] text-[#666666]">
+              We chose <span className="font-semibold text-[#111111]">{selectedCreatorRecord?.name || 'a creator'}</span> because they match your audience perfectly. Here are {displayConcepts.length} concepts ready to go.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void generateHooks(true)}
+            disabled={isGeneratingHooks}
+            className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold text-[#111111] transition hover:border-black/20 hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 sm:self-auto"
+          >
+            {isGeneratingHooks ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            {isGeneratingHooks ? 'Regenerating…' : 'Regenerate hooks'}
+          </button>
         </div>
+        {(regenerationMessage || error) && (
+          <div className="mb-8">
+          {regenerationMessage && (
+            <p role="status" className="inline-flex items-center gap-2 rounded-full bg-[#dcfce7] px-4 py-2 text-sm font-semibold text-[#15803d]">
+              <Check size={15} /> {regenerationMessage}
+            </p>
+          )}
+          {error && <p role="alert" className="text-sm font-medium text-red-600">{error}</p>}
+          </div>
+        )}
 
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {displayConcepts.map((concept, index) => (

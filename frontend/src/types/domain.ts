@@ -4,6 +4,9 @@ export type JobStatus = 'QUEUED' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'CANCELLE
 export type JobType = 'ANALYZE_WEBSITE' | 'GENERATE_CONCEPTS' | 'GENERATE_MEDIA' | 'SAVE_EXPORT' | 'GENERATE_HOOKS' | 'GENERATE_SCRIPTS';
 export type MediaType = 'IMAGE' | 'VIDEO';
 export type CharacterSource = 'preset' | 'custom';
+export type SupportStatus = 'NEW' | 'OPEN' | 'RESOLVED';
+export interface SupportRequest { id: string; email: string; message: string; userId: string | null; status: SupportStatus; createdAt: string; updatedAt: string; resolvedAt: string | null; user: { id: string; name: string | null; email: string } | null; }
+export interface SupportListResponse { requests: SupportRequest[]; counts: Record<SupportStatus, number>; pagination: { page: number; pageSize: number; total: number; totalPages: number }; }
 
 export interface AuthUser {
   id: string;
@@ -76,15 +79,12 @@ export interface BrandProfile {
   id: string;
   projectId: string;
   brandName: string;
-  tagline: string;
-  audience: string;
-  painPoints: string[];
-  benefits: string[];
-  voice: string;
-  offer: string;
-  cta: string;
-  angles: string[];
-  summary: string;
+  productSummary: string;
+  targetAudience: string;
+  customerProblems: string[];
+  keyBenefits: string[];
+  proofPoints: string[];
+  claimConstraints: string[];
   createdAt: string;
   updatedAt: string;
 }

@@ -4,7 +4,7 @@ import { ArrowRight, Clock3, Check, Eye, Gauge, Loader2, Play, Rocket, ShieldChe
 import { motion, useReducedMotion } from 'framer-motion';
 import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react';
 import { useAuth } from '../lib/auth';
-import { post } from '../lib/api';
+import { ApiClientError, post } from '../lib/api';
 import type { ProjectResponse } from '../types/domain';
 
 type PreviewCardProps = {
@@ -54,7 +54,7 @@ const previewCards: PreviewCardProps[] = [
     titleClassName: 'max-w-[8.5rem]',
   },
   {
-    src: '/assets/landing/demovid.mp4',
+    src: '/assets/landing/demo4.mp4',
     title: 'Your daily\nproductivity boost.',
     metric: '8.2K',
     accent: 'from-zinc-100/90 via-white/18 to-white/95',
@@ -63,7 +63,7 @@ const previewCards: PreviewCardProps[] = [
     titleClassName: 'max-w-[8.5rem]',
   },
   {
-    src: '/assets/landing/demovid.mp4',
+    src: '/assets/landing/demo5.mp4',
     title: 'Stop wasting time on\nmanual work.',
     metric: '10.3K',
     accent: 'from-neutral-100/90 via-white/18 to-white/95',
@@ -125,35 +125,13 @@ const testimonials = [
   },
 ] as const;
 
-const pricingPlans = [
-  {
-    name: 'Starter',
-    price: '$49',
-    period: '/mo',
-    description: 'For solo founders testing a first content engine.',
-    features: ['Website analysis', 'Hook generation', 'Basic export workflow'],
-    cta: 'Start free trial',
-    featured: false,
-  },
-  {
-    name: 'Growth',
-    price: '$149',
-    period: '/mo',
-    description: 'For teams that need repeatable creative production.',
-    features: ['Everything in Starter', 'Priority generation', 'Brand profile and asset library', 'Editor-ready output'],
-    cta: 'Choose Growth',
-    featured: true,
-  },
-  {
-    name: 'Studio',
-    price: 'Custom',
-    period: '',
-    description: 'For agencies and teams running content at higher volume.',
-    features: ['Multi-brand workflows', 'Custom onboarding', 'Collaboration support', 'Volume-based pricing'],
-    cta: 'Talk to sales',
-    featured: false,
-  },
-] as const;
+const pricingPlan = {
+  name: 'ContentLane',
+  price: '$49',
+  period: '/month',
+  description: 'One plan for the full website-to-video workflow.',
+  features: ['Website and brand analysis', 'Hook-first scripts and visuals', 'Browser editing and exports'],
+} as const;
 
 const faqs = [
   {
@@ -258,7 +236,7 @@ export default function LandingPage() {
     const value = website.trim();
     if (!value || loading) return;
     if (status !== 'authenticated') {
-      navigate('/signup');
+      navigate('/signup', { state: { from: { pathname: '/billing' } } });
       return;
     }
 
@@ -267,9 +245,21 @@ export default function LandingPage() {
     setMessage('Starting analysis');
 
     try {
-      const response = await post<ProjectResponse>('/projects', { website: value });
-      navigate(`/projects/${response.project.id}`);
+      const analysisResponse = await post<ProjectResponse>('/projects', { website: value });
+      let project = analysisResponse.project;
+
+      if (project.concepts.length === 0) {
+        setMessage('Generating 8 hooks');
+        const hooksResponse = await post<ProjectResponse>(`/projects/${project.id}/concepts`, { count: 8 });
+        project = hooksResponse.project;
+      }
+
+      navigate(`/projects/${project.id}`);
     } catch (caught) {
+      if (caught instanceof ApiClientError && caught.code === 'SUBSCRIPTION_REQUIRED') {
+        navigate('/billing');
+        return;
+      }
       setError(caught instanceof Error ? caught.message : 'Unable to start project');
     } finally {
       setLoading(false);
@@ -304,10 +294,15 @@ export default function LandingPage() {
         <div className="flex items-center gap-3">
           {user?.role === 'ADMIN' ? (
             <button
-              onClick={() => navigate('/admin/creators')}
+              onClick={() => navigate('/admin')}
               className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black"
             >
-              Creator admin
+              Admin panel
+            </button>
+          ) : null}
+          {status === 'authenticated' && user?.role !== 'ADMIN' ? (
+            <button onClick={() => navigate('/billing')} className="hidden rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black sm:block">
+              Manage billing
             </button>
           ) : null}
           <Show when="signed-out">
@@ -484,37 +479,31 @@ export default function LandingPage() {
       <section id="pricing" className="mx-auto w-full max-w-[1440px] px-6 pb-8 pt-10 sm:px-8 lg:px-12 lg:pt-14">
         <SectionHeading
           eyebrow="Pricing"
-          title="Simple tiers for testing, scaling, or running at volume"
-          description="Keep pricing visible on the page so teams can self-select the right entry point instead of hunting for a sales route."
+          title="One plan for the whole creative lane"
+          description="Full access for $49 USD each month. Charged immediately, with no trial and no hidden tiers."
         />
 
-        <div className="mt-10 grid gap-5 xl:grid-cols-3">
-          {pricingPlans.map((plan) => (
+        <div className="mx-auto mt-10 max-w-2xl">
             <div
-              key={plan.name}
-              className={`rounded-[30px] border p-6 shadow-[0_18px_42px_rgba(0,0,0,0.05)] ${plan.featured ? 'border-[#111111] bg-[#111111] text-white' : 'border-[#ececec] bg-white text-[#111111]'}`}
+              className="rounded-[30px] border border-[#111111] bg-[#111111] p-8 text-white shadow-[0_18px_42px_rgba(0,0,0,0.12)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{plan.name}</h3>
-                  <p className={`mt-2 text-sm leading-6 ${plan.featured ? 'text-white/70' : 'text-[#666666]'}`}>{plan.description}</p>
+                  <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{pricingPlan.name}</h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">{pricingPlan.description}</p>
                 </div>
-                {plan.featured ? (
-                  <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111]">
-                    Recommended
-                  </span>
-                ) : null}
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111]">Complete plan</span>
               </div>
 
               <div className="mt-7 flex items-end gap-1">
-                <span className="text-[2.5rem] font-extrabold tracking-[-0.07em]">{plan.price}</span>
-                <span className={`pb-1 text-sm ${plan.featured ? 'text-white/70' : 'text-[#666666]'}`}>{plan.period}</span>
+                <span className="text-[2.5rem] font-extrabold tracking-[-0.07em]">{pricingPlan.price}</span>
+                <span className="pb-1 text-sm text-white/70">{pricingPlan.period}</span>
               </div>
 
               <ul className="mt-6 space-y-3">
-                {plan.features.map((feature) => (
-                  <li key={feature} className={`flex items-start gap-3 text-sm leading-6 ${plan.featured ? 'text-white/90' : 'text-[#444444]'}`}>
-                    <Check size={16} className={`mt-0.5 shrink-0 ${plan.featured ? 'text-white' : 'text-[#111111]'}`} />
+                {pricingPlan.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm leading-6 text-white/90">
+                    <Check size={16} className="mt-0.5 shrink-0 text-white" />
                     <span>{feature}</span>
                   </li>
                 ))}
@@ -522,13 +511,13 @@ export default function LandingPage() {
 
               <button
                 type="button"
-                className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${plan.featured ? 'bg-white text-[#111111] hover:-translate-y-0.5 hover:bg-[#f3f3f3] focus-visible:ring-white/30 focus-visible:ring-offset-[#111111]' : 'border border-[#111111] bg-white text-[#111111] hover:-translate-y-0.5 hover:bg-[#fafafa] focus-visible:ring-black/20 focus-visible:ring-offset-white'}`}
+                onClick={() => navigate(status === 'authenticated' ? '/billing' : '/signup', status === 'authenticated' ? undefined : { state: { from: { pathname: '/billing' } } })}
+                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
               >
-                {plan.cta}
+                Subscribe for $49/month
                 <ArrowRight size={16} />
               </button>
             </div>
-          ))}
         </div>
       </section>
 
