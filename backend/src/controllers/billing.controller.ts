@@ -14,7 +14,7 @@ export const getBillingStatus: RequestHandler = async (req, res, next) => {
     const isAdmin = req.user.role === 'ADMIN';
     res.json({
       plan: 'ContentLane',
-      price: 49,
+      price: 19,
       currency: 'USD',
       status: isAdmin ? 'active' : subscription?.status ?? 'none',
       hasAccess: isAdmin || subscription?.status === 'active',

@@ -64,6 +64,10 @@ For live generation, set `AI_PROVIDER_MODE=live` and provide every credential do
 Readiness endpoints are `GET /health/live` and `GET /health/ready`.
 In development, an admin-only BullMQ dashboard is available at `http://localhost:3000/admin/queues`.
 
+## Artwork attribution
+
+Exported reel captions use [Twemoji](https://github.com/jdecked/twemoji) artwork, copyright Twitter, Inc. and other contributors, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ## Security model
 
 - Authentication uses an `HttpOnly`, `SameSite=Lax` cookie.

@@ -29,20 +29,17 @@ const AI_STEPS = [
   'Building your brand profile'
 ];
 
+const HOOK_SELECTION_TARGET = 8;
+const HOOK_PREFETCH_SELECTION_THRESHOLD = 5;
+const HOOK_PREFETCH_REMAINING_THRESHOLD = 3;
+const MAX_HOOKS_PER_PROJECT = 24;
+
 type HookRetryFailure = {
   phase: 'feedback' | 'generation';
   message: string;
 };
 
-function GenerationExperience({
-  onComplete,
-  isAnalyzing,
-  isGeneratingHooks,
-}: {
-  onComplete: () => void;
-  isAnalyzing: boolean;
-  isGeneratingHooks: boolean;
-}) {
+function GenerationExperience() {
   const [currentStep, setCurrentStep] = useState(0);
   const prefersReducedMotion = useReducedMotion();
 
@@ -55,25 +52,14 @@ function GenerationExperience({
   }, []);
 
   useEffect(() => {
-    if (currentStep >= AI_STEPS.length) {
-      // The checklist is only a presentation layer. Do not keep the whole
-      // project page hidden when a completed stage is still reported as
-      // ACTIVE (for example while the final database update is settling).
-      // ProjectPage continues polling the real job state below.
-      onComplete();
-      return;
-    }
+    if (currentStep >= AI_STEPS.length - 1) return;
 
     const timer = setTimeout(() => {
-      // Pause at step 5 if hooks are still generating
-      if (currentStep === 5 && isGeneratingHooks) {
-        return;
-      }
       setCurrentStep((s) => s + 1);
     }, 1800);
 
     return () => clearTimeout(timer);
-  }, [currentStep, isAnalyzing, isGeneratingHooks, onComplete]);
+  }, [currentStep]);
 
   return (
     <div className="flex min-h-[70vh] w-full items-center justify-center px-6">
@@ -131,14 +117,12 @@ function ReelPreviewCard({
   clip,
   selected,
   onToggle,
-  showSelectionIndicator,
 }: {
   concept: ConceptCard;
   creator: CreatorRecord | undefined;
   clip: CreatorClipRecord | null;
   selected: boolean;
   onToggle?: () => void;
-  showSelectionIndicator: boolean;
 }) {
   const captionStyle = getCaptionStyle(concept.sortOrder);
   const usesSnapchatCaptions = captionStyle === 'SNAPCHAT';
@@ -187,12 +171,6 @@ function ReelPreviewCard({
         </div>
       </div>
 
-      {showSelectionIndicator ? (
-        <div className={`absolute right-5 top-16 grid h-8 w-8 place-items-center rounded-full border-2 transition ${selected ? 'border-white bg-white text-[#111111]' : 'border-white/70 bg-black/20 text-transparent'}`} aria-hidden="true">
-          <Check size={17} strokeWidth={3} />
-        </div>
-      ) : null}
-
       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
         <button className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/40 hover:bg-white/30 transition">
           <Play size={28} className="ml-1" fill="currentColor" />
@@ -200,7 +178,7 @@ function ReelPreviewCard({
       </div>
 
       <div className={`absolute top-1/2 -translate-y-1/2 text-center ${usesSnapchatCaptions ? 'left-0 right-0 bg-black/60 px-5 py-1.5' : 'left-6 right-6'}`}>
-        <p className={`text-white ${usesSnapchatCaptions ? 'text-[0.95rem] font-medium leading-[1.25]' : 'text-[1.35rem] font-bold leading-[1.15] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]'}`}>
+        <p className={`text-white ${usesSnapchatCaptions ? 'text-[0.875rem] font-medium leading-[1.25]' : 'text-base font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]'}`}>
           {concept.hookText}
         </p>
       </div>
@@ -296,7 +274,7 @@ function SwipeReview({
           className={`relative z-10 h-full w-full ${isTransitioning ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
           whileTap={prefersReducedMotion ? undefined : { scale: 1.015 }}
         >
-          <ReelPreviewCard concept={current.concept} creator={current.creator} clip={current.clip} selected={false} onToggle={() => undefined} showSelectionIndicator={false} />
+          <ReelPreviewCard concept={current.concept} creator={current.creator} clip={current.clip} selected={false} onToggle={() => undefined} />
           <motion.div style={{ opacity: keepTint }} className="pointer-events-none absolute inset-0 rounded-[28px] bg-[#22c55e]" />
           <motion.div style={{ opacity: rejectTint }} className="pointer-events-none absolute inset-0 rounded-[28px] bg-[#ef4444]" />
           <motion.div style={{ opacity: keepOpacity }} className="pointer-events-none absolute left-5 top-5 -rotate-6 rounded-lg border-2 border-white bg-[#166534] px-4 py-2 text-sm font-extrabold uppercase tracking-[0.14em] text-white shadow-lg">Keep</motion.div>
@@ -322,22 +300,20 @@ function SwipeReview({
 export default function ProjectPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion();
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  const [generationComplete, setGenerationComplete] = useState(false);
   const [creatorLibrary, setCreatorLibrary] = useState<CreatorRecord[]>([]);
   const [creatorLibraryLoading, setCreatorLibraryLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [regenerationMessage, setRegenerationMessage] = useState('');
   const [hookRetryFailure, setHookRetryFailure] = useState<HookRetryFailure | null>(null);
+  const [isUploadSectionVisible, setIsUploadSectionVisible] = useState(false);
   const automaticGenerationAttempt = useRef<string | null>(null);
   const automaticCreatorSelectionAttempt = useRef<string | null>(null);
-
-  const handleGenerationComplete = useCallback(() => {
-    setGenerationComplete(true);
-  }, []);
+  const uploadSectionRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}`);
@@ -384,6 +360,21 @@ export default function ProjectPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const uploadSection = uploadSectionRef.current;
+    if (!uploadSection) {
+      setIsUploadSectionVisible(false);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsUploadSectionVisible(entry.isIntersecting),
+      { threshold: 0.15 },
+    );
+    observer.observe(uploadSection);
+    return () => observer.disconnect();
+  }, [project]);
+
   const generateHooks = useCallback(async (forceRegenerate: boolean, append = false) => {
     if (busy) return;
     const hasDependentWork = Boolean(
@@ -413,7 +404,6 @@ export default function ProjectPage() {
         return;
       }
       setProject(response.project);
-      setGenerationComplete(true);
       setHookRetryFailure(null);
       setRegenerationMessage(
         append && !response.cached
@@ -449,7 +439,6 @@ export default function ProjectPage() {
     try {
       const response = await post<ProjectResponse>(`/projects/${id}/analyze`, { forceRegenerate: false });
       setProject(response.project);
-      setGenerationComplete(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to analyze website');
     } finally {
@@ -475,9 +464,15 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!project || busy) return;
     const likedCount = project.concepts.filter((concept) => concept.reviewDecision === 'LIKED').length;
-    const hasUnreviewed = project.concepts.some((concept) => concept.reviewDecision === null);
+    const unreviewedCount = project.concepts.filter((concept) => concept.reviewDecision === null).length;
     const attemptKey = `${project.id}:${project.concepts.length}`;
-    if (likedCount < 8 && !hasUnreviewed && automaticGenerationAttempt.current !== attemptKey) {
+    const shouldAppendHooks = likedCount < HOOK_SELECTION_TARGET
+      && project.concepts.length < MAX_HOOKS_PER_PROJECT
+      && (
+        unreviewedCount === 0
+        || (likedCount >= HOOK_PREFETCH_SELECTION_THRESHOLD && unreviewedCount <= HOOK_PREFETCH_REMAINING_THRESHOLD)
+      );
+    if (shouldAppendHooks && automaticGenerationAttempt.current !== attemptKey) {
       automaticGenerationAttempt.current = attemptKey;
       void generateHooks(false, true);
     }
@@ -559,31 +554,18 @@ export default function ProjectPage() {
     return <div className="min-h-screen bg-[#fafaf8] p-8 text-[#111111]">{error || 'Project not found.'}</div>;
   }
 
-  const isAnalyzing = project.jobs.some(j => j.type === 'ANALYZE_WEBSITE' && ['QUEUED', 'ACTIVE'].includes(j.status));
   const isGeneratingHooks = busy === 'Generating hooks' || project.jobs.some(j => j.type === 'GENERATE_CONCEPTS' && ['QUEUED', 'ACTIVE'].includes(j.status));
-  
-  if (isAnalyzing && !generationComplete) {
-    return (
-      <main className="min-h-screen bg-[#fafaf8] text-[#111111] flex flex-col">
-        <div className="flex-1 flex items-center">
-          <GenerationExperience 
-            onComplete={handleGenerationComplete} 
-            isAnalyzing={isAnalyzing} 
-            isGeneratingHooks={isGeneratingHooks} 
-          />
-        </div>
-      </main>
-    );
-  }
 
   if (!project.concepts.length) {
     return (
       <main className="min-h-screen bg-[#fafaf8] text-[#111111] flex flex-col">
-        <header className="mx-auto flex w-full max-w-[1400px] items-center justify-end px-6 pt-5 sm:px-8 lg:px-12">
-          <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium hover:bg-[#f3f3f3]">
-            <ArrowLeft size={16} /> Back
-          </button>
-        </header>
+        {error ? (
+          <header className="mx-auto flex w-full max-w-[1400px] items-center justify-end px-6 pt-5 sm:px-8 lg:px-12">
+            <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium hover:bg-[#f3f3f3]">
+              <ArrowLeft size={16} /> Back
+            </button>
+          </header>
+        ) : null}
         {error ? (
           <div className="grid flex-1 place-items-center px-6 py-16">
             <div className="w-full max-w-lg rounded-[28px] border border-black/8 bg-white p-8 text-center shadow-[0_24px_70px_rgba(36,29,77,0.08)]">
@@ -596,11 +578,7 @@ export default function ProjectPage() {
           </div>
         ) : (
           <div className="flex-1 flex items-center">
-            <GenerationExperience
-              onComplete={handleGenerationComplete}
-              isAnalyzing={isAnalyzing}
-              isGeneratingHooks={isGeneratingHooks || !project.concepts.length}
-            />
+            <GenerationExperience />
           </div>
         )}
       </main>
@@ -627,7 +605,8 @@ export default function ProjectPage() {
     ? assignmentByConceptId.get(unreviewedConcepts[0].id)
     : undefined;
   const reviewAssignments = nextUnreviewedAssignment ? [nextUnreviewedAssignment] : [];
-  const reviewComplete = likedConcepts.length === 8;
+  const reviewComplete = likedConcepts.length === HOOK_SELECTION_TARGET;
+  const hookLimitReached = project.concepts.length >= MAX_HOOKS_PER_PROJECT;
   const resetReviews = async () => {
     const hasDependentWork = Boolean(project.exportState || project.mediaAssets.some((asset) => asset.metadata?.kind !== 'brand-demo') || project.concepts.some((concept) => concept.generatedImageUrl || concept.generatedVideoUrl));
     if (hasDependentWork && !window.confirm('Reviewing again will remove generated hook media and render settings. Your analysis, creators, product demo, and generated hooks will stay. Continue?')) return;
@@ -658,20 +637,12 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      <section className={`mx-auto w-full max-w-[1200px] px-4 sm:px-8 lg:px-12 ${reviewComplete ? 'pb-24 pt-16' : 'flex min-h-[calc(100dvh-79px)] flex-col py-4 sm:py-5'}`}>
+      <section className={`mx-auto w-full max-w-[1200px] px-4 sm:px-8 lg:px-12 ${reviewComplete ? 'pb-24 pt-10 sm:pt-12' : 'flex min-h-[calc(100dvh-79px)] flex-col py-4 sm:py-5'}`}>
         {reviewComplete && (
-        <div className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div className="max-w-2xl">
-            <h1 className="mb-4 text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold leading-[1.05] tracking-[-0.05em] text-[#111111]">
-              Tune the hooks before you build.
-            </h1>
-            <p className="text-[1.15rem] leading-[1.6] text-[#666666]">
-              Review each opening one at a time. Your choices teach the next batch what to lean into — and what to leave behind.
-            </p>
-            <p className="mt-4 text-sm font-medium text-[#8c8c8c]">
-              Your eight selected hooks are ready to become reels.
-            </p>
-          </div>
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-[clamp(2rem,4vw,3.25rem)] font-extrabold leading-[1.05] tracking-[-0.045em] text-[#111111]">
+            Your hooks are ready.
+          </h1>
           {hookRetryFailure && reviewComplete && (
             <button
               type="button"
@@ -771,8 +742,16 @@ export default function ProjectPage() {
                 <Loader2 size={28} className="animate-spin motion-reduce:animate-none" />
                 <p className="font-semibold">Building eight more hooks from your choices…</p>
               </div>
+            ) : unreviewedConcepts.length === 0 && hookLimitReached ? (
+              <div role="status" className="flex min-h-80 flex-col items-center justify-center gap-2 px-6 text-center">
+                <p className="font-semibold">You’ve reviewed the maximum of 24 hooks.</p>
+                <p className="max-w-md text-sm text-[#666]">Review the campaign again to reconsider your choices and select eight hooks.</p>
+                <button type="button" onClick={() => void resetReviews()} disabled={busy !== null} className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold disabled:opacity-50">
+                  <RotateCcw size={16} /> Review all 24 again
+                </button>
+              </div>
             ) : <SwipeReview assignments={reviewAssignments} onDecision={decideHook} />}
-            {hookRetryFailure?.phase === 'generation' && unreviewedConcepts.length === 0 ? (
+            {hookRetryFailure?.phase === 'generation' && unreviewedConcepts.length === 0 && !hookLimitReached ? (
               <button type="button" onClick={() => void generateHooks(false, true)} disabled={busy !== null} className="mt-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold disabled:opacity-50">
                 <Sparkles size={16} /> Retry next batch
               </button>
@@ -801,7 +780,6 @@ export default function ProjectPage() {
               creator={assignment.creator}
               clip={assignment.clip}
               selected
-              showSelectionIndicator
             />
           ))}
         </div>
@@ -811,7 +789,7 @@ export default function ProjectPage() {
           All 8 selected hooks are ready to render
         </div>
 
-        <div className="bg-[#111111] rounded-[40px] p-8 md:p-14 text-white shadow-2xl relative overflow-hidden">
+        <div ref={uploadSectionRef} className="relative scroll-mt-28 overflow-hidden rounded-[40px] bg-[#111111] p-8 text-white shadow-2xl md:p-14">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
           
           <div className="grid md:grid-cols-[1fr_0.8fr] gap-12 items-center relative z-10">
@@ -866,6 +844,31 @@ export default function ProjectPage() {
         </>
         )}
       </section>
+
+      {reviewComplete && !brandDemoAsset && !isUploadSectionVisible ? (
+        <aside
+          aria-label="Next step"
+          className="fixed bottom-20 left-1/2 z-[60] flex w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col gap-3 rounded-[18px] border border-black/10 bg-white/95 p-3 shadow-[0_16px_45px_rgba(0,0,0,0.16)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:px-4 lg:bottom-6"
+        >
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#15803d]">Next step</p>
+            <p className="mt-0.5 text-sm font-extrabold tracking-[-0.02em] text-[#111111]">
+              Add your product demo
+              <span className="hidden font-normal tracking-normal text-[#777777] sm:inline"> · Pair it with all {displayConcepts.length} hooks</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => uploadSectionRef.current?.scrollIntoView({
+              behavior: prefersReducedMotion ? 'auto' : 'smooth',
+              block: 'start',
+            })}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-[#111111] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2"
+          >
+            <Upload size={14} /> Upload demo
+          </button>
+        </aside>
+      ) : null}
     </main>
   );
 }

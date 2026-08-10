@@ -483,6 +483,75 @@ test("hook preferences accept a complete review and reject invalid decision sets
   });
 });
 
+test("hook batches prefetch after five selections and stop at 24 hooks", async () => {
+  await withServer(async (baseUrl) => {
+    const cookie = await signupAndGetCookie(baseUrl, {
+      email: `project-prefetch-${Date.now()}@example.com`,
+      password: "password123",
+      name: "Hook Prefetch Reviewer",
+    });
+    const createdResponse = await fetch(`${baseUrl}/api/v1/projects`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ website: `${testWebsitePrefix}prefetch-${Date.now()}.example.com` }),
+    });
+    assert.equal(createdResponse.status, 201);
+    const created = (await createdResponse.json()) as { project: { id: string } };
+    await waitForBrandProfile(baseUrl, created.project.id, cookie);
+
+    const conceptsUrl = `${baseUrl}/api/v1/projects/${created.project.id}/concepts`;
+    const generate = (append = false) => fetch(conceptsUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ count: 8, append }),
+    });
+    const review = (conceptId: string, decision: "LIKED" | "REJECTED") => fetch(
+      `${conceptsUrl}/${conceptId}/review`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ decision }),
+      },
+    );
+
+    const initialResponse = await generate();
+    assert.equal(initialResponse.status, 200);
+    const initial = (await initialResponse.json()) as { project: { concepts: Array<{ id: string }> } };
+    assert.equal(initial.project.concepts.length, 8);
+
+    const earlyAppend = await generate(true);
+    assert.equal(earlyAppend.status, 409);
+    const earlyError = (await earlyAppend.json()) as { error: { code: string } };
+    assert.equal(earlyError.error.code, "HOOKS_PENDING_REVIEW");
+
+    for (const concept of initial.project.concepts.slice(0, 5)) {
+      const response = await review(concept.id, "LIKED");
+      assert.equal(response.status, 200);
+    }
+
+    const prefetchedResponse = await generate(true);
+    assert.equal(prefetchedResponse.status, 200);
+    const prefetched = (await prefetchedResponse.json()) as { project: { concepts: Array<{ id: string; reviewDecision: string | null }> } };
+    assert.equal(prefetched.project.concepts.length, 16);
+
+    const unreviewed = prefetched.project.concepts.filter((concept) => concept.reviewDecision === null);
+    for (const concept of unreviewed.slice(0, 8)) {
+      const response = await review(concept.id, "REJECTED");
+      assert.equal(response.status, 200);
+    }
+
+    const finalBatchResponse = await generate(true);
+    assert.equal(finalBatchResponse.status, 200);
+    const finalBatch = (await finalBatchResponse.json()) as { project: { concepts: Array<{ id: string }> } };
+    assert.equal(finalBatch.project.concepts.length, 24);
+
+    const overLimitResponse = await generate(true);
+    assert.equal(overLimitResponse.status, 409);
+    const overLimitError = (await overLimitResponse.json()) as { error: { code: string } };
+    assert.equal(overLimitError.error.code, "HOOK_LIMIT_REACHED");
+  });
+});
+
 test("project routes reject anonymous requests", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/v1/projects`, {

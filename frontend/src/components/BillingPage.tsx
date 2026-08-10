@@ -67,7 +67,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
           <div className="bg-[#111111] p-8 text-white sm:p-10">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">One plan. Full access.</p>
             <div className="mt-8 flex items-end gap-2">
-              <span className="text-6xl font-extrabold tracking-[-0.08em]">$49</span>
+              <span className="text-6xl font-extrabold tracking-[-0.08em]">${billing?.price ?? 19}</span>
               <span className="pb-2 text-sm text-white/60">USD / month</span>
             </div>
             <ul className="mt-10 space-y-4 text-sm text-white/80">
@@ -97,7 +97,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
               className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-[#111111] px-6 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading || waiting ? <Loader2 size={17} className="animate-spin" /> : <CreditCard size={17} />}
-              {waiting ? 'Confirming payment' : billing?.hasAccess ? 'Manage billing' : 'Subscribe for $49/month'}
+              {waiting ? 'Confirming payment' : billing?.hasAccess ? 'Manage billing' : `Subscribe for $${billing?.price ?? 19}/month`}
             </button>
             <button type="button" onClick={() => navigate('/')} className="mt-4 text-sm font-medium text-[#666666] hover:text-[#111111]">Back to ContentLane</button>
           </div>

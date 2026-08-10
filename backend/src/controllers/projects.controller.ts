@@ -41,6 +41,11 @@ import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
 import { creatorToCharacter } from "../lib/creator-library";
 import { renderQueue, type RenderJobInput } from "../lib/render-queue";
 
+const HOOK_SELECTION_TARGET = 8;
+const HOOK_PREFETCH_SELECTION_THRESHOLD = 5;
+const HOOK_PREFETCH_REMAINING_THRESHOLD = 3;
+const MAX_HOOKS_PER_PROJECT = 24;
+
 function toBrandProfilePrismaData(
   profile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
 ) {
@@ -725,8 +730,13 @@ export const generateConcepts: RequestHandler = async (req, res) => {
   const rejectedReviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.REJECTED);
   const unreviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === null);
   if (append) {
-    if (likedConcepts.length >= 8) throw new ApiError(409, "HOOK_SELECTION_COMPLETE", "Eight hooks are already selected");
-    if (unreviewedConcepts.length > 0) throw new ApiError(409, "HOOKS_PENDING_REVIEW", "Review the remaining hooks before generating another batch");
+    if (likedConcepts.length >= HOOK_SELECTION_TARGET) throw new ApiError(409, "HOOK_SELECTION_COMPLETE", "Eight hooks are already selected");
+    if (project.concepts.length + count > MAX_HOOKS_PER_PROJECT) throw new ApiError(409, "HOOK_LIMIT_REACHED", "A project can generate at most 24 hooks");
+    const canPrefetch = likedConcepts.length >= HOOK_PREFETCH_SELECTION_THRESHOLD
+      && unreviewedConcepts.length <= HOOK_PREFETCH_REMAINING_THRESHOLD;
+    if (unreviewedConcepts.length > 0 && !canPrefetch) {
+      throw new ApiError(409, "HOOKS_PENDING_REVIEW", "Select five hooks or review the remaining cards before generating another batch");
+    }
     const activeGeneration = project.jobs.some((job) => job.type === JobType.GENERATE_CONCEPTS && (job.status === JobStatus.QUEUED || job.status === JobStatus.ACTIVE));
     if (activeGeneration) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
   }
@@ -761,6 +771,10 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           where: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE] } },
         });
         if (active) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
+        const currentConceptCount = await tx.hookConcept.count({ where: { projectId: project.id } });
+        if (currentConceptCount + count > MAX_HOOKS_PER_PROJECT) {
+          throw new ApiError(409, "HOOK_LIMIT_REACHED", "A project can generate at most 24 hooks");
+        }
         return tx.generationJob.create({
           data: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, input: { count, forceRegenerate, append }, status: JobStatus.QUEUED, progress: 0 },
         });
