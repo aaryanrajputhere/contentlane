@@ -44,8 +44,8 @@ export default function SupportWidget() {
   return (
     <>
       {open ? (
-        <div className="fixed inset-0 z-[80] flex items-end bg-black/20 sm:pointer-events-none sm:items-auto sm:bg-transparent">
-          <section role="dialog" aria-modal="true" aria-label="ContentLane support" className="pointer-events-auto w-full rounded-t-[28px] border border-[#e7e7e7] bg-white p-5 shadow-[0_-20px_60px_rgba(0,0,0,0.12)] sm:fixed sm:bottom-24 sm:right-6 sm:w-[380px] sm:rounded-[24px] sm:p-6 sm:shadow-[0_24px_70px_rgba(0,0,0,0.16)]">
+        <div className="support-widget fixed inset-0 z-[80] flex items-end bg-black/20 sm:pointer-events-none sm:items-auto sm:bg-transparent">
+          <section role="dialog" aria-modal="true" aria-label="ContentLane support" className="support-widget pointer-events-auto w-full rounded-t-[28px] border border-[#e7e7e7] bg-white p-5 shadow-[0_-20px_60px_rgba(0,0,0,0.12)] sm:fixed sm:bottom-24 sm:right-6 sm:w-[380px] sm:rounded-[24px] sm:p-6 sm:shadow-[0_24px_70px_rgba(0,0,0,0.16)]">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#8a8a8a]">Support</p>
@@ -79,7 +79,7 @@ export default function SupportWidget() {
           </section>
         </div>
       ) : null}
-      <button type="button" onClick={() => setOpen(true)} aria-label="Open support" className="fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-full bg-[#111] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5 sm:bottom-6 sm:right-6">
+      <button type="button" onClick={() => setOpen(true)} aria-label="Open support" className="support-widget fixed bottom-5 right-5 z-[70] flex items-center gap-2 rounded-full bg-[#111] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5 sm:bottom-6 sm:right-6">
         <MessageCircle size={17} /><span>Help</span>
       </button>
     </>

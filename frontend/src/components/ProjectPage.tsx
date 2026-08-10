@@ -8,12 +8,16 @@ import {
   Upload,
   Video,
   Sparkles,
+  Shuffle,
+  ThumbsDown,
+  ThumbsUp,
+  RotateCcw,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useAnimationControls, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
 import { api, post } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
-import { selectMatchedClips } from '../lib/clipMatching';
 import { getCaptionStyle } from '../lib/captionStyle';
+import { assignCreatorsToConcepts, effectiveCreatorSelection, eligibleCreators } from '../lib/creatorAssignments';
 import type { ConceptCard, CreatorClipRecord, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
 
 const AI_STEPS = [
@@ -25,6 +29,11 @@ const AI_STEPS = [
   'Building your brand profile'
 ];
 
+type HookRetryFailure = {
+  phase: 'feedback' | 'generation';
+  message: string;
+};
+
 function GenerationExperience({
   onComplete,
   isAnalyzing,
@@ -35,12 +44,23 @@ function GenerationExperience({
   isGeneratingHooks: boolean;
 }) {
   const [currentStep, setCurrentStep] = useState(0);
+  const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    document.body.classList.add('project-generation-active');
+
+    return () => {
+      document.body.classList.remove('project-generation-active');
+    };
+  }, []);
 
   useEffect(() => {
     if (currentStep >= AI_STEPS.length) {
-      if (!isAnalyzing && !isGeneratingHooks) {
-        onComplete();
-      }
+      // The checklist is only a presentation layer. Do not keep the whole
+      // project page hidden when a completed stage is still reported as
+      // ACTIVE (for example while the final database update is settling).
+      // ProjectPage continues polling the real job state below.
+      onComplete();
       return;
     }
 
@@ -56,32 +76,47 @@ function GenerationExperience({
   }, [currentStep, isAnalyzing, isGeneratingHooks, onComplete]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh] w-full px-6">
-      <div className="w-full space-y-5">
+    <div className="flex min-h-[70vh] w-full items-center justify-center px-6">
+      <div
+        className="relative h-[21rem] w-full max-w-2xl overflow-hidden sm:h-[24rem]"
+        aria-live="polite"
+        aria-label="Website analysis progress"
+      >
         {AI_STEPS.map((step, index) => {
           const isPast = index < currentStep;
           const isCurrent = index === currentStep;
-          const isFuture = index > currentStep;
-
-          if (isFuture) return null;
+          const distanceFromCurrent = Math.abs(index - currentStep);
+          const rowOffset = (index - currentStep) * (prefersReducedMotion ? 3.5 : 4.25);
+          const opacity = isCurrent ? 1 : Math.max(0.2, 0.62 - (distanceFromCurrent - 1) * 0.14);
+          const blur = isCurrent ? 0 : Math.min(2.5, distanceFromCurrent * 0.9);
+          const scale = isCurrent ? 1 : Math.max(0.94, 1 - distanceFromCurrent * 0.025);
 
           return (
             <motion.div
               key={step}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex items-center justify-center gap-4 text-lg ${isCurrent ? 'text-[#111111] font-semibold' : 'text-[#8c8c8c]'}`}
+              initial={false}
+              animate={{
+                opacity,
+                scale,
+                y: rowOffset * 16,
+                filter: `blur(${blur}px)`,
+              }}
+              transition={{
+                duration: prefersReducedMotion ? 0 : 0.55,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className={`absolute left-0 right-0 top-1/2 flex -translate-y-1/2 items-center justify-center gap-4 text-center text-[1.05rem] sm:text-lg ${isCurrent ? 'font-semibold text-[#111111]' : 'font-normal text-[#8c8c8c]'}`}
             >
-              {isPast ? (
-                <div className="grid h-6 w-6 place-items-center rounded-full bg-[#111111] text-white">
-                  <Check size={14} />
-                </div>
-              ) : (
-                <div className="grid h-6 w-6 place-items-center">
-                  <Loader2 size={16} className="animate-spin text-[#111111]" />
-                </div>
-              )}
-              {step}
+              <span className="grid h-6 w-6 shrink-0 place-items-center" aria-hidden="true">
+                {isPast ? (
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-[#111111] text-white">
+                    <Check size={14} />
+                  </span>
+                ) : (
+                  <Loader2 size={17} className={isCurrent ? 'animate-spin text-[#111111]' : 'text-[#8c8c8c]'} />
+                )}
+              </span>
+              <span>{step}</span>
             </motion.div>
           );
         })}
@@ -94,10 +129,16 @@ function ReelPreviewCard({
   concept,
   creator,
   clip,
+  selected,
+  onToggle,
+  showSelectionIndicator,
 }: {
   concept: ConceptCard;
   creator: CreatorRecord | undefined;
   clip: CreatorClipRecord | null;
+  selected: boolean;
+  onToggle?: () => void;
+  showSelectionIndicator: boolean;
 }) {
   const captionStyle = getCaptionStyle(concept.sortOrder);
   const usesSnapchatCaptions = captionStyle === 'SNAPCHAT';
@@ -106,7 +147,18 @@ function ReelPreviewCard({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative group overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-[0_20px_40px_rgba(0,0,0,0.06)] aspect-[9/16] transition hover:-translate-y-1 hover:shadow-[0_30px_60px_rgba(0,0,0,0.1)]"
+      role={onToggle ? 'button' : undefined}
+      tabIndex={onToggle ? 0 : undefined}
+      aria-pressed={onToggle ? selected : undefined}
+      aria-label={onToggle ? `${selected ? 'Deselect' : 'Select'} hook: ${concept.hookText}` : concept.hookText}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (onToggle && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onToggle();
+        }
+      }}
+      className={`relative group aspect-[9/16] overflow-hidden rounded-[28px] border bg-white shadow-[0_20px_40px_rgba(0,0,0,0.06)] transition hover:-translate-y-1 hover:shadow-[0_30px_60px_rgba(0,0,0,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 ${selected ? 'border-[#111111] ring-4 ring-[#111111]/10' : 'border-black/5'}`}
     >
       {clip && (
         <video
@@ -135,6 +187,12 @@ function ReelPreviewCard({
         </div>
       </div>
 
+      {showSelectionIndicator ? (
+        <div className={`absolute right-5 top-16 grid h-8 w-8 place-items-center rounded-full border-2 transition ${selected ? 'border-white bg-white text-[#111111]' : 'border-white/70 bg-black/20 text-transparent'}`} aria-hidden="true">
+          <Check size={17} strokeWidth={3} />
+        </div>
+      ) : null}
+
       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
         <button className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/40 hover:bg-white/30 transition">
           <Play size={28} className="ml-1" fill="currentColor" />
@@ -150,6 +208,117 @@ function ReelPreviewCard({
   );
 }
 
+function SwipeReview({
+  assignments,
+  onDecision,
+}: {
+  assignments: Array<{ concept: ConceptCard; creator: CreatorRecord | undefined; clip: CreatorClipRecord | null }>;
+  onDecision: (conceptId: string, decision: 'LIKED' | 'REJECTED') => Promise<boolean>;
+}) {
+  const prefersReducedMotion = useReducedMotion();
+  const current = assignments[0];
+  const dragX = useMotionValue(0);
+  const controls = useAnimationControls();
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionLock = useRef(false);
+  const rotate = useTransform(dragX, [-180, 0, 180], [-8, 0, 8]);
+  const keepOpacity = useTransform(dragX, [20, 120], [0, 1]);
+  const rejectOpacity = useTransform(dragX, [-120, -20], [1, 0]);
+  const keepTint = useTransform(dragX, [0, 140], [0, 0.28]);
+  const rejectTint = useTransform(dragX, [-140, 0], [0.28, 0]);
+
+  useEffect(() => {
+    dragX.set(0);
+    controls.set({ x: 0, opacity: 1, scale: 1, y: 0 });
+    transitionLock.current = false;
+    setIsTransitioning(false);
+  }, [controls, current?.concept.id, dragX]);
+
+  const decide = useCallback(async (decision: 'LIKED' | 'REJECTED') => {
+    if (!current || transitionLock.current) return;
+    transitionLock.current = true;
+    setIsTransitioning(true);
+    if (!prefersReducedMotion) {
+      await controls.start({
+        x: decision === 'LIKED' ? window.innerWidth : -window.innerWidth,
+        opacity: 0,
+        rotate: decision === 'LIKED' ? 12 : -12,
+        transition: { duration: 0.28, ease: [0.4, 0, 1, 1] },
+      });
+    }
+    const saved = await onDecision(current.concept.id, decision);
+    if (!saved) {
+      controls.set({ x: 0, opacity: 1, scale: 1, y: 0, rotate: 0 });
+      dragX.set(0);
+      transitionLock.current = false;
+      setIsTransitioning(false);
+    }
+  }, [controls, current, dragX, onDecision, prefersReducedMotion]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) return;
+      event.preventDefault();
+      void decide(event.key === 'ArrowRight' ? 'LIKED' : 'REJECTED');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [decide]);
+
+  if (!current) return null;
+
+  return (
+    <div className="mx-auto w-full max-w-xl">
+      <div className="mb-3 flex items-center justify-between px-2 text-[11px] font-bold uppercase tracking-[0.16em]" aria-hidden="true">
+        <span className="text-[#b91c1c]">← Swipe to reject</span>
+        <span className="text-[#15803d]">Swipe to keep →</span>
+      </div>
+      <div
+        className="relative mx-auto aspect-[9/16] w-full max-w-[360px]"
+        style={{ width: 'min(360px, calc((100dvh - 15rem) * 9 / 16), calc(100vw - 2rem))' }}
+      >
+        <div className="absolute inset-3 translate-y-5 scale-[.94] rounded-[30px] bg-[#e8e4dc]" aria-hidden="true" />
+        <motion.div
+          key={current.concept.id}
+          animate={controls}
+          style={{ x: dragX, rotate }}
+          drag={isTransitioning ? false : 'x'}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.8}
+          onDragEnd={(_, info) => {
+            const distance = info.offset.x;
+            if (Math.abs(distance) >= 100 || Math.abs(info.velocity.x) >= 600) {
+              void decide(distance >= 0 ? 'LIKED' : 'REJECTED');
+            }
+          }}
+          initial={false}
+          className={`relative z-10 h-full w-full ${isTransitioning ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
+          whileTap={prefersReducedMotion ? undefined : { scale: 1.015 }}
+        >
+          <ReelPreviewCard concept={current.concept} creator={current.creator} clip={current.clip} selected={false} onToggle={() => undefined} showSelectionIndicator={false} />
+          <motion.div style={{ opacity: keepTint }} className="pointer-events-none absolute inset-0 rounded-[28px] bg-[#22c55e]" />
+          <motion.div style={{ opacity: rejectTint }} className="pointer-events-none absolute inset-0 rounded-[28px] bg-[#ef4444]" />
+          <motion.div style={{ opacity: keepOpacity }} className="pointer-events-none absolute left-5 top-5 -rotate-6 rounded-lg border-2 border-white bg-[#166534] px-4 py-2 text-sm font-extrabold uppercase tracking-[0.14em] text-white shadow-lg">Keep</motion.div>
+          <motion.div style={{ opacity: rejectOpacity }} className="pointer-events-none absolute right-5 top-5 rotate-6 rounded-lg border-2 border-white bg-[#991b1b] px-4 py-2 text-sm font-extrabold uppercase tracking-[0.14em] text-white shadow-lg">Reject</motion.div>
+        </motion.div>
+      </div>
+      <div className="mt-6 flex items-center justify-center gap-3 sm:gap-4">
+        <button type="button" onClick={() => void decide('REJECTED')} disabled={isTransitioning} className="inline-flex min-w-32 items-center justify-center gap-2 rounded-full border border-[#fecaca] bg-white px-6 py-3.5 text-sm font-bold text-[#b91c1c] shadow-[0_10px_30px_rgba(185,28,28,0.1)] transition hover:-translate-y-0.5 hover:bg-[#fef2f2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b91c1c]/30 disabled:pointer-events-none disabled:opacity-50">
+          <span aria-hidden="true">←</span>
+          <ThumbsDown size={22} />
+          Reject
+        </button>
+        <button type="button" onClick={() => void decide('LIKED')} disabled={isTransitioning} className="inline-flex min-w-32 items-center justify-center gap-2 rounded-full border border-[#bbf7d0] bg-white px-6 py-3.5 text-sm font-bold text-[#15803d] shadow-[0_10px_30px_rgba(21,128,61,0.1)] transition hover:-translate-y-0.5 hover:bg-[#f0fdf4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15803d]/30 disabled:pointer-events-none disabled:opacity-50">
+          <ThumbsUp size={22} />
+          Keep <span aria-hidden="true">→</span>
+        </button>
+      </div>
+      <p className="mt-3 text-center text-xs text-[#8c8c8c]">Drag the card or use your arrow keys</p>
+    </div>
+  );
+}
+
 export default function ProjectPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -158,11 +327,13 @@ export default function ProjectPage() {
   const [error, setError] = useState('');
   
   const [generationComplete, setGenerationComplete] = useState(false);
-  const [visibleReelCount, setVisibleReelCount] = useState(3);
   const [creatorLibrary, setCreatorLibrary] = useState<CreatorRecord[]>([]);
+  const [creatorLibraryLoading, setCreatorLibraryLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [regenerationMessage, setRegenerationMessage] = useState('');
+  const [hookRetryFailure, setHookRetryFailure] = useState<HookRetryFailure | null>(null);
   const automaticGenerationAttempt = useRef<string | null>(null);
+  const automaticCreatorSelectionAttempt = useRef<string | null>(null);
 
   const handleGenerationComplete = useCallback(() => {
     setGenerationComplete(true);
@@ -171,6 +342,12 @@ export default function ProjectPage() {
   const load = useCallback(async () => {
     const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}`);
     setProject(response.project);
+    const latestAnalysis = response.project.jobs.find((job) => job.type === 'ANALYZE_WEBSITE');
+    if (latestAnalysis?.status === 'FAILED') {
+      setError(latestAnalysis.errorMessage ?? 'Website analysis failed. Please try again.');
+    } else if (latestAnalysis?.status === 'ACTIVE' || latestAnalysis?.status === 'QUEUED') {
+      setError((current) => current.startsWith('Website analysis failed') ? '' : current);
+    }
   }, [id]);
 
   useEffect(() => {
@@ -200,11 +377,14 @@ export default function ProjectPage() {
           setCreatorLibrary(response.creators.map((c) => ({ ...c, character: creatorToCharacter(c) })));
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (active) setCreatorLibraryLoading(false);
+      });
     return () => { active = false; };
   }, []);
 
-  const generateHooks = useCallback(async (forceRegenerate: boolean) => {
+  const generateHooks = useCallback(async (forceRegenerate: boolean, append = false) => {
     if (busy) return;
     const hasDependentWork = Boolean(
       project?.exportState
@@ -217,24 +397,65 @@ export default function ProjectPage() {
     setBusy('Generating hooks');
     setError('');
     setRegenerationMessage('');
+    setHookRetryFailure(null);
     try {
-      const response = await post<ProjectResponse>(`/projects/${id}/concepts`, {
-        count: 8,
-        forceRegenerate,
-      });
+      let response: ProjectResponse;
+      try {
+        response = await post<ProjectResponse>(`/projects/${id}/concepts`, {
+          count: 8,
+          forceRegenerate,
+          useHookPreferences: true,
+          append,
+        });
+      } catch (caught) {
+        const message = caught instanceof Error ? caught.message : 'Invalid generation request';
+        setHookRetryFailure({ phase: 'generation', message });
+        return;
+      }
       setProject(response.project);
       setGenerationComplete(true);
+      setHookRetryFailure(null);
       setRegenerationMessage(
-        forceRegenerate && !response.cached
-          ? `${response.project.concepts.length} hooks regenerated.`
+        append && !response.cached
+          ? `8 more hooks generated.`
           : '',
       );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to generate hooks');
+      setError(caught instanceof Error ? caught.message : 'Unable to generate similar hooks');
     } finally {
       setBusy(null);
     }
   }, [busy, id, project]);
+
+  const decideHook = useCallback(async (conceptId: string, decision: 'LIKED' | 'REJECTED') => {
+    setHookRetryFailure(null);
+    try {
+      const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}/concepts/${conceptId}/review`, {
+        method: 'PATCH',
+        body: JSON.stringify({ decision }),
+      });
+      setProject(response.project);
+      return true;
+    } catch (caught) {
+      setHookRetryFailure({ phase: 'feedback', message: caught instanceof Error ? caught.message : 'The decision could not be saved. Try again.' });
+      return false;
+    }
+  }, [id]);
+
+  const retryAnalysis = useCallback(async () => {
+    if (busy) return;
+    setBusy('Analyzing website');
+    setError('');
+    try {
+      const response = await post<ProjectResponse>(`/projects/${id}/analyze`, { forceRegenerate: false });
+      setProject(response.project);
+      setGenerationComplete(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to analyze website');
+    } finally {
+      setBusy(null);
+    }
+  }, [busy, id]);
 
   useEffect(() => {
     if (
@@ -251,16 +472,65 @@ export default function ProjectPage() {
     void generateHooks(false);
   }, [busy, generateHooks, project]);
 
-  // Set selected character if none
   useEffect(() => {
-    if (project && !project.selectedCharacter && creatorLibrary.length > 0 && !busy) {
-      const defaultCharacter = creatorLibrary[0].character;
+    if (!project || busy) return;
+    const likedCount = project.concepts.filter((concept) => concept.reviewDecision === 'LIKED').length;
+    const hasUnreviewed = project.concepts.some((concept) => concept.reviewDecision === null);
+    const attemptKey = `${project.id}:${project.concepts.length}`;
+    if (likedCount < 8 && !hasUnreviewed && automaticGenerationAttempt.current !== attemptKey) {
+      automaticGenerationAttempt.current = attemptKey;
+      void generateHooks(false, true);
+    }
+  }, [busy, generateHooks, project]);
+
+  // New campaigns start with a mixed roster whenever at least two creators have clips.
+  useEffect(() => {
+    const availableCreators = eligibleCreators(creatorLibrary);
+    if (
+      project
+      && !project.creatorSelection
+      && !project.selectedCharacter
+      && availableCreators.length > 0
+      && !busy
+      && automaticCreatorSelectionAttempt.current !== project.id
+    ) {
+      automaticCreatorSelectionAttempt.current = project.id;
+      const selection = availableCreators.length >= 2
+        ? { mode: 'mix' as const }
+        : { mode: 'single' as const, creatorId: availableCreators[0].id };
       api<{ project: ProjectSnapshot }>(`/projects/${id}/character`, {
         method: 'PATCH',
-        body: JSON.stringify({ character: defaultCharacter }),
-      }).then(res => setProject(res.project)).catch(() => {});
+        body: JSON.stringify({ selection }),
+      }).then((response) => setProject(response.project)).catch((caught) => {
+        setError(caught instanceof Error ? caught.message : 'Unable to choose creators');
+      });
     }
   }, [project, creatorLibrary, busy, id]);
+
+  const selectCreators = async (selection: { mode: 'mix' } | { mode: 'single'; creatorId: string }) => {
+    if (!project || busy) return;
+    const hasDependentWork = Boolean(
+      project.exportState
+      || project.mediaAssets.some((asset) => asset.metadata?.kind !== 'brand-demo')
+      || project.concepts.some((concept) => concept.generatedImageUrl || concept.generatedVideoUrl),
+    );
+    if (hasDependentWork && !window.confirm('Changing creators will remove generated hook media and export settings. Your hooks and product demo will stay. Continue?')) {
+      return;
+    }
+    setBusy('Selecting creators');
+    setError('');
+    try {
+      const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}/character`, {
+        method: 'PATCH',
+        body: JSON.stringify({ selection }),
+      });
+      setProject(response.project);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to change creators');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const uploadBrandDemo = async (file: File | undefined | null) => {
     if (!project || !file) return;
@@ -273,7 +543,7 @@ export default function ProjectPage() {
         body: formData,
       });
       setProject(response.project);
-      navigate(`/projects/${id}/render?count=${visibleReelCount}`);
+      navigate(`/projects/${id}/render`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to upload brand demo');
     } finally {
@@ -295,9 +565,6 @@ export default function ProjectPage() {
   if (isAnalyzing && !generationComplete) {
     return (
       <main className="min-h-screen bg-[#fafaf8] text-[#111111] flex flex-col">
-        <header className="mx-auto flex w-full max-w-[1400px] items-center px-6 pt-5 sm:px-8 lg:px-12">
-          <p className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</p>
-        </header>
         <div className="flex-1 flex items-center">
           <GenerationExperience 
             onComplete={handleGenerationComplete} 
@@ -312,8 +579,7 @@ export default function ProjectPage() {
   if (!project.concepts.length) {
     return (
       <main className="min-h-screen bg-[#fafaf8] text-[#111111] flex flex-col">
-        <header className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 pt-5 sm:px-8 lg:px-12">
-          <p className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</p>
+        <header className="mx-auto flex w-full max-w-[1400px] items-center justify-end px-6 pt-5 sm:px-8 lg:px-12">
           <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium hover:bg-[#f3f3f3]">
             <ArrowLeft size={16} /> Back
           </button>
@@ -323,8 +589,8 @@ export default function ProjectPage() {
             <div className="w-full max-w-lg rounded-[28px] border border-black/8 bg-white p-8 text-center shadow-[0_24px_70px_rgba(36,29,77,0.08)]">
               <h1 className="text-3xl font-extrabold tracking-[-0.04em]">We couldn’t generate your hooks.</h1>
               <p role="alert" className="mt-4 text-sm leading-6 text-[#686868]">{error}</p>
-              <button type="button" onClick={() => void generateHooks(false)} disabled={isGeneratingHooks} className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-[#111] px-7 py-3.5 text-sm font-bold text-white disabled:opacity-50">
-                <Sparkles size={16} /> {isGeneratingHooks ? 'Generating…' : 'Try again'}
+              <button type="button" onClick={() => void retryAnalysis()} disabled={busy !== null} className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-[#111] px-7 py-3.5 text-sm font-bold text-white disabled:opacity-50">
+                <Sparkles size={16} /> {busy === 'Analyzing website' ? 'Analyzing…' : 'Try again'}
               </button>
             </div>
           </div>
@@ -341,15 +607,42 @@ export default function ProjectPage() {
     );
   }
 
-  const selectedCreatorRecord = creatorLibrary.find(c => c.id === project.selectedCharacter?.id) || creatorLibrary[0];
-  const availableReelCount = Math.min(project.concepts?.length ?? 0, 8);
-  const displayConcepts = project.concepts?.length ? project.concepts.slice(0, visibleReelCount) : [];
-  const hasMoreReels = visibleReelCount < availableReelCount;
+  const availableCreators = eligibleCreators(creatorLibrary);
+  const creatorSelection = effectiveCreatorSelection(project, creatorLibrary);
+  const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === 'LIKED').slice(0, 8);
+  const unreviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === null);
+  const displayConcepts = likedConcepts;
   const brandDemoAsset = project.mediaAssets.find(
     (asset) => asset.type === 'VIDEO' && asset.metadata?.kind === 'brand-demo',
   );
-  const matchedPreviewClips = selectMatchedClips(displayConcepts, selectedCreatorRecord?.clips ?? []);
-
+  const creatorAssignments = assignCreatorsToConcepts(displayConcepts, creatorLibrary, creatorSelection);
+  // Match the full accumulated pool before choosing the visible card. Matching
+  // only the current card resets clip de-duplication after every swipe and
+  // repeatedly selects the same highest-scoring UGC clip.
+  const assignmentByConceptId = new Map(
+    assignCreatorsToConcepts(project.concepts, creatorLibrary, creatorSelection)
+      .map((assignment) => [assignment.concept.id, assignment]),
+  );
+  const nextUnreviewedAssignment = unreviewedConcepts.length > 0
+    ? assignmentByConceptId.get(unreviewedConcepts[0].id)
+    : undefined;
+  const reviewAssignments = nextUnreviewedAssignment ? [nextUnreviewedAssignment] : [];
+  const reviewComplete = likedConcepts.length === 8;
+  const resetReviews = async () => {
+    const hasDependentWork = Boolean(project.exportState || project.mediaAssets.some((asset) => asset.metadata?.kind !== 'brand-demo') || project.concepts.some((concept) => concept.generatedImageUrl || concept.generatedVideoUrl));
+    if (hasDependentWork && !window.confirm('Reviewing again will remove generated hook media and render settings. Your analysis, creators, product demo, and generated hooks will stay. Continue?')) return;
+    setBusy('Resetting review');
+    setError('');
+    try {
+      const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}/concepts/review/reset`, { method: 'PATCH', body: JSON.stringify({ clearDependentOutputs: hasDependentWork }) });
+      setProject(response.project);
+      automaticGenerationAttempt.current = null;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to restart review');
+    } finally {
+      setBusy(null);
+    }
+  };
   return (
     <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/50 backdrop-blur-md">
@@ -365,68 +658,158 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      <section className="mx-auto w-full max-w-[1200px] px-6 sm:px-12 pt-16 pb-24">
+      <section className={`mx-auto w-full max-w-[1200px] px-4 sm:px-8 lg:px-12 ${reviewComplete ? 'pb-24 pt-16' : 'flex min-h-[calc(100dvh-79px)] flex-col py-4 sm:py-5'}`}>
+        {reviewComplete && (
         <div className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-2xl">
             <h1 className="mb-4 text-[clamp(2.5rem,5vw,4.5rem)] font-extrabold leading-[1.05] tracking-[-0.05em] text-[#111111]">
-              Your viral Reels are ready.
+              Tune the hooks before you build.
             </h1>
             <p className="text-[1.15rem] leading-[1.6] text-[#666666]">
-              We chose <span className="font-semibold text-[#111111]">{selectedCreatorRecord?.name || 'a creator'}</span> because they match your audience perfectly. Here are {displayConcepts.length} concepts ready to go.
+              Review each opening one at a time. Your choices teach the next batch what to lean into — and what to leave behind.
+            </p>
+            <p className="mt-4 text-sm font-medium text-[#8c8c8c]">
+              Your eight selected hooks are ready to become reels.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void generateHooks(true)}
-            disabled={isGeneratingHooks}
-            className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold text-[#111111] transition hover:border-black/20 hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 sm:self-auto"
-          >
-            {isGeneratingHooks ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            {isGeneratingHooks ? 'Regenerating…' : 'Regenerate hooks'}
-          </button>
+          {hookRetryFailure && reviewComplete && (
+            <button
+              type="button"
+              onClick={() => void generateHooks(true)}
+              disabled={isGeneratingHooks}
+              className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold text-[#111111] transition hover:border-black/20 hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 sm:self-auto"
+            >
+              {isGeneratingHooks ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {isGeneratingHooks ? 'Generating…' : 'Retry similar hooks'}
+            </button>
+          )}
         </div>
-        {(regenerationMessage || error) && (
-          <div className="mb-8">
+        )}
+        {(regenerationMessage || hookRetryFailure || error) && (
+          <div className={reviewComplete ? 'mb-8' : 'mb-3 text-center'}>
           {regenerationMessage && (
             <p role="status" className="inline-flex items-center gap-2 rounded-full bg-[#dcfce7] px-4 py-2 text-sm font-semibold text-[#15803d]">
               <Check size={15} /> {regenerationMessage}
+            </p>
+          )}
+          {hookRetryFailure && (
+            <p role="alert" className="text-sm font-medium text-red-600">
+              {hookRetryFailure.phase === 'feedback'
+                ? `Review complete. Feedback is pending: ${hookRetryFailure.message}`
+                : `Feedback saved, but similar hook generation failed: ${hookRetryFailure.message}`}
             </p>
           )}
           {error && <p role="alert" className="text-sm font-medium text-red-600">{error}</p>}
           </div>
         )}
 
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {displayConcepts.map((concept, index) => (
+        {reviewComplete ? (
+        <div className="mb-8 rounded-[20px] border border-black/8 bg-white p-2.5 shadow-[0_12px_36px_rgba(0,0,0,0.035)] sm:flex sm:items-center sm:gap-3 sm:p-3">
+          <div className="mb-2 px-2 sm:mb-0 sm:min-w-28">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8c8c8c]">Creators</p>
+            <p className="mt-1 text-sm font-semibold text-[#111111]">Choose the cast</p>
+          </div>
+          {creatorLibraryLoading ? (
+            <div className="flex items-center gap-2 px-2 py-2 text-sm text-[#666]">
+              <Loader2 size={16} className="animate-spin" />
+              Loading creators…
+            </div>
+          ) : availableCreators.length > 0 ? (
+            <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 sm:pb-0" role="group" aria-label="Choose creators for this campaign">
+              <button
+                type="button"
+                onClick={() => void selectCreators({ mode: 'mix' })}
+                disabled={availableCreators.length < 2 || busy === 'Selecting creators'}
+                aria-pressed={creatorSelection?.mode === 'mix'}
+                title={availableCreators.length < 2 ? 'Add clips to another creator to use Mix' : undefined}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${creatorSelection?.mode === 'mix' ? 'border-black bg-black text-white' : 'border-black/10 bg-[#fafaf8] text-[#444] hover:border-black/25'}`}
+              >
+                <span className="flex -space-x-2" aria-hidden="true">
+                  {availableCreators.slice(0, 3).map((creator) => (
+                    <img key={creator.id} src={creator.baseImageUrl} alt="" className="h-7 w-7 rounded-full border-2 border-current object-cover" />
+                  ))}
+                </span>
+                <Shuffle size={14} />
+                Mix
+              </button>
+              {availableCreators.map((creator) => {
+                const selected = creatorSelection?.mode === 'single' && creatorSelection.characters[0]?.id === creator.id;
+                return (
+                  <button
+                    key={creator.id}
+                    type="button"
+                    onClick={() => void selectCreators({ mode: 'single', creatorId: creator.id })}
+                    disabled={busy === 'Selecting creators'}
+                    aria-pressed={selected}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 ${selected ? 'border-black bg-black text-white' : 'border-black/10 bg-[#fafaf8] text-[#444] hover:border-black/25'}`}
+                  >
+                    <img src={creator.baseImageUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+                    {creator.name}
+                  </button>
+                );
+              })}
+              {busy === 'Selecting creators' ? <Loader2 size={18} className="my-auto ml-1 shrink-0 animate-spin text-[#666]" aria-label="Updating creators" /> : null}
+            </div>
+          ) : (
+            <p className="px-2 py-2 text-sm text-[#666]">No creators have clips yet. Ask an admin to add creator footage.</p>
+          )}
+        </div>
+        ) : null}
+
+        {!reviewComplete ? (
+          <section aria-labelledby="hook-review-title" className="flex flex-1 flex-col items-center justify-center py-2">
+            <h1 id="hook-review-title" className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[#8c8c8c]">
+              {likedConcepts.length} of 8 hooks selected · {unreviewedConcepts.length} cards remaining
+            </h1>
+            <div className="mb-4 flex gap-1.5" role="img" aria-label={`${likedConcepts.length} of 8 hooks selected`}>
+              {Array.from({ length: 8 }, (_, index) => (
+                <span key={index} className={`h-1.5 w-7 rounded-full transition-colors ${index < likedConcepts.length ? 'bg-[#15803d]' : 'bg-black/10'}`} />
+              ))}
+            </div>
+            {isGeneratingHooks && unreviewedConcepts.length === 0 ? (
+              <div role="status" aria-live="polite" className="flex min-h-80 flex-col items-center justify-center gap-4 text-center">
+                <Loader2 size={28} className="animate-spin motion-reduce:animate-none" />
+                <p className="font-semibold">Building eight more hooks from your choices…</p>
+              </div>
+            ) : <SwipeReview assignments={reviewAssignments} onDecision={decideHook} />}
+            {hookRetryFailure?.phase === 'generation' && unreviewedConcepts.length === 0 ? (
+              <button type="button" onClick={() => void generateHooks(false, true)} disabled={busy !== null} className="mt-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold disabled:opacity-50">
+                <Sparkles size={16} /> Retry next batch
+              </button>
+            ) : null}
+          </section>
+        ) : (
+          <section aria-labelledby="review-summary-title" className="mb-14 rounded-[30px] border border-[#bbf7d0] bg-[#f0fdf4] p-5 sm:flex sm:items-center sm:justify-between sm:px-7">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#15803d]">Review complete</p>
+              <h2 id="review-summary-title" className="mt-1 text-xl font-extrabold tracking-[-0.03em]">Your direction is saved for this batch.</h2>
+              <p className="mt-1 text-sm text-[#4b6854]">Liked hooks guide the next generation; rejected hooks mark the patterns to avoid.</p>
+            </div>
+            <button type="button" onClick={() => void resetReviews()} disabled={busy !== null} className="mt-4 inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#86efac] bg-white px-4 py-2.5 text-sm font-bold text-[#166534] transition hover:bg-[#dcfce7] disabled:opacity-50 sm:mt-0">
+              <RotateCcw size={15} /> Review again
+            </button>
+          </section>
+        )}
+
+        {reviewComplete && (
+        <>
+        <div className={`grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${!reviewComplete ? 'opacity-50' : ''}`} aria-label="Hook grid reference">
+          {creatorAssignments.map((assignment) => (
             <ReelPreviewCard
-              key={concept.id}
-              concept={concept}
-              creator={selectedCreatorRecord}
-              clip={matchedPreviewClips[index]}
+              key={assignment.concept.id}
+              concept={assignment.concept}
+              creator={assignment.creator}
+              clip={assignment.clip}
+              selected
+              showSelectionIndicator
             />
           ))}
         </div>
 
-        {hasMoreReels ? (
-          <div className="mb-24 mt-10 flex flex-col items-center text-center">
-            <p className="mb-4 text-sm text-[#666666]">
-              {availableReelCount - visibleReelCount} more hooks are ready for this campaign.
-            </p>
-            <button
-              type="button"
-              onClick={() => setVisibleReelCount(availableReelCount)}
-              className="inline-flex items-center gap-2 rounded-full bg-[#111111] px-7 py-3.5 text-sm font-bold text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2"
-            >
-              <Sparkles size={17} />
-              Generate more
-            </button>
-          </div>
-        ) : (
-          <div className="mb-24 mt-10 flex items-center justify-center gap-2 text-sm font-medium text-[#666666]">
-            <Check size={16} className="text-[#15803d]" />
-            All {availableReelCount} hooks are ready to render
-          </div>
-        )}
+        <div className="mb-24 mt-10 flex items-center justify-center gap-2 text-sm font-medium text-[#666666]">
+          <Check size={16} className="text-[#15803d]" />
+          All 8 selected hooks are ready to render
+        </div>
 
         <div className="bg-[#111111] rounded-[40px] p-8 md:p-14 text-white shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
@@ -442,7 +825,7 @@ export default function ProjectPage() {
                 {brandDemoAsset ? (
                   <button
                     type="button"
-                    onClick={() => navigate(`/projects/${id}/render?count=${displayConcepts.length}`)}
+                    onClick={() => navigate(`/projects/${id}/render`)}
                     className="inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 font-bold text-[#111111] shadow-xl transition hover:scale-[1.02] hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
                   >
                     <Play size={20} fill="currentColor" />
@@ -480,6 +863,8 @@ export default function ProjectPage() {
             </div>
           </div>
         </div>
+        </>
+        )}
       </section>
     </main>
   );

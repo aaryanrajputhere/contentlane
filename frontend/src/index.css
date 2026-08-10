@@ -21,6 +21,10 @@ body {
   scrollbar-gutter: stable;
 }
 
+body.project-generation-active .support-widget {
+  display: none;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -84,6 +84,28 @@ Generation endpoints return `202 Accepted` with a persisted job. The frontend po
 
 The browser editor intentionally exports WebM. Current desktop Chrome, Edge, or Firefox is recommended; small screens receive a constrained editor layout and are not the primary export target.
 
+## High-level System Architecture
+
+```mermaid
+flowchart LR
+    U[User / Marketer] --> FE[Frontend\nReact + Vite]
+    FE --> API[Backend API\nExpress + TypeScript]
+    U --> WEB[Business Website]
+    WEB --> ANALYZE[Website Analysis]
+    ANALYZE --> API
+
+    API --> DB[(PostgreSQL\nPrisma)]
+    API --> REDIS[(Redis)]
+    API --> JOBS[Background Worker\nBullMQ]
+
+    JOBS --> AI[AI Providers\nAnakin / Hugging Face / RunPod / Cloudinary]
+    JOBS --> DB
+    JOBS --> REDIS
+
+    FE --> EDITOR[Browser Editor\nCanvas + Web Audio + MediaRecorder]
+    EDITOR --> EXPORT[WebM Export]
+```
+
 ## Troubleshooting
 
 - `Invalid environment configuration`: compare `backend/.env` with `backend/.env.example`; JWT secrets must be at least 32 characters.

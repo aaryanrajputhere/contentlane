@@ -179,6 +179,18 @@ test("regeneration prompt excludes previous copy", () => {
   assert.match(prompt.user, /previous attempt reused existing copy/i);
 });
 
+test("hook prompt uses selected examples as creative direction without copying them", () => {
+  const prompt = buildHooksPrompt(persistedProfile, 8, [{
+    hookText: "i found the shortcut nobody mentions",
+    demoOverlayText: "this is what i use now",
+    angle: "manual work",
+  }]);
+
+  assert.match(prompt.user, /Selected and previous hook references/);
+  assert.match(prompt.user, /manual work/);
+  assert.match(prompt.user, /do not repeat or lightly paraphrase/i);
+});
+
 test("creative line comparison ignores casing, punctuation, and whitespace", () => {
   assert.equal(normalizeCreativeLine("  Save EVERY memory!!! "), "save every memory");
   assert.deepEqual(findRepeatedCreativeLines([

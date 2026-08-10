@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Prisma } from "@prisma/client";
 import {
+  characterSelectionSchema,
   conceptSelectionSchema,
   conceptStageInputSchema,
   creatorCharacterSchema,
@@ -9,7 +10,10 @@ import {
   creatorListQuerySchema,
   creatorMutationSchema,
   exportPayloadSchema,
+  hookPreferenceSelectionSchema,
+  hookPreferencesSchema,
   mediaStageInputSchema,
+  projectCreatorSelectionSchema,
   websiteInputSchema,
 } from "../domain/schemas";
 import { creatorToCharacter } from "../lib/creator-library";
@@ -48,6 +52,9 @@ test("workflow helpers derive a lean brand profile", () => {
 
 test("generation payload schemas set sane defaults", () => {
   assert.equal(conceptStageInputSchema.parse({}).count, 8);
+  assert.equal(conceptStageInputSchema.parse({}).useHookPreferences, true);
+  assert.equal(conceptStageInputSchema.parse({}).append, false);
+  assert.equal(conceptStageInputSchema.parse({ append: true }).append, true);
   assert.throws(() => conceptStageInputSchema.parse({ brief: {} }));
   assert.equal(mediaStageInputSchema.parse({}).forceRegenerate, false);
   const exportValue = exportPayloadSchema.parse({
@@ -58,6 +65,47 @@ test("generation payload schemas set sane defaults", () => {
     conceptSelectionSchema.parse({ conceptId: null }).conceptId,
     null,
   );
+});
+
+test("hook preference schemas accept bounded project-scoped examples", () => {
+  const current = hookPreferenceSelectionSchema.parse({
+    likedConceptIds: ["concept_legacy_01"],
+    rejectedConceptIds: ["concept_legacy_02"],
+  });
+  assert.deepEqual(current.likedConceptIds, ["concept_legacy_01"]);
+  assert.deepEqual(current.rejectedConceptIds, ["concept_legacy_02"]);
+
+  const selected = hookPreferenceSelectionSchema.parse({
+    conceptIds: ["cm00000000000000000000001"],
+  });
+  assert.equal(selected.conceptIds.length, 1);
+  const preferences = hookPreferencesSchema.parse({
+    examples: [{
+      hookText: "i found the shortcut nobody mentions",
+      demoOverlayText: "this is what i use now",
+      angle: "manual work",
+      score: 93,
+      selectedAt: "2026-08-10T00:00:00.000Z",
+    }],
+    updatedAt: "2026-08-10T00:00:00.000Z",
+  });
+  assert.equal(preferences.examples[0]?.hookText, "i found the shortcut nobody mentions");
+  assert.throws(() => hookPreferenceSelectionSchema.parse({ conceptIds: [] }));
+  assert.throws(() => hookPreferenceSelectionSchema.parse({
+    likedConceptIds: ["same-concept"],
+    rejectedConceptIds: ["same-concept"],
+  }), /both liked and rejected/);
+  assert.throws(() => hookPreferenceSelectionSchema.parse({
+    likedConceptIds: ["same-concept", "same-concept"],
+    rejectedConceptIds: [],
+  }), /cannot be repeated/);
+  assert.throws(() => hookPreferenceSelectionSchema.parse({
+    likedConceptIds: ["1", "2", "3", "4", "5"],
+    rejectedConceptIds: ["6", "7", "8", "9"],
+  }), /At most eight hook decisions/);
+  assert.throws(() => hookPreferenceSelectionSchema.parse({
+    conceptIds: ["same-concept", "same-concept"],
+  }));
 });
 
 test("creator library schemas normalize editor payloads", () => {
@@ -105,6 +153,29 @@ test("creator library schemas normalize editor payloads", () => {
     creatorCharacterSchema.parse(character).persona.length <= 160,
     true,
   );
+});
+
+test("creator selection schemas support stable mixes and legacy characters", () => {
+  const character = {
+    id: "creator-test",
+    source: "preset" as const,
+    name: "Test",
+    persona: "Persona",
+    appearance: "Look",
+    voice: "Voice",
+    prompt: "Prompt",
+  };
+  const mixRequest = characterSelectionSchema.parse({ selection: { mode: "mix" } });
+  assert.ok("selection" in mixRequest);
+  assert.equal(mixRequest.selection.mode, "mix");
+  const legacyRequest = characterSelectionSchema.parse({ character });
+  assert.ok("character" in legacyRequest);
+  assert.equal(legacyRequest.character?.id, "creator-test");
+  assert.equal(
+    projectCreatorSelectionSchema.parse({ mode: "single", characters: [character] }).mode,
+    "single",
+  );
+  assert.throws(() => projectCreatorSelectionSchema.parse({ mode: "mix", characters: [character] }));
 });
 
 test("concept prompt builders and export state stay aligned", () => {

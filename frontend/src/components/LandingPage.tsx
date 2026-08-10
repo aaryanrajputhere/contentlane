@@ -248,7 +248,7 @@ export default function LandingPage() {
       const analysisResponse = await post<ProjectResponse>('/projects', { website: value });
       let project = analysisResponse.project;
 
-      if (project.concepts.length === 0) {
+      if (project.brandProfile && project.concepts.length === 0) {
         setMessage('Generating 8 hooks');
         const hooksResponse = await post<ProjectResponse>(`/projects/${project.id}/concepts`, { count: 8 });
         project = hooksResponse.project;

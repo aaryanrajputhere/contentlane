@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { AddressInfo } from "node:net";
-import test, { before, beforeEach } from "node:test";
+import test, { after, before, beforeEach } from "node:test";
 import prisma from "../lib/prisma";
 import { createUserAccount, signupAndGetCookie } from "./test-helpers";
 
@@ -34,6 +34,15 @@ beforeEach(async () => {
   await prisma.user.deleteMany({
     where: { email: { startsWith: "project-" } },
   });
+  await prisma.creator.deleteMany({
+    where: { name: { startsWith: "Project Mix Test" } },
+  });
+});
+
+after(async () => {
+  await prisma.creator.deleteMany({
+    where: { name: { startsWith: "Project Mix Test" } },
+  });
 });
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
@@ -45,6 +54,17 @@ async function withServer(run: (baseUrl: string) => Promise<void>) {
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+}
+
+async function waitForBrandProfile(baseUrl: string, projectId: string, cookie: string) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const response = await fetch(`${baseUrl}/api/v1/projects/${projectId}`, { headers: { cookie } });
+    assert.equal(response.status, 200);
+    const payload = (await response.json()) as { project: { brandProfile: unknown } };
+    if (payload.project.brandProfile) return payload.project;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.fail("Project analysis did not complete in time");
 }
 
 function buildBrandDemoFormData() {
@@ -77,8 +97,9 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
       job: { id: string };
     };
     assert.ok(created.project.id);
-    assert.ok(created.project.brandProfile);
     assert.ok(created.job.id);
+    const analyzedProject = await waitForBrandProfile(baseUrl, created.project.id, ownerCookie);
+    assert.ok(analyzedProject.brandProfile);
 
     const preDemoConceptsResponse = await fetch(
       `${baseUrl}/api/v1/projects/${created.project.id}/concepts`,
@@ -223,6 +244,10 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
           voice: string;
           prompt: string;
         } | null;
+        creatorSelection: {
+          mode: "single" | "mix";
+          characters: Array<{ id: string; name: string }>;
+        } | null;
         concepts: Array<{
           id: string;
           generatedImageUrl: string | null;
@@ -240,6 +265,8 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
     assert.equal(snapshot.project.selectedConceptId, selectedConceptId);
     assert.equal(snapshot.project.selectedCharacterId, "creator-test-founder");
     assert.equal(snapshot.project.selectedCharacter?.name, "Test Founder");
+    assert.equal(snapshot.project.creatorSelection?.mode, "single");
+    assert.equal(snapshot.project.creatorSelection?.characters[0]?.id, "creator-test-founder");
     assert.equal(
       snapshot.project.concepts[0]?.generatedImageUrl !== null,
       true,
@@ -273,6 +300,50 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
       },
     );
     assert.equal(exportResponse.status, 200);
+
+    await Promise.all(["Mia", "Jake"].map((name, index) => prisma.creator.create({
+      data: {
+        name: `Project Mix Test ${name}`,
+        description: `${name} test creator`,
+        baseImageUrl: `https://example.com/${name.toLowerCase()}.jpg`,
+        baseImageProvider: "test",
+        baseImageMimeType: "image/jpeg",
+        sortOrder: 10_000 + index,
+        clips: {
+          create: {
+            title: `${name} hook`,
+            url: `https://example.com/${name.toLowerCase()}.mp4`,
+            provider: "test",
+            mimeType: "video/mp4",
+            tags: ["founder", "hook"],
+            sortOrder: 0,
+          },
+        },
+      },
+    })));
+    const mixResponse = await fetch(
+      `${baseUrl}/api/v1/projects/${created.project.id}/character`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json", cookie: ownerCookie },
+        body: JSON.stringify({ selection: { mode: "mix" } }),
+      },
+    );
+    assert.equal(mixResponse.status, 200);
+    const mixed = (await mixResponse.json()) as {
+      project: {
+        creatorSelection: { mode: "single" | "mix"; characters: Array<{ id: string }> } | null;
+        concepts: Array<{ generatedImageUrl: string | null; generatedVideoUrl: string | null }>;
+        mediaAssets: Array<{ metadata: { kind?: string } | null }>;
+        exportState: unknown;
+      };
+    };
+    assert.equal(mixed.project.creatorSelection?.mode, "mix");
+    assert.equal(mixed.project.creatorSelection?.characters.length >= 2, true);
+    assert.equal(mixed.project.concepts.length, 4);
+    assert.equal(mixed.project.concepts.every((concept) => concept.generatedImageUrl === null && concept.generatedVideoUrl === null), true);
+    assert.equal(mixed.project.mediaAssets.every((asset) => asset.metadata?.kind === "brand-demo"), true);
+    assert.equal(mixed.project.exportState, null);
 
     const jobResponse = await fetch(
       `${baseUrl}/api/v1/jobs/${created.job.id}`,
@@ -308,6 +379,107 @@ test("project lifecycle is authenticated and scoped to the signed-in beta user",
       { headers: { cookie: viewerCookie } },
     );
     assert.equal(forbiddenJobResponse.status, 404);
+  });
+});
+
+test("hook preferences accept a complete review and reject invalid decision sets", async () => {
+  await withServer(async (baseUrl) => {
+    const cookie = await signupAndGetCookie(baseUrl, {
+      email: `project-preferences-${Date.now()}@example.com`,
+      password: "password123",
+      name: "Hook Reviewer",
+    });
+    const createProject = async (suffix: string) => {
+      const createdResponse = await fetch(`${baseUrl}/api/v1/projects`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ website: `${testWebsitePrefix}${suffix}.example.com` }),
+      });
+      assert.equal(createdResponse.status, 201);
+      const created = (await createdResponse.json()) as { project: { id: string } };
+      await waitForBrandProfile(baseUrl, created.project.id, cookie);
+      const conceptsResponse = await fetch(`${baseUrl}/api/v1/projects/${created.project.id}/concepts`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ count: 8 }),
+      });
+      assert.equal(conceptsResponse.status, 200);
+      const generated = (await conceptsResponse.json()) as { project: { concepts: Array<{ id: string }> } };
+      assert.equal(generated.project.concepts.length, 8);
+      return { projectId: created.project.id, conceptIds: generated.project.concepts.map(({ id }) => id) };
+    };
+    const primary = await createProject(`preferences-${Date.now()}`);
+    const foreign = await createProject(`preferences-foreign-${Date.now()}`);
+    const preferenceUrl = `${baseUrl}/api/v1/projects/${primary.projectId}/concepts/preferences`;
+    const patchPreferences = (body: unknown) => fetch(preferenceUrl, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    const expectError = async (body: unknown, status: number, message: RegExp) => {
+      const response = await patchPreferences(body);
+      assert.equal(response.status, status);
+      const payload = (await response.json()) as { error: { message: string } };
+      assert.match(payload.error.message, message);
+    };
+
+    const accepted = await patchPreferences({
+      likedConceptIds: primary.conceptIds.slice(0, 5),
+      rejectedConceptIds: primary.conceptIds.slice(5, 8),
+    });
+    assert.equal(accepted.status, 200, await accepted.clone().text());
+    const acceptedPayload = (await accepted.json()) as {
+      project: { hookPreferences: { liked: unknown[]; rejected: unknown[] } };
+    };
+    assert.equal(acceptedPayload.project.hookPreferences.liked.length, 5);
+    assert.equal(acceptedPayload.project.hookPreferences.rejected.length, 3);
+
+    await expectError({ likedConceptIds: [], rejectedConceptIds: [] }, 400, /At least one hook decision/);
+    await expectError({ likedConceptIds: [primary.conceptIds[0], primary.conceptIds[0]], rejectedConceptIds: [] }, 400, /cannot be repeated/);
+    await expectError({ likedConceptIds: [primary.conceptIds[0]], rejectedConceptIds: [primary.conceptIds[0]] }, 400, /both liked and rejected/);
+    await expectError({ likedConceptIds: primary.conceptIds.slice(0, 5), rejectedConceptIds: [...primary.conceptIds.slice(5), foreign.conceptIds[0]] }, 400, /At most eight hook decisions/);
+    await expectError({ likedConceptIds: [foreign.conceptIds[0]], rejectedConceptIds: [] }, 404, /do not belong to this project/);
+
+    const legacy = await patchPreferences({ conceptIds: primary.conceptIds.slice(0, 2) });
+    assert.equal(legacy.status, 200);
+    const legacyPayload = (await legacy.json()) as {
+      project: { hookPreferences: { liked: unknown[]; rejected: unknown[] } };
+    };
+    assert.equal(legacyPayload.project.hookPreferences.liked.length, 2);
+    assert.equal(legacyPayload.project.hookPreferences.rejected.length, 0);
+
+    const reviewUrl = `${baseUrl}/api/v1/projects/${primary.projectId}/concepts/${primary.conceptIds[0]}/review`;
+    const review = await fetch(reviewUrl, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ decision: "LIKED" }),
+    });
+    assert.equal(review.status, 200);
+    const reviewed = (await review.json()) as { project: { concepts: Array<{ id: string; reviewDecision: string | null }> } };
+    assert.equal(reviewed.project.concepts.find(({ id }) => id === primary.conceptIds[0])?.reviewDecision, "LIKED");
+
+    const changedDecision = await fetch(reviewUrl, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ decision: "REJECTED" }),
+    });
+    assert.equal(changedDecision.status, 409);
+
+    const foreignReview = await fetch(`${baseUrl}/api/v1/projects/${primary.projectId}/concepts/${foreign.conceptIds[0]}/review`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ decision: "LIKED" }),
+    });
+    assert.equal(foreignReview.status, 404);
+
+    const reset = await fetch(`${baseUrl}/api/v1/projects/${primary.projectId}/concepts/review/reset`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    assert.equal(reset.status, 200);
+    const resetPayload = (await reset.json()) as { project: { concepts: Array<{ reviewDecision: string | null }> } };
+    assert.equal(resetPayload.project.concepts.every(({ reviewDecision }) => reviewDecision === null), true);
   });
 });
 

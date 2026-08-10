@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { analyzeProject, createProject, generateConceptImageAsset, generateConcepts, generateConceptVideoAsset, generateMedia, getProject, saveExportState, selectCharacter, selectConcept, uploadBrandDemo } from '../controllers/projects.controller';
-import { characterSelectionSchema, conceptSelectionSchema, conceptStageInputSchema, exportPayloadSchema, mediaStageInputSchema, projectIdParamsSchema, websiteInputSchema } from '../domain/schemas';
+import { analyzeProject, createProject, generateConceptImageAsset, generateConcepts, generateConceptVideoAsset, generateMedia, getProject, renderProject, resetConceptReviews, reviewConcept, saveExportState, selectCharacter, selectConcept, saveHookPreferences, uploadBrandDemo } from '../controllers/projects.controller';
+import { characterSelectionSchema, conceptReviewParamsSchema, conceptReviewResetSchema, conceptReviewSchema, conceptSelectionSchema, conceptStageInputSchema, exportPayloadSchema, hookPreferenceSelectionSchema, mediaStageInputSchema, projectIdParamsSchema, renderRequestSchema, websiteInputSchema } from '../domain/schemas';
 import { validate } from '../lib/validation';
 
 const upload = multer({
@@ -16,11 +16,15 @@ router.get('/:id', validate({ params: projectIdParamsSchema }), getProject);
 router.post('/:id/analyze', validate({ params: projectIdParamsSchema }), analyzeProject);
 router.post('/:id/brand-demo', upload.single('demo'), validate({ params: projectIdParamsSchema }), uploadBrandDemo);
 router.post('/:id/concepts', validate({ params: projectIdParamsSchema, body: conceptStageInputSchema }), generateConcepts);
+router.patch('/:id/concepts/review/reset', validate({ params: projectIdParamsSchema, body: conceptReviewResetSchema }), resetConceptReviews);
+router.patch('/:id/concepts/:conceptId/review', validate({ params: conceptReviewParamsSchema, body: conceptReviewSchema }), reviewConcept);
+router.patch('/:id/concepts/preferences', validate({ params: projectIdParamsSchema, body: hookPreferenceSelectionSchema }), saveHookPreferences);
 router.patch('/:id/concepts/selection', validate({ params: projectIdParamsSchema, body: conceptSelectionSchema }), selectConcept);
 router.patch('/:id/character', validate({ params: projectIdParamsSchema, body: characterSelectionSchema }), selectCharacter);
 router.post('/:id/media/image', validate({ params: projectIdParamsSchema, body: mediaStageInputSchema }), generateConceptImageAsset);
 router.post('/:id/media/video', validate({ params: projectIdParamsSchema, body: mediaStageInputSchema }), generateConceptVideoAsset);
 router.post('/:id/media', validate({ params: projectIdParamsSchema, body: mediaStageInputSchema }), generateMedia);
 router.patch('/:id/export', validate({ params: projectIdParamsSchema, body: exportPayloadSchema }), saveExportState);
+router.post('/:id/render', validate({ params: projectIdParamsSchema, body: renderRequestSchema }), renderProject);
 
 export default router;

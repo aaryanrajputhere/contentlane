@@ -707,8 +707,15 @@ export async function loadProjectSnapshot(projectId: string, userId?: string) {
     include: projectSnapshotInclude,
   });
   if (!project) return null;
+  const preferenceRows = await prisma.$queryRaw<Array<{ hookPreferences: Prisma.JsonValue | null }>>`
+    SELECT "hookPreferences"
+    FROM "Project"
+    WHERE "id" = ${projectId}
+    LIMIT 1
+  `;
   return {
     ...project,
+    hookPreferences: preferenceRows[0]?.hookPreferences ?? null,
     websiteAnalysis: normalizeWebsiteAnalysisRecord(project.websiteAnalysis),
   };
 }
@@ -735,9 +742,15 @@ export async function clearGeneratedContent(projectId: string) {
         selectedConceptId: null,
         selectedCharacterId: null,
         selectedCharacter: Prisma.JsonNull,
+        creatorSelection: Prisma.JsonNull,
       },
     }),
   ]);
+  await prisma.$executeRaw`
+    UPDATE "Project"
+    SET "hookPreferences" = NULL
+    WHERE "id" = ${projectId}
+  `;
 }
 
 export function buildCharacterImagePrompt(

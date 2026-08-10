@@ -23,6 +23,7 @@
     "src/main.tsx",
     "src/index.css",
     "src/lib/api.ts",
+    "src/lib/demoOverlay.ts",
     "src/vite-env.d.ts",
     "src/types/domain.ts",
     "src/components/LandingPage.tsx",

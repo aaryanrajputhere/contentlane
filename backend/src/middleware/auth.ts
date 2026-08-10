@@ -7,8 +7,8 @@ import { config } from '../config';
 
 export async function resolveAuthenticatedUser(req: Request) {
   if (req.user) return req.user;
-  const clerkAuth = getAuth(req);
-  if (clerkAuth.isAuthenticated && clerkAuth.userId) {
+  const clerkAuth = config.NODE_ENV === 'test' ? null : getAuth(req);
+  if (clerkAuth?.isAuthenticated && clerkAuth.userId) {
     const clerkUser = await clerkClient.users.getUser(clerkAuth.userId);
     const email = clerkUser.primaryEmailAddress?.emailAddress.toLowerCase();
     if (!email) throw new ApiError(401, 'AUTH_REQUIRED', 'Your Clerk account needs an email address');
@@ -53,10 +53,10 @@ export async function resolveAuthenticatedUser(req: Request) {
 
 export async function resolveOptionalUser(req: Request) {
   if (req.user) return req.user;
-  const clerkAuth = getAuth(req);
+  const clerkAuth = config.NODE_ENV === 'test' ? null : getAuth(req);
   const token = (req as Request & { cookies?: Record<string, string> }).cookies?.[config.COOKIE_NAME];
   const hasBearer = req.header('authorization')?.startsWith('Bearer ') ?? false;
-  if (!clerkAuth.isAuthenticated && !token && !hasBearer) return null;
+  if (!clerkAuth?.isAuthenticated && !token && !hasBearer) return null;
   return resolveAuthenticatedUser(req);
 }
 

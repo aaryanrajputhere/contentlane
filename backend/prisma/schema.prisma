@@ -30,6 +30,7 @@ enum JobType {
   SAVE_EXPORT
   GENERATE_HOOKS
   GENERATE_SCRIPTS
+  RENDER_REELS
 }
 
 enum JobStatus {
@@ -45,6 +46,11 @@ enum MediaType {
   VIDEO
 }
 
+enum ReviewDecision {
+  LIKED
+  REJECTED
+}
+
 enum SupportRequestStatus {
   NEW
   OPEN
@@ -52,17 +58,17 @@ enum SupportRequestStatus {
 }
 
 model User {
-  id                String         @id @default(cuid())
-  clerkId           String?        @unique
-  email             String         @unique
+  id                String           @id @default(cuid())
+  clerkId           String?          @unique
+  email             String           @unique
   passwordHash      String?
   name              String?
-  role              UserRole       @default(USER)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  role              UserRole         @default(USER)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   projects          Project[]
-  allowedEmailsMade AllowedEmail[] @relation("AllowedEmailCreatedBy")
-  dodoCustomerId    String?        @unique
+  allowedEmailsMade AllowedEmail[]   @relation("AllowedEmailCreatedBy")
+  dodoCustomerId    String?          @unique
   subscriptions     Subscription[]
   supportRequests   SupportRequest[]
 }
@@ -84,19 +90,19 @@ model SupportRequest {
 }
 
 model Subscription {
-  id                       String   @id @default(cuid())
-  userId                   String
-  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dodoCustomerId           String
-  dodoSubscriptionId       String   @unique
-  dodoProductId            String
-  status                   String
-  currentPeriodStart       DateTime?
-  currentPeriodEnd         DateTime?
-  cancelAtNextBillingDate  Boolean  @default(false)
-  latestProviderEventAt    DateTime
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                      String    @id @default(cuid())
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dodoCustomerId          String
+  dodoSubscriptionId      String    @unique
+  dodoProductId           String
+  status                  String
+  currentPeriodStart      DateTime?
+  currentPeriodEnd        DateTime?
+  cancelAtNextBillingDate Boolean   @default(false)
+  latestProviderEventAt   DateTime
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   @@index([userId, dodoProductId, status])
   @@index([dodoCustomerId])
@@ -118,18 +124,20 @@ model AllowedEmail {
 }
 
 model Project {
-  id                  String         @id @default(cuid())
+  id                  String           @id @default(cuid())
   userId              String?
-  user                User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   website             String
   normalizedWebsite   String
-  status              ProjectStatus  @default(DRAFT)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
-  selectedConceptId   String?        @map("selectedHookId")
-  selectedCharacterId String?        @map("selectedCharacterId")
-  selectedCharacter   Json?          @map("selectedCharacter")
-  selectedConcept     HookConcept?   @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
+  status              ProjectStatus    @default(DRAFT)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  selectedConceptId   String?          @map("selectedHookId")
+  selectedCharacterId String?          @map("selectedCharacterId")
+  selectedCharacter   Json?            @map("selectedCharacter")
+  creatorSelection    Json?            @map("creatorSelection")
+  hookPreferences     Json?            @map("hookPreferences")
+  selectedConcept     HookConcept?     @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
   brandProfile        BrandProfile?
   websiteAnalysis     WebsiteAnalysis?
   concepts            HookConcept[]
@@ -170,9 +178,9 @@ model WebsiteAnalysis {
 }
 
 model HookConcept {
-  id                    String    @id @default(cuid())
+  id                    String       @id @default(cuid())
   projectId             String
-  project               Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project               Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   angle                 String
   hookText              String
   hookImagePrompt       String
@@ -185,44 +193,46 @@ model HookConcept {
   rationale             String
   generatedImageUrl     String?
   generatedVideoUrl     String?
-  sortOrder             Int       @default(0)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  selectedByProjects    Project[] @relation("ProjectSelectedConcept")
+  sortOrder             Int          @default(0)
+  reviewDecision        ReviewDecision?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  selectedByProjects    Project[]    @relation("ProjectSelectedConcept")
   mediaAssets           MediaAsset[]
 
   @@index([projectId, sortOrder])
+  @@index([projectId, reviewDecision, sortOrder])
   @@map("HookDraft")
 }
 
 model MediaAsset {
-  id          String       @id @default(cuid())
-  projectId   String
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  conceptId   String?      @map("scriptDraftId")
-  concept     HookConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
-  type        MediaType
-  provider    String
-  providerId  String?
-  url         String
-  mimeType    String?
-  metadata    Json?
-  createdAt   DateTime     @default(now())
+  id         String       @id @default(cuid())
+  projectId  String
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conceptId  String?      @map("scriptDraftId")
+  concept    HookConcept? @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  type       MediaType
+  provider   String
+  providerId String?
+  url        String
+  mimeType   String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
 
   @@index([projectId, createdAt])
 }
 
 model ProjectExport {
-  id         String   @id @default(cuid())
-  projectId  String   @unique
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  settings   Json
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  projectId String   @unique
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  settings  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Creator {
-  id                  String       @id @default(cuid())
+  id                  String        @id @default(cuid())
   name                String
   description         String?
   baseImageUrl        String
@@ -230,46 +240,46 @@ model Creator {
   baseImageProviderId String?
   baseImageMimeType   String?
   baseImageMetadata   Json?
-  sortOrder           Int          @default(0)
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  sortOrder           Int           @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
   clips               CreatorClip[]
 
   @@index([sortOrder, createdAt])
 }
 
 model CreatorClip {
-  id          String   @id @default(cuid())
-  creatorId   String
-  creator     Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  title       String?
-  url         String
-  provider    String
-  providerId  String?
-  mimeType    String?
-  metadata    Json?
-  tags        String[]
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  creatorId  String
+  creator    Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title      String?
+  url        String
+  provider   String
+  providerId String?
+  mimeType   String?
+  metadata   Json?
+  tags       String[]
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([creatorId, sortOrder])
   @@index([createdAt])
 }
 
 model GenerationJob {
-  id             String      @id @default(cuid())
-  projectId      String
-  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  type           JobType
-  status         JobStatus   @default(QUEUED)
-  progress       Int         @default(0)
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type            JobType
+  status          JobStatus @default(QUEUED)
+  progress        Int       @default(0)
   progressMessage String?
-  input          Json
-  result         Json?
-  errorMessage   String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  input           Json
+  result          Json?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([projectId, createdAt])
   @@index([status, createdAt])

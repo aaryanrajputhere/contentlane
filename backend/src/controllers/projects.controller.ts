@@ -1,17 +1,23 @@
 import type { RequestHandler } from "express";
-import { JobStatus, JobType, Prisma } from "@prisma/client";
+import { JobStatus, JobType, Prisma, ProjectStatus, ReviewDecision } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiError } from "../lib/errors";
-import type { BrandProfile } from "../domain/schemas";
+import type { BrandProfile, CreatorCharacter, HookPreferenceExample } from "../domain/schemas";
 import {
   characterSelectionSchema,
   conceptSelectionSchema,
   conceptStageInputSchema,
+  conceptReviewParamsSchema,
+  conceptReviewResetSchema,
+  conceptReviewSchema,
   creatorCharacterSchema,
   exportPayloadSchema,
+  hookPreferencesSchema,
   jobIdParamsSchema,
   mediaStageInputSchema,
+  projectCreatorSelectionSchema,
   projectIdParamsSchema,
+  renderRequestSchema,
   websiteInputSchema,
 } from "../domain/schemas";
 import {
@@ -32,6 +38,8 @@ import { generateHooksFromLLM } from "../lib/website-intelligence/hooks";
 import { withLLMTelemetry } from "../lib/website-intelligence/llm";
 import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
 import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
+import { creatorToCharacter } from "../lib/creator-library";
+import { renderQueue, type RenderJobInput } from "../lib/render-queue";
 
 function toBrandProfilePrismaData(
   profile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
@@ -46,6 +54,21 @@ function asBrandProfile(prismaProfile: {
   [key: string]: unknown;
 }): BrandProfile {
   return prismaProfile as unknown as BrandProfile;
+}
+
+type HookPreferencePayload = {
+  liked: HookPreferenceExample[];
+  rejected: HookPreferenceExample[];
+  updatedAt: Date;
+};
+
+function normalizeHookPreferences(value: unknown): HookPreferencePayload | null {
+  const parsed = hookPreferencesSchema.safeParse(value);
+  if (!parsed.success) return null;
+  if (parsed.data.examples?.length) {
+    return { liked: parsed.data.examples, rejected: [], updatedAt: parsed.data.updatedAt };
+  }
+  return parsed.data;
 }
 
 async function createJob(
@@ -68,8 +91,9 @@ async function runStage<T>(
   input: Prisma.InputJsonValue,
   label: string,
   fn: (job: { id: string; createdAt: Date }) => Promise<T>,
+  existingJob?: { id: string; createdAt: Date },
 ) {
-  const job = await createJob(projectId, type, input);
+  const job = existingJob ?? await createJob(projectId, type, input);
   await updateJob(job.id, {
     status: JobStatus.ACTIVE,
     progress: 10,
@@ -113,7 +137,19 @@ async function getProjectOrFail(id: string, userId: string) {
 
 function resolveSelectedCharacter(
   project: Awaited<ReturnType<typeof getProjectOrFail>>,
+  concept?: { id: string; sortOrder: number } | null,
 ) {
+  if (project.creatorSelection) {
+    const parsed = projectCreatorSelectionSchema.safeParse(project.creatorSelection);
+    if (parsed.success) {
+      const characters = parsed.data.characters;
+      if (parsed.data.mode === "mix" && concept) {
+        const conceptIndex = project.concepts.findIndex((item) => item.id === concept.id);
+        return characters[(conceptIndex >= 0 ? conceptIndex : concept.sortOrder) % characters.length] ?? null;
+      }
+      return characters[0] ?? null;
+    }
+  }
   if (!project.selectedCharacter) return null;
   return creatorCharacterSchema.parse(project.selectedCharacter);
 }
@@ -163,9 +199,15 @@ async function resetProjectForNewFlow(projectId: string) {
         selectedConceptId: null,
         selectedCharacterId: null,
         selectedCharacter: Prisma.JsonNull,
+        creatorSelection: Prisma.JsonNull,
       },
     }),
   ]);
+  await prisma.$executeRaw`
+    UPDATE "Project"
+    SET "hookPreferences" = NULL
+    WHERE "id" = ${projectId}
+  `;
 }
 
 function isBrandDemoAsset(asset: {
@@ -253,7 +295,7 @@ async function selectConceptForProject(
 async function analyzeProjectById(
   projectId: string,
   userId: string,
-  options: { forceRegenerate: boolean },
+  options: { forceRegenerate: boolean; existingJob?: { id: string; createdAt: Date } },
 ) {
   const project = await prisma.project.findFirst({
     where: { id: projectId, userId },
@@ -321,6 +363,7 @@ async function analyzeProjectById(
           throw error;
         }
       },
+      options.existingJob,
     );
     const next = assertProject(await loadProjectSnapshot(project.id, userId));
     return {
@@ -379,10 +422,20 @@ export const createProject: RequestHandler = async (req, res) => {
       where: { id: existingProject.id },
       data: { website: website.trim(), normalizedWebsite },
     });
-    const analyzed = await analyzeProjectById(project.id, userId, {
+    const snapshot = assertProject(await loadProjectSnapshot(project.id, userId));
+    if (snapshot.brandProfile) {
+      res.status(200).json({ project: snapshot, cached: true });
+      return;
+    }
+    const analysisJob = await createJob(project.id, JobType.ANALYZE_WEBSITE, {
+      website: project.website,
       forceRegenerate: false,
     });
-    res.status(200).json(analyzed);
+    await prisma.project.update({ where: { id: project.id }, data: { status: ProjectStatus.ANALYZING } });
+    void analyzeProjectById(project.id, userId, { forceRegenerate: false, existingJob: analysisJob }).catch((error) => {
+      console.error(`[projects] background analysis failed project=${project.id}:`, error);
+    });
+    res.status(200).json({ project: assertProject(await loadProjectSnapshot(project.id, userId)), job: analysisJob, cached: false });
     return;
   }
 
@@ -395,20 +448,35 @@ export const createProject: RequestHandler = async (req, res) => {
     },
   });
 
-  const analyzed = await analyzeProjectById(project.id, userId, {
+  const analysisJob = await createJob(project.id, JobType.ANALYZE_WEBSITE, {
+    website: project.website,
     forceRegenerate: false,
   });
-  res.status(201).json(analyzed);
+  await prisma.project.update({ where: { id: project.id }, data: { status: ProjectStatus.ANALYZING } });
+  void analyzeProjectById(project.id, userId, { forceRegenerate: false, existingJob: analysisJob }).catch((error) => {
+    console.error(`[projects] background analysis failed project=${project.id}:`, error);
+  });
+  res.status(201).json({ project: assertProject(await loadProjectSnapshot(project.id, userId)), job: analysisJob, cached: false });
 };
 
 export const analyzeProject: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
   const { forceRegenerate } = req.body as { forceRegenerate?: boolean };
-  const payload = await analyzeProjectById(id, userId, {
+  const project = await getProjectOrFail(id, userId);
+  if (project.brandProfile && !forceRegenerate) {
+    res.json({ project, cached: true });
+    return;
+  }
+  const analysisJob = await createJob(id, JobType.ANALYZE_WEBSITE, {
+    website: project.website,
     forceRegenerate: Boolean(forceRegenerate),
   });
-  res.json(payload);
+  await prisma.project.update({ where: { id }, data: { status: ProjectStatus.ANALYZING } });
+  void analyzeProjectById(id, userId, { forceRegenerate: Boolean(forceRegenerate), existingJob: analysisJob }).catch((error) => {
+    console.error(`[projects] background analysis failed project=${id}:`, error);
+  });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)), job: analysisJob, cached: false });
 };
 
 export const uploadBrandDemo: RequestHandler = async (req, res) => {
@@ -490,19 +558,135 @@ export const selectConcept: RequestHandler = async (req, res) => {
   res.json({ project });
 };
 
+export const saveHookPreferences: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const selection = req.body as {
+    likedConceptIds: string[];
+    rejectedConceptIds: string[];
+    legacy: boolean;
+  };
+  const likedConceptIds = selection.likedConceptIds;
+  const rejectedConceptIds = selection.legacy ? [] : selection.rejectedConceptIds;
+  const project = await getProjectOrFail(id, userId);
+  const findExample = (conceptId: string) => {
+    const concept = project.concepts.find((item) => item.id === conceptId);
+    if (!concept) {
+      throw new ApiError(404, "CONCEPT_NOT_FOUND", "One or more selected hooks do not belong to this project");
+    }
+    return {
+      hookText: concept.hookText,
+      demoOverlayText: concept.demoOverlayText,
+      angle: concept.angle,
+      score: concept.score,
+      selectedAt: new Date(),
+    };
+  };
+  const preferences: HookPreferencePayload = {
+    liked: likedConceptIds.map(findExample),
+    rejected: rejectedConceptIds.map(findExample),
+    updatedAt: new Date(),
+  };
+  await prisma.$executeRaw`
+    UPDATE "Project"
+    SET "hookPreferences" = ${JSON.stringify(preferences)}::jsonb
+    WHERE "id" = ${id}
+  `;
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
+export const reviewConcept: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id, conceptId } = conceptReviewParamsSchema.parse(req.params);
+  const { decision } = conceptReviewSchema.parse(req.body);
+  await prisma.$transaction(async (tx) => {
+    const concept = await tx.hookConcept.findFirst({
+      where: { id: conceptId, projectId: id, project: { userId } },
+      select: { id: true, reviewDecision: true },
+    });
+    if (!concept) throw new ApiError(404, "CONCEPT_NOT_FOUND", "Hook not found for this project");
+    if (concept.reviewDecision !== null) {
+      if (concept.reviewDecision === decision) return;
+      throw new ApiError(409, "REVIEW_ALREADY_SAVED", "This hook has already been reviewed");
+    }
+    if (decision === ReviewDecision.LIKED) {
+      const likedCount = await tx.hookConcept.count({ where: { projectId: id, reviewDecision: ReviewDecision.LIKED } });
+      if (likedCount >= 8) throw new ApiError(409, "HOOK_SELECTION_COMPLETE", "Eight hooks are already selected");
+    }
+    await tx.hookConcept.update({ where: { id: concept.id }, data: { reviewDecision: decision } });
+  });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
+export const resetConceptReviews: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const { clearDependentOutputs } = conceptReviewResetSchema.parse(req.body);
+  const project = await getProjectOrFail(id, userId);
+  const hasDependentOutputs = Boolean(
+    project.exportState
+    || project.mediaAssets.some((asset) => !isBrandDemoAsset(asset))
+    || project.concepts.some((concept) => concept.generatedImageUrl || concept.generatedVideoUrl),
+  );
+  if (hasDependentOutputs && !clearDependentOutputs) {
+    throw new ApiError(409, "DEPENDENT_OUTPUTS_EXIST", "Generated media and renders must be cleared before reviewing again");
+  }
+  if (hasDependentOutputs) await clearCreativeArtifacts(project.id);
+  await prisma.hookConcept.updateMany({ where: { projectId: project.id }, data: { reviewDecision: null } });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
 export const selectCharacter: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
-  const { character } = characterSelectionSchema.parse(req.body);
+  const input = characterSelectionSchema.parse(req.body);
   const project = await getProjectOrFail(id, userId);
-  const nextCharacter = character
-    ? creatorCharacterSchema.parse(character)
-    : null;
-  const current = project.selectedCharacter
-    ? creatorCharacterSchema.parse(project.selectedCharacter)
-    : null;
-  const selectionChanged =
-    JSON.stringify(current) !== JSON.stringify(nextCharacter);
+  let nextSelection: Prisma.InputJsonValue | typeof Prisma.JsonNull = Prisma.JsonNull;
+  let nextCharacter: CreatorCharacter | null = null;
+
+  if ('selection' in input) {
+    const creatorInclude = {
+      clips: { orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }] },
+    };
+    if (input.selection.mode === 'mix') {
+      const creators = await prisma.creator.findMany({
+        where: { clips: { some: {} } },
+        include: creatorInclude,
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      });
+      if (creators.length < 2) {
+        throw new ApiError(409, 'MIX_UNAVAILABLE', 'Add clips to at least two creators before using Mix');
+      }
+      const characters = creators.map(creatorToCharacter);
+      nextCharacter = characters[0] ?? null;
+      nextSelection = projectCreatorSelectionSchema.parse({ mode: 'mix', characters }) as Prisma.InputJsonValue;
+    } else {
+      const creator = await prisma.creator.findUnique({
+        where: { id: input.selection.creatorId },
+        include: creatorInclude,
+      });
+      if (!creator) throw new ApiError(404, 'NOT_FOUND', 'Creator not found');
+      if (creator.clips.length === 0) {
+        throw new ApiError(409, 'CREATOR_HAS_NO_CLIPS', 'Add at least one clip before selecting this creator');
+      }
+      nextCharacter = creatorToCharacter(creator);
+      nextSelection = projectCreatorSelectionSchema.parse({
+        mode: 'single',
+        characters: [nextCharacter],
+      }) as Prisma.InputJsonValue;
+    }
+  } else {
+    nextCharacter = input.character ? creatorCharacterSchema.parse(input.character) : null;
+    nextSelection = nextCharacter
+      ? (projectCreatorSelectionSchema.parse({
+          mode: 'single',
+          characters: [nextCharacter],
+        }) as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
+  }
+
+  const comparableNextSelection = nextSelection === Prisma.JsonNull ? null : nextSelection;
+  const selectionChanged = JSON.stringify(project.creatorSelection) !== JSON.stringify(comparableNextSelection);
   if (!selectionChanged) {
     res.json({ project });
     return;
@@ -515,7 +699,8 @@ export const selectCharacter: RequestHandler = async (req, res) => {
       selectedCharacter: nextCharacter
         ? (nextCharacter as Prisma.InputJsonValue)
         : Prisma.JsonNull,
-      status: "READY",
+      creatorSelection: nextSelection,
+      status: project.concepts.length > 0 ? ProjectStatus.HOOKS_READY : ProjectStatus.READY,
     },
   });
   res.json({
@@ -526,7 +711,7 @@ export const selectCharacter: RequestHandler = async (req, res) => {
 export const generateConcepts: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
-  const { count, forceRegenerate } = conceptStageInputSchema.parse(req.body);
+  const { count, forceRegenerate, useHookPreferences, append } = conceptStageInputSchema.parse(req.body);
   const project = await getProjectOrFail(id, userId);
   if (!project.brandProfile)
     throw new ApiError(
@@ -535,14 +720,24 @@ export const generateConcepts: RequestHandler = async (req, res) => {
       "Analyze the website before generating concepts",
     );
   const profile = asBrandProfile(project.brandProfile);
-  if (project.concepts.length > 0 && !forceRegenerate) {
+  if (append && forceRegenerate) throw new ApiError(400, "INVALID_GENERATION_MODE", "Append and replacement modes cannot be combined");
+  const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
+  const rejectedReviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.REJECTED);
+  const unreviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === null);
+  if (append) {
+    if (likedConcepts.length >= 8) throw new ApiError(409, "HOOK_SELECTION_COMPLETE", "Eight hooks are already selected");
+    if (unreviewedConcepts.length > 0) throw new ApiError(409, "HOOKS_PENDING_REVIEW", "Review the remaining hooks before generating another batch");
+    const activeGeneration = project.jobs.some((job) => job.type === JobType.GENERATE_CONCEPTS && (job.status === JobStatus.QUEUED || job.status === JobStatus.ACTIVE));
+    if (activeGeneration) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
+  }
+  if (project.concepts.length > 0 && !forceRegenerate && !append) {
     res.json({
       project: assertProject(await loadProjectSnapshot(project.id, userId)),
       cached: true,
     });
     return;
   }
-  const staleAssets = project.mediaAssets.filter((asset) => !isBrandDemoAsset(asset));
+  const staleAssets = append ? [] : project.mediaAssets.filter((asset) => !isBrandDemoAsset(asset));
   const latestAnalysisJob = await prisma.generationJob.findFirst({
     where: {
       projectId: project.id,
@@ -559,16 +754,39 @@ export const generateConcepts: RequestHandler = async (req, res) => {
         startedAt: latestAnalysisJob.createdAt,
       })
     : null;
+  const reservedAppendJob = append
+    ? await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${project.id}))`;
+        const active = await tx.generationJob.findFirst({
+          where: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE] } },
+        });
+        if (active) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
+        return tx.generationJob.create({
+          data: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, input: { count, forceRegenerate, append }, status: JobStatus.QUEUED, progress: 0 },
+        });
+      })
+    : undefined;
   try {
     await runStage(
       project.id,
       JobType.GENERATE_CONCEPTS,
-      { count, forceRegenerate },
+      { count, forceRegenerate, append },
       "Generating hooks",
       async (generationJob) => {
-        const previousConcepts = forceRegenerate
-          ? project.concepts.map(({ hookText, demoOverlayText }) => ({ hookText, demoOverlayText }))
-          : [];
+        const savedPreferences = useHookPreferences && project.hookPreferences
+          ? normalizeHookPreferences(project.hookPreferences)
+          : null;
+        const preferredConcepts = append
+          ? likedConcepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }))
+          : savedPreferences?.liked.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
+        const rejectedConcepts = append
+          ? rejectedReviewedConcepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }))
+          : savedPreferences?.rejected.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
+        const allPriorConcepts = project.concepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }));
+        const previousConcepts = append ? preferredConcepts : [
+          ...(forceRegenerate ? allPriorConcepts : []),
+          ...preferredConcepts,
+        ];
         await recorder?.write('hooks-request', {
           projectId: project.id,
           generationJobId: generationJob.id,
@@ -577,6 +795,8 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           forceRegenerate,
           brandProfile: profile,
           previousConcepts,
+          preferredConcepts,
+          rejectedConcepts,
         });
         let source: 'llm' | 'fallback' = 'llm';
         let concepts: ConceptBlueprint[];
@@ -585,7 +805,9 @@ export const generateConcepts: RequestHandler = async (req, res) => {
             profile,
             count,
             previousConcepts,
+            rejectedConcepts,
             recorder ?? undefined,
+            append ? allPriorConcepts : previousConcepts,
           );
         } catch (error) {
           if (forceRegenerate) throw error;
@@ -594,15 +816,18 @@ export const generateConcepts: RequestHandler = async (req, res) => {
         }
         await recorder?.write('hooks', { source, concepts });
         await prisma.$transaction(async (tx) => {
-          await tx.mediaAsset.deleteMany({
+          if (!append) await tx.mediaAsset.deleteMany({
             where: { projectId: project.id, id: { in: staleAssets.map((asset) => asset.id) } },
           });
-          await tx.projectExport.deleteMany({ where: { projectId: project.id } });
-          await tx.project.update({
+          if (!append) await tx.projectExport.deleteMany({ where: { projectId: project.id } });
+          if (!append) await tx.project.update({
             where: { id: project.id },
             data: { selectedConceptId: null },
           });
-          await tx.hookConcept.deleteMany({ where: { projectId: project.id } });
+          if (!append) await tx.hookConcept.deleteMany({ where: { projectId: project.id } });
+          const sortOrderOffset = append
+            ? project.concepts.reduce((maximum, concept) => Math.max(maximum, concept.sortOrder), -1) + 1
+            : 0;
           await tx.hookConcept.createMany({
             data: concepts.map((concept) => ({
               projectId: project.id,
@@ -618,7 +843,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
               rationale: concept.rationale,
               generatedImageUrl: null,
               generatedVideoUrl: null,
-              sortOrder: concept.sortOrder,
+              sortOrder: sortOrderOffset + concept.sortOrder,
             })),
           });
           await tx.project.update({
@@ -633,6 +858,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
         })));
         return concepts;
       },
+      reservedAppendJob,
     );
     const snapshot = assertProject(await loadProjectSnapshot(project.id, userId));
     await recorder?.write('project-snapshot', snapshot);
@@ -660,7 +886,7 @@ export const generateConceptImageAsset: RequestHandler = async (req, res) => {
       "Analyze the website before generating media",
     );
   const concept = conceptOrFail(project, conceptId);
-  const selectedCharacter = resolveSelectedCharacter(project);
+  const selectedCharacter = resolveSelectedCharacter(project, concept);
   if (!selectedCharacter)
     throw new ApiError(
       409,
@@ -688,7 +914,7 @@ export const generateConceptImageAsset: RequestHandler = async (req, res) => {
         await loadProjectSnapshot(project.id, userId),
       );
       const selectedConcept = conceptOrFail(latestProject, concept.id);
-      const activeCharacter = resolveSelectedCharacter(latestProject);
+      const activeCharacter = resolveSelectedCharacter(latestProject, selectedConcept);
       if (!activeCharacter)
         throw new ApiError(
           409,
@@ -738,7 +964,7 @@ export const generateConceptVideoAsset: RequestHandler = async (req, res) => {
       "Analyze the website before generating media",
     );
   const concept = conceptOrFail(project, conceptId);
-  const selectedCharacter = resolveSelectedCharacter(project);
+  const selectedCharacter = resolveSelectedCharacter(project, concept);
   if (!selectedCharacter)
     throw new ApiError(
       409,
@@ -776,7 +1002,7 @@ export const generateConceptVideoAsset: RequestHandler = async (req, res) => {
         await loadProjectSnapshot(project.id, userId),
       );
       const selectedConcept = conceptOrFail(latestProject, concept.id);
-      const activeCharacter = resolveSelectedCharacter(latestProject);
+      const activeCharacter = resolveSelectedCharacter(latestProject, selectedConcept);
       if (!activeCharacter)
         throw new ApiError(
           409,
@@ -827,7 +1053,7 @@ export const generateMedia: RequestHandler = async (req, res) => {
       "Analyze the website before generating media",
     );
   const concept = conceptOrFail(project, conceptId);
-  const selectedCharacter = resolveSelectedCharacter(project);
+  const selectedCharacter = resolveSelectedCharacter(project, concept);
   if (!selectedCharacter)
     throw new ApiError(
       409,
@@ -862,7 +1088,7 @@ export const generateMedia: RequestHandler = async (req, res) => {
         await loadProjectSnapshot(project.id, userId),
       );
       const selectedConcept = conceptOrFail(latestProject, concept.id);
-      const activeCharacter = resolveSelectedCharacter(latestProject);
+      const activeCharacter = resolveSelectedCharacter(latestProject, selectedConcept);
       if (!activeCharacter)
         throw new ApiError(
           409,
@@ -909,7 +1135,7 @@ export const saveExportState: RequestHandler = async (req, res) => {
   const { settings } = exportPayloadSchema.parse(req.body);
   const project = await getProjectOrFail(id, userId);
   const concept = conceptOrFail(project, settings.selectedConceptId ?? null);
-  const selectedCharacter = resolveSelectedCharacter(project);
+  const selectedCharacter = resolveSelectedCharacter(project, concept);
   const selectedImage =
     project.mediaAssets.find(
       (asset) => asset.conceptId === concept.id && asset.type === "IMAGE",
@@ -959,6 +1185,49 @@ export const saveExportState: RequestHandler = async (req, res) => {
   res.json({
     project: assertProject(await loadProjectSnapshot(project.id, userId)),
   });
+};
+
+export const renderProject: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const { conceptIds, assignments: requestedAssignments } = renderRequestSchema.parse(req.body);
+  const project = await getProjectOrFail(id, userId);
+  const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
+  if (likedConcepts.length !== 8) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select exactly eight hooks before rendering');
+  if (conceptIds?.some((conceptId) => !likedConcepts.some((concept) => concept.id === conceptId))) {
+    throw new ApiError(409, 'HOOK_NOT_SELECTED', 'Only selected hooks can be rendered');
+  }
+  const concepts = (conceptIds?.length ? likedConcepts.filter((concept) => conceptIds.includes(concept.id)) : likedConcepts)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  if (concepts.length !== 8) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Render all eight selected hooks together');
+  const demo = project.mediaAssets.find(isBrandDemoAsset);
+  if (!demo) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Upload a product demo before rendering');
+  const selection = project.creatorSelection && projectCreatorSelectionSchema.safeParse(project.creatorSelection).success
+    ? projectCreatorSelectionSchema.parse(project.creatorSelection)
+    : project.selectedCharacter
+      ? { mode: 'single' as const, characters: [creatorCharacterSchema.parse(project.selectedCharacter)] }
+      : null;
+  if (!selection) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Select a creator before rendering');
+  const creators = await prisma.creator.findMany({
+    where: { id: { in: selection.characters.map((character) => character.id) } },
+    include: { clips: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
+  });
+  const byId = new Map(creators.map((creator) => [creator.id, creator]));
+  const requestedClipByConcept = new Map((requestedAssignments ?? []).map((assignment) => [assignment.conceptId, assignment.clipId]));
+  const assignments = concepts.map((concept, index) => {
+    const character = selection.characters[selection.mode === 'mix' ? index % selection.characters.length : 0];
+    const creator = character ? byId.get(character.id) : undefined;
+    const requestedClipId = requestedClipByConcept.get(concept.id);
+    const clip = requestedClipId
+      ? creator?.clips.find((item) => item.id === requestedClipId)
+      : creator?.clips[index % (creator.clips.length || 1)];
+    if (!creator || !clip) throw new ApiError(409, 'PROJECT_INCOMPLETE', `Creator clip missing for Reel ${index + 1}`);
+    return { conceptId: concept.id, clipUrl: clip.url, clipId: clip.id, creatorName: creator.name };
+  });
+  const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments };
+  const job = await createJob(project.id, JobType.RENDER_REELS, input as unknown as Prisma.InputJsonValue);
+  await renderQueue.add('render-reels', input, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
+  res.status(202).json({ job: await prisma.generationJob.findUnique({ where: { id: job.id } }) });
 };
 
 export const getJob: RequestHandler = async (req, res) => {

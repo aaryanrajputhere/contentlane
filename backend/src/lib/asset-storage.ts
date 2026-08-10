@@ -24,7 +24,7 @@ function dataUrlFromBuffer(buffer: Buffer, mimeType: string | null) {
   return `data:${resolvedMimeType};base64,${buffer.toString('base64')}`;
 }
 
-async function uploadBufferToCloudinary(buffer: Buffer, options: { folder: string; publicId: string; mimeType: string | null; trimStart?: number; trimEnd?: number }) {
+async function uploadBufferToCloudinary(buffer: Buffer, options: { folder: string; publicId: string; mimeType: string | null; trimStart?: number; trimEnd?: number; overwrite?: boolean }) {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -45,6 +45,7 @@ async function uploadBufferToCloudinary(buffer: Buffer, options: { folder: strin
         folder: options.folder, 
         public_id: options.publicId, 
         resource_type: resourceType,
+        ...(options.overwrite ? { overwrite: true } : {}),
         ...(transformation.length > 0 ? { transformation } : {})
       },
       (error, result) => {
@@ -76,7 +77,7 @@ async function uploadBufferToCloudinary(buffer: Buffer, options: { folder: strin
   });
 }
 
-export async function storeUploadedAsset(buffer: Buffer, options: { folder: string; publicId: string; mimeType: string | null; trimStart?: number; trimEnd?: number }) {
+export async function storeUploadedAsset(buffer: Buffer, options: { folder: string; publicId: string; mimeType: string | null; trimStart?: number; trimEnd?: number; overwrite?: boolean }) {
   if (hasCloudinaryCredentials()) {
     return await uploadBufferToCloudinary(buffer, options);
   }

@@ -45,7 +45,72 @@ export const stageInputSchema = z.object({ forceRegenerate: z.boolean().default(
 export const conceptStageInputSchema = z.object({
   count: z.number().int().min(1).max(8).default(8),
   forceRegenerate: z.boolean().default(false),
+  useHookPreferences: z.boolean().default(true),
+  append: z.boolean().default(false),
 }).strict();
+export const conceptReviewParamsSchema = projectIdParamsSchema.extend({
+  conceptId: z.string().trim().min(1).max(128),
+});
+export const conceptReviewSchema = z.object({
+  decision: z.enum(['LIKED', 'REJECTED']),
+}).strict();
+export const conceptReviewResetSchema = z.object({
+  clearDependentOutputs: z.boolean().default(false),
+}).strict();
+export const hookPreferenceExampleSchema = z.object({
+  hookText: z.string().trim().min(1).max(240),
+  demoOverlayText: z.string().trim().min(1).max(240),
+  angle: z.string().trim().min(1).max(240),
+  score: z.number().int(),
+  selectedAt: z.coerce.date(),
+}).strict();
+const currentHookPreferencesSchema = z.object({
+  liked: z.array(hookPreferenceExampleSchema).max(8),
+  rejected: z.array(hookPreferenceExampleSchema).max(8),
+  updatedAt: z.coerce.date(),
+}).strict().refine((value) => value.liked.length + value.rejected.length > 0, {
+  message: "At least one hook preference is required",
+}).refine((value) => value.liked.length + value.rejected.length <= 8, {
+  message: "At most eight hook preferences are allowed",
+});
+const legacyHookPreferencesSchema = z.object({
+  examples: z.array(hookPreferenceExampleSchema).min(1).max(8),
+  updatedAt: z.coerce.date(),
+}).strict();
+export const hookPreferencesSchema = z.union([currentHookPreferencesSchema, legacyHookPreferencesSchema]).transform((value) => "examples" in value
+  ? { ...value, liked: value.examples, rejected: [] as z.infer<typeof hookPreferenceExampleSchema>[] }
+  : { ...value, examples: [] as z.infer<typeof hookPreferenceExampleSchema>[] });
+const currentHookPreferenceSelectionSchema = z.object({
+  // Ownership is checked against the loaded project below. Do not require a
+  // particular database ID encoding here; older projects may contain IDs
+  // created before the current Prisma default was introduced.
+  likedConceptIds: z.array(z.string().trim().min(1).max(128)).max(8).default([]),
+  rejectedConceptIds: z.array(z.string().trim().min(1).max(128)).max(8).default([]),
+}).strict().superRefine((value, context) => {
+  const decisionCount = value.likedConceptIds.length + value.rejectedConceptIds.length;
+  if (decisionCount === 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "At least one hook decision is required" });
+  }
+  if (decisionCount > 8) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "At most eight hook decisions are allowed" });
+  }
+  if (new Set(value.likedConceptIds).size !== value.likedConceptIds.length
+    || new Set(value.rejectedConceptIds).size !== value.rejectedConceptIds.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "A hook decision cannot be repeated" });
+  }
+  const rejectedIds = new Set(value.rejectedConceptIds);
+  if (value.likedConceptIds.some((conceptId) => rejectedIds.has(conceptId))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "A hook cannot be both liked and rejected" });
+  }
+});
+export const hookPreferenceSelectionSchema = currentHookPreferenceSelectionSchema
+  .or(z.object({ conceptIds: z.array(z.string().trim().min(1).max(128)).min(1).max(8) }).strict()
+    .refine((value) => new Set(value.conceptIds).size === value.conceptIds.length, {
+      message: "A hook cannot be selected more than once",
+    }))
+  .transform((value) => "conceptIds" in value
+    ? { ...value, likedConceptIds: value.conceptIds, rejectedConceptIds: [], legacy: true as const }
+    : { ...value, conceptIds: [] as string[], legacy: false as const });
 export const mediaStageInputSchema = z.object({
   conceptId: z.string().cuid().nullable().optional(),
   forceRegenerate: z.boolean().default(false),
@@ -128,16 +193,50 @@ export const conceptSelectionSchema = z.object({
   conceptId: z.string().cuid().nullable(),
 }).strict();
 
-export const characterSelectionSchema = z.object({
-  character: creatorCharacterSchema.nullable(),
-}).strict();
+export const projectCreatorSelectionSchema = z.object({
+  mode: z.enum(['single', 'mix']),
+  characters: z.array(creatorCharacterSchema).min(1),
+}).strict().superRefine((selection, context) => {
+  if (selection.mode === 'single' && selection.characters.length !== 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Single creator selections must contain exactly one creator',
+      path: ['characters'],
+    });
+  }
+  if (selection.mode === 'mix' && selection.characters.length < 2) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Mixed creator selections require at least two creators',
+      path: ['characters'],
+    });
+  }
+});
+
+const creatorSelectionRequestSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('mix') }).strict(),
+  z.object({ mode: z.literal('single'), creatorId: z.string().cuid() }).strict(),
+]);
+
+export const characterSelectionSchema = z.union([
+  z.object({ character: creatorCharacterSchema.nullable() }).strict(),
+  z.object({ selection: creatorSelectionRequestSchema }).strict(),
+]);
 
 export const userRoleSchema = z.enum(['USER', 'ADMIN']);
 export const projectStatusSchema = z.enum(['DRAFT', 'ANALYZING', 'READY', 'HOOKS_READY', 'SCRIPTS_READY', 'MEDIA_READY', 'EXPORT_READY', 'FAILED']);
 export const analysisExtractionStatusSchema = z.enum(['success', 'failed']);
 export const analysisExtractionSourceSchema = z.enum(['firecrawl', 'fallback']);
 export const jobStatusSchema = z.enum(['QUEUED', 'ACTIVE', 'COMPLETED', 'FAILED', 'CANCELLED']);
-export const jobTypeSchema = z.enum(['ANALYZE_WEBSITE', 'GENERATE_CONCEPTS', 'GENERATE_MEDIA', 'SAVE_EXPORT', 'GENERATE_HOOKS', 'GENERATE_SCRIPTS']);
+export const jobTypeSchema = z.enum(['ANALYZE_WEBSITE', 'GENERATE_CONCEPTS', 'GENERATE_MEDIA', 'SAVE_EXPORT', 'GENERATE_HOOKS', 'GENERATE_SCRIPTS', 'RENDER_REELS']);
+
+export const renderRequestSchema = z.object({
+  conceptIds: z.array(z.string().cuid()).min(1).max(8).optional(),
+  assignments: z.array(z.object({
+    conceptId: z.string().cuid(),
+    clipId: z.string().cuid(),
+  }).strict()).min(1).max(8).optional(),
+}).strict();
 export const mediaTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 
 export const authUserSchema = z.object({
@@ -247,6 +346,7 @@ export const projectSchema = z.object({
   updatedAt: z.coerce.date(),
   selectedConceptId: z.string().cuid().nullable(),
   selectedCharacterId: z.string().min(1).nullable(),
+  hookPreferences: hookPreferencesSchema.nullable(),
 }).strict();
 
 export const projectSnapshotSchema = projectSchema.extend({
@@ -256,6 +356,8 @@ export const projectSnapshotSchema = projectSchema.extend({
   mediaAssets: z.array(mediaAssetSchema),
   exportState: projectExportSchema.nullable(),
   jobs: z.array(generationJobSchema),
+  selectedCharacter: creatorCharacterSchema.nullable(),
+  creatorSelection: projectCreatorSelectionSchema.nullable(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -264,12 +366,15 @@ export type AuthUser = z.infer<typeof authUserSchema>;
 export type WebsiteInput = z.infer<typeof websiteInputSchema>;
 export type StageInput = z.infer<typeof stageInputSchema>;
 export type ConceptStageInput = z.infer<typeof conceptStageInputSchema>;
+export type HookPreferenceExample = z.infer<typeof hookPreferenceExampleSchema>;
+export type HookPreferences = z.infer<typeof hookPreferencesSchema>;
 export type MediaStageInput = z.infer<typeof mediaStageInputSchema>;
 export type ExportState = z.infer<typeof exportStateSchema>;
 export type BrandProfile = z.infer<typeof brandProfileSchema>;
 export type WebsiteAnalysisHomepage = z.infer<typeof websiteAnalysisHomepageSchema>;
 export type WebsiteAnalysis = z.infer<typeof websiteAnalysisSchema>;
 export type CreatorCharacter = z.infer<typeof creatorCharacterSchema>;
+export type ProjectCreatorSelection = z.infer<typeof projectCreatorSelectionSchema>;
 export type CreatorRecord = z.infer<typeof creatorSchema>;
 export type CreatorClipRecord = z.infer<typeof creatorClipSchema>;
 export type ConceptCard = z.infer<typeof conceptCardSchema>;

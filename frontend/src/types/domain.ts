@@ -1,7 +1,7 @@
 export type UserRole = 'USER' | 'ADMIN';
 export type ProjectStatus = 'DRAFT' | 'ANALYZING' | 'READY' | 'HOOKS_READY' | 'SCRIPTS_READY' | 'MEDIA_READY' | 'EXPORT_READY' | 'FAILED';
 export type JobStatus = 'QUEUED' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-export type JobType = 'ANALYZE_WEBSITE' | 'GENERATE_CONCEPTS' | 'GENERATE_MEDIA' | 'SAVE_EXPORT' | 'GENERATE_HOOKS' | 'GENERATE_SCRIPTS';
+export type JobType = 'ANALYZE_WEBSITE' | 'GENERATE_CONCEPTS' | 'GENERATE_MEDIA' | 'SAVE_EXPORT' | 'GENERATE_HOOKS' | 'GENERATE_SCRIPTS' | 'RENDER_REELS';
 export type MediaType = 'IMAGE' | 'VIDEO';
 export type CharacterSource = 'preset' | 'custom';
 export type SupportStatus = 'NEW' | 'OPEN' | 'RESOLVED';
@@ -41,6 +41,13 @@ export interface CreatorCharacter {
   baseImageMimeType?: string | null;
   clipCount?: number;
   clipTags?: string[];
+}
+
+export type CreatorSelectionMode = 'single' | 'mix';
+
+export interface CreatorSelection {
+  mode: CreatorSelectionMode;
+  characters: CreatorCharacter[];
 }
 
 export interface CreatorClipRecord {
@@ -130,7 +137,24 @@ export interface ConceptCard {
   generatedImageUrl: string | null;
   generatedVideoUrl: string | null;
   sortOrder: number;
+  reviewDecision: 'LIKED' | 'REJECTED' | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface HookPreferenceExample {
+  hookText: string;
+  demoOverlayText: string;
+  angle: string;
+  score: number;
+  selectedAt: string;
+}
+
+export interface HookPreferences {
+  liked: HookPreferenceExample[];
+  rejected: HookPreferenceExample[];
+  /** Legacy first-version preferences, normalized by the API when used. */
+  examples?: HookPreferenceExample[];
   updatedAt: string;
 }
 
@@ -199,6 +223,8 @@ export interface ProjectSnapshot {
   selectedConceptId: string | null;
   selectedCharacterId: string | null;
   selectedCharacter: CreatorCharacter | null;
+  creatorSelection: CreatorSelection | null;
+  hookPreferences: HookPreferences | null;
 }
 
 export interface ProjectResponse {

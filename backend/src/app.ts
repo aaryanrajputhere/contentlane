@@ -42,7 +42,7 @@ export function createApp() {
   app.post('/api/v1/webhooks/dodo', express.raw({ type: 'application/json', limit: '1mb' }), handleDodoWebhook);
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
-  app.use(clerkMiddleware());
+  if (config.NODE_ENV !== 'test') app.use(clerkMiddleware());
   app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
   app.get('/health/ready', async (_req, res) => res.json({ status: 'ready' }));
   app.use('/api/v1/auth', authRouter);

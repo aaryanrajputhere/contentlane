@@ -7,7 +7,6 @@ import {
   Image as ImageIcon,
   Loader2,
   Pencil,
-  Plus,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -56,7 +55,6 @@ function creatorMeta(creator: CreatorRecord) {
 }
 
 const shellClass = 'rounded-[26px] border border-[#ECECEC] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)]';
-const pageShellClass = 'mx-auto w-full max-w-[1440px] px-6 sm:px-8 lg:px-12';
 const inputClass =
   'w-full rounded-[18px] border border-[#ECECEC] bg-white px-4 py-3 text-sm text-[#111111] outline-none transition placeholder:text-[#9A9A9A] focus:border-black focus:ring-1 focus:ring-black/10';
 const textareaClass =
@@ -663,26 +661,6 @@ export default function AdminCreatorsPage() {
   return (
     <main className="min-h-screen bg-[#FAFAF8] text-[#111111]">
       <AdminHeader />
-      <div className="border-b border-black/6 bg-white/95 backdrop-blur-xl">
-        <div className={`${pageShellClass} flex items-center justify-between gap-4 py-4`}>
-          <div className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]">ContentLane</div>
-          <nav className="hidden items-center gap-8 text-sm text-[#666666] lg:flex">
-            <span>Dashboard</span>
-            <span>Projects</span>
-            <span className="rounded-full bg-black px-3 py-1.5 text-white">Creators</span>
-            <span>Media</span>
-            <span>Analytics</span>
-            <span>Settings</span>
-          </nav>
-          <div className="flex items-center gap-3">
-            <button type="button" className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:scale-[1.01] hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:ring-offset-2 focus-visible:ring-offset-white">
-              <Plus size={16} />
-              New Project
-            </button>
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-[#EFE7FF] text-sm font-semibold text-[#6B4AE2]">AR</div>
-          </div>
-        </div>
-      </div>
 
       <div className="mx-auto flex w-full max-w-[1440px] gap-6 px-5 py-5 sm:px-8 lg:px-20">
         <aside className="w-full max-w-[270px] shrink-0 space-y-4">
