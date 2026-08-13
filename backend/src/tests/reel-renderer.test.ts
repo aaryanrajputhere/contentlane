@@ -88,8 +88,8 @@ test('FFmpeg overlays static caption images and produces a valid reel with color
     const output = join(directory, 'output.mp4');
     const frame = join(directory, 'frame.png');
     await Promise.all([
-      execFileAsync(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'color=c=gray:s=1080x1920:r=10:d=0.3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', hook]),
-      execFileAsync(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'color=c=gray:s=1080x1920:r=10:d=0.3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', demo]),
+      execFileAsync(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'color=c=gray:s=1080x1920:r=24:d=0.3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', hook]),
+      execFileAsync(ffmpeg, ['-y', '-f', 'lavfi', '-i', 'color=c=gray:s=1080x1920:r=29.97:d=0.3', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', demo]),
       rasterizeCaption('Smoke 🔥', 'STANDARD', 'HOOK').then((png) => writeFile(hookCaption, png)),
       rasterizeCaption('Demo ❤️', 'STANDARD', 'DEMO').then((png) => writeFile(demoCaption, png)),
     ]);
@@ -120,6 +120,7 @@ test('FFmpeg overlays static caption images and produces a valid reel with color
 
 test('reel filter accepts explicit static caption image inputs', () => {
   const filter = buildReelFilter({ hook: 4, demo: 5 });
+  assert.match(filter, /fps=30,setpts=PTS-STARTPTS/);
   assert.match(filter, /\[hook-base\]\[4:v\]overlay=0:0:format=auto\[hook\]/);
   assert.match(filter, /\[demo-base\]\[5:v\]overlay=0:0:format=auto\[demo\]/);
   assert.doesNotMatch(filter, /drawtext|drawbox/);

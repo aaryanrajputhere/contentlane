@@ -29,9 +29,9 @@ export interface ReelCaptionInputs {
 
 export function buildReelFilter(captionInputs: ReelCaptionInputs = { hook: 2, demo: 3 }) {
   return [
-    '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[hook-base]',
+    '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,setpts=PTS-STARTPTS[hook-base]',
     `[hook-base][${captionInputs.hook}:v]overlay=0:0:format=auto[hook]`,
-    '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[demo-base]',
+    '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,setpts=PTS-STARTPTS[demo-base]',
     `[demo-base][${captionInputs.demo}:v]overlay=0:0:format=auto[demo]`,
     '[hook][demo]concat=n=2:v=1:a=0[video]',
   ].join(';');
@@ -79,6 +79,7 @@ export async function renderReel(input: ReelRenderInput) {
       '-map', '1:a?',
       '-c:v', 'libx264',
       '-preset', 'veryfast',
+      '-r', '30',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
       '-movflags', '+faststart',
