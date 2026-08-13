@@ -1,6 +1,6 @@
 import { authUnauthorizedEvent } from './auth-events';
 
-const productionApiBase = 'https://contentlane-backend-aaryanrajputheres-projects.vercel.app';
+const productionApiBase = 'https://api-contentlane.up.railway.app';
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? productionApiBase : '');
 let getAuthToken: (() => Promise<string | null>) | null = null;
 
