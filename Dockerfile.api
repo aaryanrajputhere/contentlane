@@ -14,5 +14,7 @@ RUN npm ci
 COPY . .
 RUN npm run build -w backend
 
+EXPOSE 3000
+
 ENV NODE_ENV=production
 CMD ["npm", "run", "start", "-w", "backend"]
