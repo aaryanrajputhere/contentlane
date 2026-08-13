@@ -53,8 +53,12 @@ test('pure text, mixed text, multiline, Snapchat, and standard lines are centere
   }
 
   const snapchat = layoutCaption('A short hook', 'SNAPCHAT', 'HOOK');
+  const snapchatDemo = layoutCaption('A demo', 'SNAPCHAT', 'DEMO');
   assert.deepEqual(snapchat.band, { y: 919, height: 82 });
-  assert.equal(layoutCaption('A demo', 'SNAPCHAT', 'DEMO').band, undefined);
+  assert.deepEqual(snapchatDemo.band, { y: 919, height: 82 });
+  assert.equal(snapchatDemo.fontSize, snapchat.fontSize);
+  assert.equal(snapchatDemo.lineHeight, snapchat.lineHeight);
+  assert.equal(layoutCaption('A demo', 'STANDARD', 'DEMO').band, undefined);
 });
 
 test('caption PNG is transparent, correctly sized, and contains chromatic emoji pixels', async () => {

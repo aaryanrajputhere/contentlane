@@ -100,7 +100,7 @@ export function wrapCaptionText(value: string, captionStyle: CaptionStyle) {
 }
 
 function captionTypography(style: CaptionStyle, role: CaptionRole) {
-  const fontSize = role === 'DEMO' ? 42 : style === 'SNAPCHAT' ? SNAPCHAT_FONT_SIZE : 68;
+  const fontSize = style === 'SNAPCHAT' ? SNAPCHAT_FONT_SIZE : role === 'DEMO' ? 42 : 68;
   return {
     fontSize,
     fontFamily: style === 'SNAPCHAT' ? 'ContentLane Sans' : 'ContentLane Sans Bold',
@@ -131,7 +131,7 @@ export function layoutCaption(value: string, style: CaptionStyle, role: CaptionR
     fontSize,
     lineHeight,
     lines,
-    ...(style === 'SNAPCHAT' && role === 'HOOK'
+    ...(style === 'SNAPCHAT'
       ? { band: { y: (CAPTION_HEIGHT - bandHeight) / 2, height: bandHeight } }
       : {}),
   };
