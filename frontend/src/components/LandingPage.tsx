@@ -696,25 +696,36 @@ export default function LandingPage() {
         />
 
         <div className="mx-auto mt-10 max-w-2xl">
-            <div
-              className="rounded-[30px] border border-[#111111] bg-[#111111] p-8 text-white shadow-[0_18px_42px_rgba(0,0,0,0.12)]"
+            <motion.div
+              initial={reducedMotion ? false : { opacity: 0, y: 24 }}
+              whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.35 }}
+              whileHover={reducedMotion ? undefined : { y: -8, scale: 1.012 }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              className="group relative overflow-hidden rounded-[30px] border border-white/10 bg-[#111111] p-8 text-white shadow-[0_18px_42px_rgba(0,0,0,0.12)] transition-shadow duration-500 hover:shadow-[0_28px_70px_rgba(17,17,17,0.24)] sm:p-10"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-[#a99cff]/20 blur-3xl transition duration-700 group-hover:bg-[#a99cff]/35" />
+              <div className="pointer-events-none absolute -bottom-32 -left-20 h-56 w-56 rounded-full bg-[#6fe4c0]/10 blur-3xl transition duration-700 group-hover:bg-[#6fe4c0]/20" />
+              <div className="relative flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{pricingPlan.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-[#6fe4c0] shadow-[0_0_0_5px_rgba(111,228,192,0.1)]" />
+                    <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{pricingPlan.name}</h3>
+                  </div>
                   <p className="mt-2 text-sm leading-6 text-white/70">{pricingPlan.description}</p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111]">3-day free trial</span>
+                <span className="shrink-0 rounded-full border border-white/15 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111] shadow-[0_8px_20px_rgba(255,255,255,0.08)] transition-transform duration-300 group-hover:rotate-2">3-day free trial</span>
               </div>
 
-              <div className="mt-7 flex items-end gap-1">
+              <div className="relative mt-8 flex items-end gap-1">
                 <AnimatedPrice reducedMotion={reducedMotion} />
                 <span className="pb-1 text-sm text-white/70">{pricingPlan.period}</span>
               </div>
+              <p className="relative mt-2 text-xs font-medium uppercase tracking-[0.16em] text-[#6fe4c0]">Nothing charged today</p>
 
-              <ul className="mt-6 space-y-3">
-                {pricingPlan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-3 text-sm leading-6 text-white/90">
+              <ul className="relative mt-7 space-y-3">
+                {pricingPlan.features.map((feature, index) => (
+                  <li key={feature} className="flex items-start gap-3 text-sm leading-6 text-white/90 transition-transform duration-300 group-hover:translate-x-1" style={{ transitionDelay: `${index * 35}ms` }}>
                     <Check size={16} className="mt-0.5 shrink-0 text-white" />
                     <span>{feature}</span>
                   </li>
@@ -724,12 +735,12 @@ export default function LandingPage() {
               <button
                 type="button"
                 onClick={() => navigate(status === 'authenticated' ? '/billing' : '/signup', status === 'authenticated' ? undefined : { state: { from: { pathname: '/billing' } } })}
-                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
+                className="relative mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3.5 text-sm font-semibold text-[#111111] transition duration-300 hover:-translate-y-1 hover:bg-[#f3f3f3] hover:shadow-[0_12px_28px_rgba(255,255,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
               >
                 Start 3-day free trial
-                <ArrowRight size={16} />
+                <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
               </button>
-            </div>
+            </motion.div>
         </div>
       </section>
 
