@@ -121,7 +121,7 @@ const pricingPlan = {
   originalPrice: 29,
   price: 19,
   period: '/month',
-  description: 'One plan for the full website-to-video workflow.',
+  description: '3-day free trial, then $19 USD per month for the full website-to-video workflow.',
   features: ['Website and brand analysis', 'Hook-first scripts and visuals', 'Browser editing and exports'],
 } as const;
 
@@ -161,7 +161,7 @@ function AnimatedPrice({ reducedMotion }: { reducedMotion: boolean | null }) {
 
   if (reducedMotion) {
     return (
-      <span className="relative inline-grid h-[3.75rem] min-w-[5.25rem] items-end" aria-label="Launch price: $19 per month, reduced from $29">
+      <span className="relative inline-grid h-[3.75rem] min-w-[5.25rem] items-end" aria-label="3-day free trial, then $19 per month, reduced from $29">
         <span aria-hidden="true" className="absolute left-0 top-0 text-base font-bold leading-none tracking-[-0.03em] text-white/55 line-through decoration-[#ad9cff] decoration-2">
           ${pricingPlan.originalPrice}
         </span>
@@ -176,7 +176,7 @@ function AnimatedPrice({ reducedMotion }: { reducedMotion: boolean | null }) {
     <span
       ref={priceRef}
       className="relative inline-grid h-[3.75rem] min-w-[5.25rem] items-end"
-      aria-label="Launch price: $19 per month, reduced from $29"
+      aria-label="3-day free trial, then $19 per month, reduced from $29"
     >
       <motion.span
         aria-hidden="true"
@@ -692,7 +692,7 @@ export default function LandingPage() {
         <SectionHeading
           eyebrow="Pricing"
           title="One plan for the whole creative lane"
-          description="Launch pricing drops from $29 to $19 USD each month. Charged immediately, with no trial and no hidden tiers."
+          description="Start with a 3-day free trial, then continue for $19 USD each month. Cancel anytime before renewal."
         />
 
         <div className="mx-auto mt-10 max-w-2xl">
@@ -704,7 +704,7 @@ export default function LandingPage() {
                   <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{pricingPlan.name}</h3>
                   <p className="mt-2 text-sm leading-6 text-white/70">{pricingPlan.description}</p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111]">Complete plan</span>
+                <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111]">3-day free trial</span>
               </div>
 
               <div className="mt-7 flex items-end gap-1">
@@ -726,7 +726,7 @@ export default function LandingPage() {
                 onClick={() => navigate(status === 'authenticated' ? '/billing' : '/signup', status === 'authenticated' ? undefined : { state: { from: { pathname: '/billing' } } })}
                 className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f3f3f3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
               >
-                Subscribe for $19/month
+                Start 3-day free trial
                 <ArrowRight size={16} />
               </button>
             </div>

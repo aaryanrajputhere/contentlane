@@ -38,6 +38,7 @@ export const createCheckout: RequestHandler = async (req, res, next) => {
 
     const session = await getDodoClient().checkoutSessions.create({
       product_cart: [{ product_id: config.DODO_PAYMENTS_PRODUCT_ID, quantity: 1 }],
+      subscription_data: { trial_period_days: 3 },
       customer: req.user.name
         ? { email: req.user.email, name: req.user.name }
         : { email: req.user.email },

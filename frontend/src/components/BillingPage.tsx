@@ -65,10 +65,10 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
       <section className="w-full max-w-3xl overflow-hidden rounded-[36px] border border-[#e8e8e8] bg-white shadow-[0_28px_80px_rgba(0,0,0,0.08)]">
         <div className="grid md:grid-cols-[0.92fr_1.08fr]">
           <div className="bg-[#111111] p-8 text-white sm:p-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">One plan. Full access.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/55">3-day free trial. Full access.</p>
             <div className="mt-8 flex items-end gap-2">
               <span className="text-6xl font-extrabold tracking-[-0.08em]">${billing?.price ?? 19}</span>
-              <span className="pb-2 text-sm text-white/60">USD / month</span>
+              <span className="pb-2 text-sm text-white/60">USD / month after trial</span>
             </div>
             <ul className="mt-10 space-y-4 text-sm text-white/80">
               {['Brand and website analysis', 'Hook-first scripts and visuals', 'Browser editing and exports'].map((item) => (
@@ -86,7 +86,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
                 ? 'Payment received. We are waiting for secure confirmation from Dodo Payments.'
                 : billing?.hasAccess
                   ? billing.cancelAtPeriodEnd ? 'Your access remains active until the end of the current billing period.' : 'You have full access to every ContentLane workflow.'
-                  : 'You will be charged immediately. There is no trial or setup fee.'}
+                  : 'Start with 3 days free. You will be charged $19/month after the trial unless you cancel.'}
             </p>
             {searchParams.get('cancelled') ? <p className="mt-4 rounded-2xl bg-[#f5f5f5] p-4 text-sm">Checkout was cancelled. You have not been charged.</p> : null}
             {error ? <p role="alert" className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -97,7 +97,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
               className="mt-8 inline-flex items-center justify-center gap-2 rounded-full bg-[#111111] px-6 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading || waiting ? <Loader2 size={17} className="animate-spin" /> : <CreditCard size={17} />}
-              {waiting ? 'Confirming payment' : billing?.hasAccess ? 'Manage billing' : `Subscribe for $${billing?.price ?? 19}/month`}
+              {waiting ? 'Confirming payment' : billing?.hasAccess ? 'Manage billing' : 'Start 3-day free trial'}
             </button>
             <button type="button" onClick={() => navigate('/')} className="mt-4 text-sm font-medium text-[#666666] hover:text-[#111111]">Back to ContentLane</button>
           </div>
