@@ -48,7 +48,7 @@ export const createCheckout: RequestHandler = async (req, res, next) => {
       feature_flags: {
         allow_customer_editing_email: false,
         allow_customer_editing_name: true,
-        allow_discount_code: false,
+        allow_discount_code: true,
       },
     });
     if (!session.checkout_url) throw new ApiError(502, 'CHECKOUT_FAILED', 'Dodo did not return a checkout URL');
