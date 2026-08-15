@@ -195,6 +195,8 @@ model HookConcept {
   generatedVideoUrl     String?
   sortOrder             Int          @default(0)
   reviewDecision        ReviewDecision?
+  assignedCreatorId     String?
+  assignedClipId        String?
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
   selectedByProjects    Project[]    @relation("ProjectSelectedConcept")

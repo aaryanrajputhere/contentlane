@@ -4,6 +4,8 @@ import AuthPage from './components/AuthPage';
 import LandingPage from './components/LandingPage';
 import ProjectPage from './components/ProjectPage';
 import ProjectRenderPage from './components/ProjectRenderPage';
+import CampaignWorkspacePage from './components/CampaignWorkspacePage';
+import ProjectsPage from './components/ProjectsPage';
 import BillingPage from './components/BillingPage';
 import AdminSupportPage from './components/AdminSupportPage';
 import SupportWidget from './components/SupportWidget';
@@ -33,12 +35,19 @@ export default function App() {
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/billing/success" element={<BillingPage success />} />
         <Route element={<RequireSubscription />}>
-          <Route path="/projects/:id" element={<ProjectPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<CampaignWorkspacePage />} />
+          <Route path="/projects/:id/brand" element={<CampaignWorkspacePage />} />
+          <Route path="/projects/:id/content" element={<CampaignWorkspacePage />} />
+          <Route path="/projects/:id/generate" element={<CampaignWorkspacePage />} />
+          <Route path="/projects/:id/batches" element={<Navigate to="content" replace />} />
+          <Route path="/projects/:id/workflow" element={<ProjectPage />} />
           <Route path="/projects/:id/demo" element={<ProjectPage />} />
           <Route path="/projects/:id/hooks" element={<ProjectPage />} />
           <Route path="/projects/:id/creator" element={<ProjectPage />} />
           <Route path="/projects/:id/export" element={<ProjectPage />} />
           <Route path="/projects/:id/render" element={<ProjectRenderPage />} />
+          <Route path="/projects/:id/dashboard" element={<CampaignWorkspacePage />} />
         </Route>
       </Route>
       <Route element={<RequireAdmin />}>

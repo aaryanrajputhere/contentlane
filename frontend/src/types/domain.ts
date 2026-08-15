@@ -138,6 +138,8 @@ export interface ConceptCard {
   generatedVideoUrl: string | null;
   sortOrder: number;
   reviewDecision: 'LIKED' | 'REJECTED' | null;
+  assignedCreatorId?: string | null;
+  assignedClipId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -153,6 +155,7 @@ export interface HookPreferenceExample {
 export interface HookPreferences {
   liked: HookPreferenceExample[];
   rejected: HookPreferenceExample[];
+  patterns: string[];
   /** Legacy first-version preferences, normalized by the API when used. */
   examples?: HookPreferenceExample[];
   updatedAt: string;
@@ -232,4 +235,14 @@ export interface ProjectResponse {
   cached?: boolean;
   job?: GenerationJob;
   brandProfile?: BrandProfile;
+}
+
+export interface ProjectListItem {
+  id: string;
+  website: string;
+  normalizedWebsite: string;
+  status: ProjectStatus;
+  updatedAt: string;
+  brandProfile: { brandName: string } | null;
+  _count: { concepts: number; jobs: number };
 }

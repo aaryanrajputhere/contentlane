@@ -11,8 +11,9 @@ function conceptTagsFromDirection(value: string) {
 export function selectMatchedClips(
   concepts: ProjectSnapshot['concepts'],
   clips: CreatorClipRecord[],
+  initiallyUsedClipIds: Iterable<string> = [],
 ) {
-  const usedClipIds = new Set<string>();
+  const usedClipIds = new Set(initiallyUsedClipIds);
 
   return concepts.map((concept, index) => {
     if (clips.length === 0) return null;
