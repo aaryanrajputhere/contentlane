@@ -168,6 +168,17 @@ test("hook prompt applies automatic styles and brand constraints", () => {
   assert.match(prompt.system, /Output ONLY valid JSON/);
 });
 
+test("hook prompt uses saved patterns instead of the defaults", () => {
+  const prompt = buildHooksPrompt(persistedProfile, 8, [], [], false, [], [
+    "show the shortcut for {task}",
+    "the feature nobody on your team uses",
+  ]);
+
+  assert.match(prompt.system, /show the shortcut for \{task\}/);
+  assert.match(prompt.system, /the feature nobody on your team uses/);
+  assert.doesNotMatch(prompt.system, /how to actually use \{app\} without making it complicated/);
+});
+
 test("regeneration prompt excludes previous copy", () => {
   const prompt = buildHooksPrompt(persistedProfile, 8, [{
     hookText: "i kept forgetting our best moments 😭",

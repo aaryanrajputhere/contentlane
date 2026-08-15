@@ -37,7 +37,7 @@ const worker = new Worker<RenderJobInput>('contentlane-render-reels', async (job
       if (!hookUrl) throw new Error(`Creator clip is missing for Reel ${index + 1}`);
       await prisma.generationJob.update({ where: { id: job.id }, data: { progress: Math.round((index / input.assignments.length) * 90) + 5, progressMessage: `Rendering Reel ${index + 1} of ${input.assignments.length}` } });
       const demoOverlay = composeDemoOverlayText(concept.demoOverlayText, concept.sortOrder, project.brandProfile?.brandName, project.websiteAnalysis?.rootDomain ?? null, project.website);
-      const output = await renderReel({ hookUrl, demoUrl: demo.url, hookOverlay: concept.hookText, demoOverlay, captionStyle: captionStyleForSortOrder(concept.sortOrder), outputId: `${project.id}-reel-${concept.sortOrder + 1}`, folder: `ContentLane/projects/${project.id}/renders` });
+      const output = await renderReel({ hookUrl, demoUrl: demo.url, hookOverlay: concept.hookText, demoOverlay, captionStyle: captionStyleForSortOrder(concept.sortOrder), outputId: `${project.id}-${job.id}-reel-${index + 1}`, folder: `ContentLane/projects/${project.id}/renders` });
       outputs.push({ conceptId: concept.id, clipId: assignment.clipId, creatorName: assignment.creatorName, sortOrder: concept.sortOrder, url: output.url, provider: output.provider, providerId: output.providerId, mimeType: output.mimeType, format: output.format });
     }
     const result = { format: 'mp4', reels: outputs };

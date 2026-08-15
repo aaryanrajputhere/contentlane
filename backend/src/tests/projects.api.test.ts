@@ -520,9 +520,9 @@ test("hook batches prefetch after five selections and stop at 24 hooks", async (
     assert.equal(initial.project.concepts.length, 8);
 
     const earlyAppend = await generate(true);
-    assert.equal(earlyAppend.status, 409);
-    const earlyError = (await earlyAppend.json()) as { error: { code: string } };
-    assert.equal(earlyError.error.code, "HOOKS_PENDING_REVIEW");
+    assert.equal(earlyAppend.status, 200);
+    const early = (await earlyAppend.json()) as { project: { concepts: Array<{ id: string }> } };
+    assert.equal(early.project.concepts.length, 16);
 
     for (const concept of initial.project.concepts.slice(0, 5)) {
       const response = await review(concept.id, "LIKED");
@@ -532,7 +532,7 @@ test("hook batches prefetch after five selections and stop at 24 hooks", async (
     const prefetchedResponse = await generate(true);
     assert.equal(prefetchedResponse.status, 200);
     const prefetched = (await prefetchedResponse.json()) as { project: { concepts: Array<{ id: string; reviewDecision: string | null }> } };
-    assert.equal(prefetched.project.concepts.length, 16);
+    assert.equal(prefetched.project.concepts.length, 24);
 
     const unreviewed = prefetched.project.concepts.filter((concept) => concept.reviewDecision === null);
     for (const concept of unreviewed.slice(0, 8)) {
@@ -543,12 +543,12 @@ test("hook batches prefetch after five selections and stop at 24 hooks", async (
     const finalBatchResponse = await generate(true);
     assert.equal(finalBatchResponse.status, 200);
     const finalBatch = (await finalBatchResponse.json()) as { project: { concepts: Array<{ id: string }> } };
-    assert.equal(finalBatch.project.concepts.length, 24);
+    assert.equal(finalBatch.project.concepts.length, 32);
 
     const overLimitResponse = await generate(true);
-    assert.equal(overLimitResponse.status, 409);
-    const overLimitError = (await overLimitResponse.json()) as { error: { code: string } };
-    assert.equal(overLimitError.error.code, "HOOK_LIMIT_REACHED");
+    assert.equal(overLimitResponse.status, 200);
+    const nextBatch = (await overLimitResponse.json()) as { project: { concepts: Array<{ id: string }> } };
+    assert.equal(nextBatch.project.concepts.length, 40);
   });
 });
 

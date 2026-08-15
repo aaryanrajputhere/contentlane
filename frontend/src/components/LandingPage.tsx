@@ -502,7 +502,7 @@ export default function LandingPage() {
         project = hooksResponse.project;
       }
 
-      navigate(`/projects/${project.id}`);
+      navigate(`/projects/${project.id}/hooks`);
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.code === 'SUBSCRIPTION_REQUIRED') {
         navigate('/billing');
@@ -548,9 +548,9 @@ export default function LandingPage() {
               Admin panel
             </button>
           ) : null}
-          {status === 'authenticated' && user?.role !== 'ADMIN' ? (
-            <button onClick={() => navigate('/billing')} className="hidden rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black sm:block">
-              Manage billing
+          {status === 'authenticated' ? (
+            <button onClick={() => navigate('/projects')} className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black">
+              Dashboard
             </button>
           ) : null}
           <Show when="signed-out">
@@ -625,6 +625,12 @@ export default function LandingPage() {
             <span className="hidden text-[#b0b0b0] sm:inline">-&gt;</span>
             <span>Ready-to-post ad after approval</span>
           </div>
+
+          {status === 'authenticated' ? (
+            <button type="button" onClick={() => navigate('/projects')} className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#666666] underline decoration-black/20 underline-offset-4 transition hover:text-[#111111]">
+              Choose an existing website <ArrowRight size={14} />
+            </button>
+          ) : null}
 
           {(message || error) && (
             <div className="mt-5 min-h-6 text-sm" role={error ? 'alert' : 'status'}>

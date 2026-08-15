@@ -12,6 +12,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   RotateCcw,
+  LayoutDashboard,
 } from 'lucide-react';
 import { motion, useAnimationControls, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
 import { api, post } from '../lib/api';
@@ -32,7 +33,7 @@ const AI_STEPS = [
 const HOOK_SELECTION_TARGET = 8;
 const HOOK_PREFETCH_SELECTION_THRESHOLD = 5;
 const HOOK_PREFETCH_REMAINING_THRESHOLD = 3;
-const MAX_HOOKS_PER_PROJECT = 24;
+const MAX_HOOKS_PER_PROJECT = 96;
 
 type HookRetryFailure = {
   phase: 'feedback' | 'generation';
@@ -310,6 +311,7 @@ export default function ProjectPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [regenerationMessage, setRegenerationMessage] = useState('');
   const [hookRetryFailure, setHookRetryFailure] = useState<HookRetryFailure | null>(null);
+  const [acceptedHookOrder, setAcceptedHookOrder] = useState<string[]>([]);
   const [isUploadSectionVisible, setIsUploadSectionVisible] = useState(false);
   const automaticGenerationAttempt = useRef<string | null>(null);
   const automaticCreatorSelectionAttempt = useRef<string | null>(null);
@@ -425,6 +427,9 @@ export default function ProjectPage() {
         body: JSON.stringify({ decision }),
       });
       setProject(response.project);
+      if (decision === 'LIKED') {
+        setAcceptedHookOrder((current) => [conceptId, ...current.filter((id) => id !== conceptId)]);
+      }
       return true;
     } catch (caught) {
       setHookRetryFailure({ phase: 'feedback', message: caught instanceof Error ? caught.message : 'The decision could not be saved. Try again.' });
@@ -587,7 +592,15 @@ export default function ProjectPage() {
 
   const availableCreators = eligibleCreators(creatorLibrary);
   const creatorSelection = effectiveCreatorSelection(project, creatorLibrary);
-  const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === 'LIKED').slice(0, 8);
+  const likedConcepts = project.concepts
+    .filter((concept) => concept.reviewDecision === 'LIKED')
+    .sort((a, b) => {
+      const aIndex = acceptedHookOrder.indexOf(a.id);
+      const bIndex = acceptedHookOrder.indexOf(b.id);
+      if (aIndex !== -1 || bIndex !== -1) return (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex);
+      return Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.sortOrder - b.sortOrder;
+    })
+    .slice(0, 8);
   const unreviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === null);
   const displayConcepts = likedConcepts;
   const brandDemoAsset = project.mediaAssets.find(
@@ -615,6 +628,7 @@ export default function ProjectPage() {
     try {
       const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}/concepts/review/reset`, { method: 'PATCH', body: JSON.stringify({ clearDependentOutputs: hasDependentWork }) });
       setProject(response.project);
+      setAcceptedHookOrder([]);
       automaticGenerationAttempt.current = null;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to restart review');
@@ -633,6 +647,13 @@ export default function ProjectPage() {
           >
             <ArrowLeft size={16} />
             Back
+          </button>
+          <button
+            onClick={() => navigate(`/projects/${id}/dashboard`)}
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[#111111] transition hover:bg-[#f3f3f3]"
+          >
+            <LayoutDashboard size={16} />
+            Dashboard
           </button>
         </div>
       </header>
@@ -744,8 +765,8 @@ export default function ProjectPage() {
               </div>
             ) : unreviewedConcepts.length === 0 && hookLimitReached ? (
               <div role="status" className="flex min-h-80 flex-col items-center justify-center gap-2 px-6 text-center">
-                <p className="font-semibold">You’ve reviewed the maximum of 24 hooks.</p>
-                <p className="max-w-md text-sm text-[#666]">Review the campaign again to reconsider your choices and select eight hooks.</p>
+                <p className="font-semibold">You’ve reviewed the maximum of 96 hooks.</p>
+                <p className="max-w-md text-sm text-[#666]">Open the campaign dashboard to choose a fresh batch from your hook library.</p>
                 <button type="button" onClick={() => void resetReviews()} disabled={busy !== null} className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold disabled:opacity-50">
                   <RotateCcw size={16} /> Review all 24 again
                 </button>

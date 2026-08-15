@@ -52,7 +52,9 @@ export const conceptReviewParamsSchema = projectIdParamsSchema.extend({
   conceptId: z.string().trim().min(1).max(128),
 });
 export const conceptReviewSchema = z.object({
-  decision: z.enum(['LIKED', 'REJECTED']),
+  decision: z.enum(['LIKED', 'REJECTED']).nullable(),
+  creatorId: z.string().cuid().optional(),
+  clipId: z.string().cuid().optional(),
 }).strict();
 export const conceptReviewResetSchema = z.object({
   clearDependentOutputs: z.boolean().default(false),
@@ -67,10 +69,9 @@ export const hookPreferenceExampleSchema = z.object({
 const currentHookPreferencesSchema = z.object({
   liked: z.array(hookPreferenceExampleSchema).max(8),
   rejected: z.array(hookPreferenceExampleSchema).max(8),
+  patterns: z.array(z.string().trim().min(1).max(240)).max(50).default([]),
   updatedAt: z.coerce.date(),
-}).strict().refine((value) => value.liked.length + value.rejected.length > 0, {
-  message: "At least one hook preference is required",
-}).refine((value) => value.liked.length + value.rejected.length <= 8, {
+}).strict().refine((value) => value.liked.length + value.rejected.length <= 8, {
   message: "At most eight hook preferences are allowed",
 });
 const legacyHookPreferencesSchema = z.object({
@@ -78,7 +79,7 @@ const legacyHookPreferencesSchema = z.object({
   updatedAt: z.coerce.date(),
 }).strict();
 export const hookPreferencesSchema = z.union([currentHookPreferencesSchema, legacyHookPreferencesSchema]).transform((value) => "examples" in value
-  ? { ...value, liked: value.examples, rejected: [] as z.infer<typeof hookPreferenceExampleSchema>[] }
+  ? { ...value, patterns: [] as string[], liked: value.examples, rejected: [] as z.infer<typeof hookPreferenceExampleSchema>[] }
   : { ...value, examples: [] as z.infer<typeof hookPreferenceExampleSchema>[] });
 const currentHookPreferenceSelectionSchema = z.object({
   // Ownership is checked against the loaded project below. Do not require a
@@ -111,6 +112,17 @@ export const hookPreferenceSelectionSchema = currentHookPreferenceSelectionSchem
   .transform((value) => "conceptIds" in value
     ? { ...value, likedConceptIds: value.conceptIds, rejectedConceptIds: [], legacy: true as const }
     : { ...value, conceptIds: [] as string[], legacy: false as const });
+export const hookPreferencesUpdateSchema = z.object({
+  liked: z.array(hookPreferenceExampleSchema).max(8),
+  rejected: z.array(hookPreferenceExampleSchema).max(8),
+  patterns: z.array(z.string().trim().min(1).max(240)).max(50).optional(),
+}).strict().refine((value) => value.liked.length + value.rejected.length <= 8, {
+  message: "At most eight hook preferences are allowed",
+});
+export const conceptEditSchema = z.object({
+  hookText: z.string().trim().min(1).max(240),
+  demoOverlayText: z.string().trim().min(1).max(240),
+}).strict();
 export const mediaStageInputSchema = z.object({
   conceptId: z.string().cuid().nullable().optional(),
   forceRegenerate: z.boolean().default(false),
@@ -259,6 +271,7 @@ export const brandProfileSchema = z.object({
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 }).strict();
+export const brandProfileUpdateSchema = brandProfileSchema.omit({ id: true, projectId: true, createdAt: true, updatedAt: true });
 export const websiteAnalysisHomepageSchema = z.object({
   url: z.string().url(),
   title: z.string().min(1).nullable().optional(),

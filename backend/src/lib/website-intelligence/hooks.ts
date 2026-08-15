@@ -5,6 +5,7 @@ import type { ConceptBlueprint } from "../workflow";
 import { config } from "../../config";
 import type { AnalysisJsonRecorder } from "../analysis-json";
 import { errorJson } from "../analysis-json";
+import { DEFAULT_HOOK_PATTERNS } from "./hook-patterns";
 
 type HookReference = Pick<ConceptBlueprint, "hookText" | "demoOverlayText"> & {
   angle?: string;
@@ -49,14 +50,19 @@ export function buildHooksPrompt(
   rejectedConceptsOrRetry: HookReference[] | boolean = [],
   isDuplicateRetry = false,
   duplicateAvoidanceConcepts: HookReference[] = [],
+  patterns: readonly string[] = DEFAULT_HOOK_PATTERNS,
 ): LLMPrompt {
   const rejectedConcepts = Array.isArray(rejectedConceptsOrRetry) ? rejectedConceptsOrRetry : [];
   const duplicateRetry = typeof rejectedConceptsOrRetry === "boolean" ? rejectedConceptsOrRetry : isDuplicateRetry;
   const guidance = [
     `Creative styles:\n- ${automaticStyleGuidance.join("\n- ")}`,
+    patterns.length
+      ? `User-provided positive hook examples. Match their voice, pacing, point of view, specificity, and emotional framing. Create new hooks with similar creative DNA, but do not copy or lightly paraphrase the wording:\n${patterns.map((pattern) => `- ${pattern}`).join("\n")}`
+      : "",
     profile.claimConstraints.length
       ? `Claim constraints:\n- ${profile.claimConstraints.join("\n- ")}`
       : "",
+    `Creative styles:\n- ${automaticStyleGuidance.join("\n- ")}`,
     previousConcepts.length
       ? `Liked hooks: use these creative patterns as positive references. Selected and previous hook references (do not repeat or lightly paraphrase any wording):\n${previousConcepts.map((concept) => `- Hook: ${concept.hookText}\n  Demo: ${concept.demoOverlayText}${concept.angle ? `\n  Angle: ${concept.angle}` : ""}`).join("\n")}`
       : "",
@@ -72,6 +78,7 @@ export function buildHooksPrompt(
   ]
     .filter(Boolean)
     .join("\n\n");
+  const patternGuidance = patterns.map((pattern) => `* ${pattern}`).join("\n");
 
   const prompt = {
     system: `You are a viral short-form content strategist.
@@ -96,37 +103,7 @@ PROVEN HOOK PATTERNS
 
 Use patterns such as:
 
-* how to actually use {app} without making it complicated
-* everyone uses {app} wrong... here's the easier way
-* they really hid this {category} feature 💀
-* i had NO idea {app} could do this
-* 3 years struggling with {problem}... and this was the fix??
-* why is literally nobody talking about this?
-* i can't believe i was doing this manually
-* this feels illegal... but it works 😭
-* i wish someone showed me this sooner
-* this one feature saved me hours
-* you're overcomplicating {task}
-* stop doing {task} the hard way
-* this tiny trick changes everything
-* the easiest way to {desired outcome}
-* the {app} feature everyone ignores
-* i found the shortcut nobody mentions
-* if you use {app}, watch this first
-* this is the only {app} tutorial you actually need
-* you can do THIS in {app}?!
-* the fastest way to {outcome} without paying
-* wait... you can actually do this??
-* i've been doing this wrong the whole time 💀
-* nobody told me there was an easier way
-* why did i only find this NOW
-* i thought this would take hours...
-* apparently i've been wasting so much time 😭
-* there's no way it's actually this easy
-* this would've saved me so much time
-* i accidentally found the easiest way to {outcome}
-* okay this is actually useful
-* POV: you finally stop doing {task} manually
+${patternGuidance}
 
 These are patterns and inspiration only.
 
@@ -470,7 +447,11 @@ Customer problems: ${profile.customerProblems.join(" | ")}
 Key benefits: ${profile.keyBenefits.join(" | ")}
 Proof points: ${profile.proofPoints.join(" | ")}
 
-${guidance}
+ ${guidance}
+
+${patterns.length ? `MANDATORY USER STYLE:
+These are the user's own examples and the strongest style signal in this request. At least 6 of the ${count} hooks MUST clearly follow the same formats and creative moves as these examples, while using fresh wording and the actual product context:
+${patterns.map((pattern) => `- ${pattern}`).join("\n")}` : ""}
 
 Generate EXACTLY ${count} distinct hook concepts.
 
@@ -551,6 +532,16 @@ export function findRepeatedCreativeLines(
   return concepts
     .flatMap((concept) => [concept.hookText, concept.demoOverlayText])
     .filter((line) => previousLines.has(normalizeCreativeLine(line)));
+}
+
+export function findRepeatedHookLines(
+  concepts: Array<Pick<ConceptBlueprint, "hookText">>,
+  previousConcepts: Array<Pick<ConceptBlueprint, "hookText">>,
+): string[] {
+  const previousHooks = new Set(previousConcepts.map((concept) => normalizeCreativeLine(concept.hookText)));
+  return concepts
+    .map((concept) => concept.hookText)
+    .filter((hookText) => previousHooks.has(normalizeCreativeLine(hookText)));
 }
 
 // Normalize field names from LLM (handles camelCase, snake_case, short names)
@@ -714,13 +705,14 @@ export async function generateHooksFromLLM(
   rejectedConcepts: HookReference[] = [],
   recorder?: AnalysisJsonRecorder,
   duplicateAvoidanceConcepts: HookReference[] = previousConcepts,
+  patterns: readonly string[] = DEFAULT_HOOK_PATTERNS,
 ): Promise<ConceptBlueprint[]> {
   console.log(`[hooks] start brand="${profile.brandName}" count=${count}`);
 
   if (!hasLLMConfig()) {
     await recorder?.write(
       "hooks-prompt-attempt-1",
-      buildHooksPrompt(profile, count, previousConcepts),
+      buildHooksPrompt(profile, count, previousConcepts, [], false, [], patterns),
     );
     const error = new Error(
       "Hook generation is temporarily unavailable. No language model is configured.",
@@ -738,6 +730,7 @@ export async function generateHooksFromLLM(
         rejectedConcepts,
         attempt === 1,
         duplicateAvoidanceConcepts,
+        patterns,
       );
       const attemptNumber = attempt + 1;
       await recorder?.write(`hooks-prompt-attempt-${attemptNumber}`, prompt);
@@ -788,17 +781,25 @@ export async function generateHooksFromLLM(
       const concepts = validated.map((item, index) =>
         toConceptBlueprint(item, profile, index),
       );
-      const repeatedLines = findRepeatedCreativeLines(
+      const batchLines = concepts.map((concept) => concept.hookText);
+      const seenBatchLines = new Set<string>();
+      const repeatedBatchLines = batchLines.filter((line) => {
+        const normalized = normalizeCreativeLine(line);
+        if (seenBatchLines.has(normalized)) return true;
+        seenBatchLines.add(normalized);
+        return false;
+      });
+      const repeatedLines = findRepeatedHookLines(
         concepts,
         duplicateAvoidanceConcepts,
       );
-      if (repeatedLines.length === 0) {
+      if (repeatedLines.length === 0 && repeatedBatchLines.length === 0) {
         console.log(`[hooks] done concepts=${concepts.length}`);
         return concepts;
       }
       if (attempt === 0) {
         console.warn(
-          `[hooks] retrying after ${repeatedLines.length} repeated creative lines`,
+          `[hooks] retrying after ${repeatedLines.length + repeatedBatchLines.length} repeated creative lines`,
         );
         continue;
       }

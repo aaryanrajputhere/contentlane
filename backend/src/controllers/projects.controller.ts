@@ -5,14 +5,17 @@ import { ApiError } from "../lib/errors";
 import type { BrandProfile, CreatorCharacter, HookPreferenceExample } from "../domain/schemas";
 import {
   characterSelectionSchema,
+  brandProfileUpdateSchema,
   conceptSelectionSchema,
   conceptStageInputSchema,
   conceptReviewParamsSchema,
   conceptReviewResetSchema,
   conceptReviewSchema,
+  conceptEditSchema,
   creatorCharacterSchema,
   exportPayloadSchema,
   hookPreferencesSchema,
+  hookPreferencesUpdateSchema,
   jobIdParamsSchema,
   mediaStageInputSchema,
   projectCreatorSelectionSchema,
@@ -34,17 +37,16 @@ import {
   type ConceptBlueprint,
 } from "../lib/workflow";
 import { runWebsiteIntelligencePipeline } from "../lib/website-intelligence/pipeline";
-import { generateHooksFromLLM } from "../lib/website-intelligence/hooks";
+import { findRepeatedHookLines, generateHooksFromLLM } from "../lib/website-intelligence/hooks";
+import { DEFAULT_HOOK_PATTERNS } from "../lib/website-intelligence/hook-patterns";
 import { withLLMTelemetry } from "../lib/website-intelligence/llm";
 import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
 import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
 import { creatorToCharacter } from "../lib/creator-library";
 import { renderQueue, type RenderJobInput } from "../lib/render-queue";
+import { resolveCreatorClipAssignments } from "../lib/creator-clip-matching";
 
 const HOOK_SELECTION_TARGET = 8;
-const HOOK_PREFETCH_SELECTION_THRESHOLD = 5;
-const HOOK_PREFETCH_REMAINING_THRESHOLD = 3;
-const MAX_HOOKS_PER_PROJECT = 24;
 
 function toBrandProfilePrismaData(
   profile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
@@ -64,6 +66,7 @@ function asBrandProfile(prismaProfile: {
 type HookPreferencePayload = {
   liked: HookPreferenceExample[];
   rejected: HookPreferenceExample[];
+  patterns: string[];
   updatedAt: Date;
 };
 
@@ -71,9 +74,26 @@ function normalizeHookPreferences(value: unknown): HookPreferencePayload | null 
   const parsed = hookPreferencesSchema.safeParse(value);
   if (!parsed.success) return null;
   if (parsed.data.examples?.length) {
-    return { liked: parsed.data.examples, rejected: [], updatedAt: parsed.data.updatedAt };
+    return { liked: parsed.data.examples, rejected: [], patterns: parsed.data.patterns, updatedAt: parsed.data.updatedAt };
   }
   return parsed.data;
+}
+
+async function ensureHookPatterns(projectId: string, value: unknown): Promise<HookPreferencePayload> {
+  const existing = normalizeHookPreferences(value);
+  const hasSavedPatterns = Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "patterns"));
+  if (existing && hasSavedPatterns) return existing;
+
+  const preferences: HookPreferencePayload = {
+    liked: existing?.liked ?? [],
+    rejected: existing?.rejected ?? [],
+    patterns: [...DEFAULT_HOOK_PATTERNS],
+    updatedAt: new Date(),
+  };
+  await prisma.$executeRaw`
+    UPDATE "Project" SET "hookPreferences" = ${JSON.stringify(preferences)}::jsonb WHERE "id" = ${projectId}
+  `;
+  return preferences;
 }
 
 async function createJob(
@@ -464,6 +484,24 @@ export const createProject: RequestHandler = async (req, res) => {
   res.status(201).json({ project: assertProject(await loadProjectSnapshot(project.id, userId)), job: analysisJob, cached: false });
 };
 
+export const listProjects: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const projects = await prisma.project.findMany({
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      website: true,
+      normalizedWebsite: true,
+      status: true,
+      updatedAt: true,
+      brandProfile: { select: { brandName: true } },
+      _count: { select: { concepts: true, jobs: true } },
+    },
+  });
+  res.json({ projects });
+};
+
 export const analyzeProject: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
@@ -555,6 +593,41 @@ export const getProject: RequestHandler = async (req, res) => {
   res.json({ project });
 };
 
+export const updateBrandProfile: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const project = await getProjectOrFail(id, userId);
+  const profile = brandProfileUpdateSchema.parse(req.body);
+  await prisma.brandProfile.upsert({
+    where: { projectId: project.id },
+    update: profile,
+    create: { projectId: project.id, ...profile },
+  });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
+export const updateHookPreferences: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const project = await getProjectOrFail(id, userId);
+  const value = hookPreferencesUpdateSchema.parse(req.body);
+  const existing = normalizeHookPreferences(project.hookPreferences);
+  await prisma.$executeRaw`
+    UPDATE "Project" SET "hookPreferences" = ${JSON.stringify({ ...value, patterns: value.patterns ?? existing?.patterns ?? [], updatedAt: new Date() })}::jsonb WHERE "id" = ${id}
+  `;
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
+export const updateConcept: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id, conceptId } = conceptReviewParamsSchema.parse(req.params);
+  const value = conceptEditSchema.parse(req.body);
+  const concept = await prisma.hookConcept.findFirst({ where: { id: conceptId, projectId: id, project: { userId } } });
+  if (!concept) throw new ApiError(404, 'CONCEPT_NOT_FOUND', 'Hook not found for this project');
+  await prisma.hookConcept.update({ where: { id: concept.id }, data: value });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
 export const selectConcept: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
@@ -590,6 +663,7 @@ export const saveHookPreferences: RequestHandler = async (req, res) => {
   const preferences: HookPreferencePayload = {
     liked: likedConceptIds.map(findExample),
     rejected: rejectedConceptIds.map(findExample),
+    patterns: normalizeHookPreferences(project.hookPreferences)?.patterns ?? [],
     updatedAt: new Date(),
   };
   await prisma.$executeRaw`
@@ -603,22 +677,27 @@ export const saveHookPreferences: RequestHandler = async (req, res) => {
 export const reviewConcept: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id, conceptId } = conceptReviewParamsSchema.parse(req.params);
-  const { decision } = conceptReviewSchema.parse(req.body);
+  const { decision, creatorId, clipId } = conceptReviewSchema.parse(req.body);
+  if ((creatorId && !clipId) || (!creatorId && clipId)) {
+    throw new ApiError(400, "INVALID_CLIP_ASSIGNMENT", "Creator and clip must be provided together");
+  }
   await prisma.$transaction(async (tx) => {
     const concept = await tx.hookConcept.findFirst({
       where: { id: conceptId, projectId: id, project: { userId } },
-      select: { id: true, reviewDecision: true },
+      select: { id: true },
     });
     if (!concept) throw new ApiError(404, "CONCEPT_NOT_FOUND", "Hook not found for this project");
-    if (concept.reviewDecision !== null) {
-      if (concept.reviewDecision === decision) return;
-      throw new ApiError(409, "REVIEW_ALREADY_SAVED", "This hook has already been reviewed");
+    if (creatorId && clipId) {
+      const clip = await tx.creatorClip.findFirst({ where: { id: clipId, creatorId }, select: { id: true } });
+      if (!clip) throw new ApiError(400, "INVALID_CLIP_ASSIGNMENT", "The selected clip does not belong to the selected creator");
     }
-    if (decision === ReviewDecision.LIKED) {
-      const likedCount = await tx.hookConcept.count({ where: { projectId: id, reviewDecision: ReviewDecision.LIKED } });
-      if (likedCount >= 8) throw new ApiError(409, "HOOK_SELECTION_COMPLETE", "Eight hooks are already selected");
-    }
-    await tx.hookConcept.update({ where: { id: concept.id }, data: { reviewDecision: decision } });
+    await tx.hookConcept.update({
+      where: { id: concept.id },
+      data: {
+        reviewDecision: decision,
+        ...(creatorId && clipId ? { assignedCreatorId: creatorId, assignedClipId: clipId } : {}),
+      },
+    });
   });
   res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
 };
@@ -728,15 +807,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
   if (append && forceRegenerate) throw new ApiError(400, "INVALID_GENERATION_MODE", "Append and replacement modes cannot be combined");
   const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
   const rejectedReviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.REJECTED);
-  const unreviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === null);
   if (append) {
-    if (likedConcepts.length >= HOOK_SELECTION_TARGET) throw new ApiError(409, "HOOK_SELECTION_COMPLETE", "Eight hooks are already selected");
-    if (project.concepts.length + count > MAX_HOOKS_PER_PROJECT) throw new ApiError(409, "HOOK_LIMIT_REACHED", "A project can generate at most 24 hooks");
-    const canPrefetch = likedConcepts.length >= HOOK_PREFETCH_SELECTION_THRESHOLD
-      && unreviewedConcepts.length <= HOOK_PREFETCH_REMAINING_THRESHOLD;
-    if (unreviewedConcepts.length > 0 && !canPrefetch) {
-      throw new ApiError(409, "HOOKS_PENDING_REVIEW", "Select five hooks or review the remaining cards before generating another batch");
-    }
     const activeGeneration = project.jobs.some((job) => job.type === JobType.GENERATE_CONCEPTS && (job.status === JobStatus.QUEUED || job.status === JobStatus.ACTIVE));
     if (activeGeneration) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
   }
@@ -747,6 +818,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
     });
     return;
   }
+  const savedPreferences = await ensureHookPatterns(project.id, project.hookPreferences);
   const staleAssets = append ? [] : project.mediaAssets.filter((asset) => !isBrandDemoAsset(asset));
   const latestAnalysisJob = await prisma.generationJob.findFirst({
     where: {
@@ -771,10 +843,6 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           where: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE] } },
         });
         if (active) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
-        const currentConceptCount = await tx.hookConcept.count({ where: { projectId: project.id } });
-        if (currentConceptCount + count > MAX_HOOKS_PER_PROJECT) {
-          throw new ApiError(409, "HOOK_LIMIT_REACHED", "A project can generate at most 24 hooks");
-        }
         return tx.generationJob.create({
           data: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, input: { count, forceRegenerate, append }, status: JobStatus.QUEUED, progress: 0 },
         });
@@ -787,15 +855,13 @@ export const generateConcepts: RequestHandler = async (req, res) => {
       { count, forceRegenerate, append },
       "Generating hooks",
       async (generationJob) => {
-        const savedPreferences = useHookPreferences && project.hookPreferences
-          ? normalizeHookPreferences(project.hookPreferences)
-          : null;
+        const preferences = useHookPreferences ? savedPreferences : null;
         const preferredConcepts = append
           ? likedConcepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }))
-          : savedPreferences?.liked.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
+          : preferences?.liked.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
         const rejectedConcepts = append
           ? rejectedReviewedConcepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }))
-          : savedPreferences?.rejected.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
+          : preferences?.rejected.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
         const allPriorConcepts = project.concepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }));
         const previousConcepts = append ? preferredConcepts : [
           ...(forceRegenerate ? allPriorConcepts : []),
@@ -822,11 +888,23 @@ export const generateConcepts: RequestHandler = async (req, res) => {
             rejectedConcepts,
             recorder ?? undefined,
             append ? allPriorConcepts : previousConcepts,
+            preferences?.patterns ?? [],
           );
         } catch (error) {
           if (forceRegenerate) throw error;
           source = 'fallback';
           concepts = buildConceptCards(profile, count);
+          const repeatedFallbackLines = findRepeatedHookLines(
+            concepts,
+            append ? allPriorConcepts : previousConcepts,
+          );
+          if (repeatedFallbackLines.length > 0) {
+            throw new ApiError(
+              502,
+              'HOOK_GENERATION_DUPLICATE',
+              'The hook generator could not produce fresh hooks. Please retry this batch.',
+            );
+          }
         }
         await recorder?.write('hooks', { source, concepts });
         await prisma.$transaction(async (tx) => {
@@ -1204,14 +1282,14 @@ export const saveExportState: RequestHandler = async (req, res) => {
 export const renderProject: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
-  const { conceptIds, assignments: requestedAssignments } = renderRequestSchema.parse(req.body);
+  const { conceptIds } = renderRequestSchema.parse(req.body);
   const project = await getProjectOrFail(id, userId);
   const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
-  if (likedConcepts.length !== 8) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select exactly eight hooks before rendering');
-  if (conceptIds?.some((conceptId) => !likedConcepts.some((concept) => concept.id === conceptId))) {
+  if (!conceptIds?.length && likedConcepts.length !== 8) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select exactly eight hooks before rendering');
+  if (conceptIds?.some((conceptId) => !project.concepts.some((concept) => concept.id === conceptId))) {
     throw new ApiError(409, 'HOOK_NOT_SELECTED', 'Only selected hooks can be rendered');
   }
-  const concepts = (conceptIds?.length ? likedConcepts.filter((concept) => conceptIds.includes(concept.id)) : likedConcepts)
+  const concepts = (conceptIds?.length ? project.concepts.filter((concept) => conceptIds.includes(concept.id)) : likedConcepts)
     .sort((a, b) => a.sortOrder - b.sortOrder);
   if (concepts.length !== 8) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Render all eight selected hooks together');
   const demo = project.mediaAssets.find(isBrandDemoAsset);
@@ -1226,18 +1304,8 @@ export const renderProject: RequestHandler = async (req, res) => {
     where: { id: { in: selection.characters.map((character) => character.id) } },
     include: { clips: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
   });
-  const byId = new Map(creators.map((creator) => [creator.id, creator]));
-  const requestedClipByConcept = new Map((requestedAssignments ?? []).map((assignment) => [assignment.conceptId, assignment.clipId]));
-  const assignments = concepts.map((concept, index) => {
-    const character = selection.characters[selection.mode === 'mix' ? index % selection.characters.length : 0];
-    const creator = character ? byId.get(character.id) : undefined;
-    const requestedClipId = requestedClipByConcept.get(concept.id);
-    const clip = requestedClipId
-      ? creator?.clips.find((item) => item.id === requestedClipId)
-      : creator?.clips[index % (creator.clips.length || 1)];
-    if (!creator || !clip) throw new ApiError(409, 'PROJECT_INCOMPLETE', `Creator clip missing for Reel ${index + 1}`);
-    return { conceptId: concept.id, clipUrl: clip.url, clipId: clip.id, creatorName: creator.name };
-  });
+  const assignments = resolveCreatorClipAssignments(concepts, creators, selection);
+  if (assignments.length !== concepts.length) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'A matching creator clip is missing for one or more hooks');
   const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments };
   const job = await createJob(project.id, JobType.RENDER_REELS, input as unknown as Prisma.InputJsonValue);
   await renderQueue.add('render-reels', input, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
