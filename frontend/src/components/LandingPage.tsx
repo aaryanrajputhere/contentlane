@@ -14,6 +14,7 @@ type PreviewCardProps = {
   accent: string;
   className?: string;
   videoClassName?: string;
+  mobile?: boolean;
 };
 
 type ReelPreview = {
@@ -246,6 +247,7 @@ function PreviewCard({
   accent,
   className,
   videoClassName,
+  mobile = false,
 }: PreviewCardProps) {
   return (
     <motion.div
@@ -253,7 +255,7 @@ function PreviewCard({
       whileInView={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
       viewport={{ once: true, margin: '-80px' }}
       transition={{ duration: 0.7, ease: 'easeOut' }}
-      className={`group relative h-[26.5rem] w-[15.5rem] overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_30px_80px_rgba(0,0,0,0.12)] sm:w-[16rem] lg:w-[16.5rem] ${className ?? ''}`}
+      className={`group relative h-[26.5rem] w-[15.5rem] overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_30px_80px_rgba(0,0,0,0.12)] sm:w-[16rem] lg:w-[16.5rem] ${mobile ? '' : className ?? ''}`}
     >
       <div className={`absolute inset-0 bg-gradient-to-b ${accent}`} />
       <video
@@ -501,8 +503,10 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [activePreviewIndex, setActivePreviewIndex] = useState(0);
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
+  const isCompactViewport = useCompactViewport();
   const { status, user } = useAuth();
 
   const startProject = async () => {
@@ -672,13 +676,43 @@ export default function LandingPage() {
             transition={{ duration: 0.8, ease: 'easeOut' }}
             className="relative z-10 flex w-full items-end justify-center px-2 sm:px-4"
           >
-            <div className="relative flex max-w-full items-end justify-start gap-4 overflow-x-auto px-3 pb-4 sm:justify-center sm:gap-0 sm:overflow-visible sm:px-0 sm:pb-0">
-              {previewCards.map((card, index) => (
-                <div key={card.id} className={index === 0 ? 'shrink-0' : 'shrink-0 sm:-ml-12'}>
-                  <PreviewCard {...card} />
+            {isCompactViewport ? (
+              <div className="flex w-full flex-col items-center gap-4">
+                <AnimatePresence initial={false} mode="wait">
+                  <motion.div
+                    key={previewCards[activePreviewIndex].id}
+                    initial={reducedMotion ? undefined : { opacity: 0, x: 18 }}
+                    animate={reducedMotion ? undefined : { opacity: 1, x: 0 }}
+                    exit={reducedMotion ? undefined : { opacity: 0, x: -18 }}
+                    transition={{ duration: 0.24, ease: 'easeOut' }}
+                    className="landing-preview-card"
+                  >
+                    <PreviewCard {...previewCards[activePreviewIndex]} mobile />
+                  </motion.div>
+                </AnimatePresence>
+                <div className="flex items-center gap-1.5" role="tablist" aria-label="Preview videos">
+                  {previewCards.map((card, index) => (
+                    <button
+                      key={card.id}
+                      type="button"
+                      role="tab"
+                      aria-label={`Show preview ${index + 1}`}
+                      aria-selected={activePreviewIndex === index}
+                      onClick={() => setActivePreviewIndex(index)}
+                      className={`h-1.5 rounded-full transition-all ${activePreviewIndex === index ? 'w-6 bg-[#111111]' : 'w-1.5 bg-black/20'}`}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="relative flex max-w-full items-end justify-center gap-0 px-3 sm:px-0">
+                {previewCards.map((card) => (
+                  <div key={card.id} className="shrink-0 -ml-12 first:ml-0">
+                    <PreviewCard {...card} />
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
           <div
             aria-hidden="true"
