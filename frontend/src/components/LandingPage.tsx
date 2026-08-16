@@ -27,6 +27,24 @@ type ReelPreview = {
   accent: string;
 };
 
+function posterFor(src: string) {
+  return src.replace(/\.(?:mp4|webm)$/i, '.jpg');
+}
+
+function useCompactViewport() {
+  const [isCompact, setIsCompact] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 1279px)');
+    const update = () => setIsCompact(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener('change', update);
+    return () => mediaQuery.removeEventListener('change', update);
+  }, []);
+
+  return isCompact;
+}
+
 const navLinks = [
   { label: 'Workflow', href: '#workflow' },
   { label: 'Features', href: '#features' },
@@ -240,11 +258,13 @@ function PreviewCard({
       <div className={`absolute inset-0 bg-gradient-to-b ${accent}`} />
       <video
         src={src}
+        poster={posterFor(src)}
         className={`relative h-full w-full object-cover opacity-[0.94] brightness-[1.08] saturate-[1.05] ${videoClassName ?? ''}`}
         muted
         autoPlay
         loop
         playsInline
+        preload="auto"
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.01),rgba(255,255,255,0.12)_68%,rgba(255,255,255,0.28)_100%)]" />
       <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/18 to-transparent" />
@@ -302,12 +322,13 @@ function ReelCard({
         ref={(node) => registerVideo(index, node)}
         data-reel-preview={reel.id}
         src={reel.clip}
+        poster={posterFor(reel.clip)}
         className={`h-full w-full object-cover ${reel.crop}`}
         muted
         autoPlay={shouldPlay}
         loop
         playsInline
-        preload="metadata"
+        preload="auto"
         onLoadedMetadata={(event) => {
           event.currentTarget.currentTime = reel.startOffset;
         }}
@@ -321,9 +342,10 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
   const productVideoRef = useRef<HTMLVideoElement | null>(null);
   const reelVideoRefs = useRef<Array<HTMLVideoElement | null>>([]);
   const sectionVisible = useInView(sectionRef, { amount: 0.08 });
+  const isCompactViewport = useCompactViewport();
   const [tabVisible, setTabVisible] = useState(() => document.visibilityState === 'visible');
   const shouldPlayProductDemo = sectionVisible && tabVisible;
-  const shouldAnimateReels = shouldPlayProductDemo && reducedMotion === false;
+  const shouldAnimateReels = shouldPlayProductDemo && reducedMotion !== true && !isCompactViewport;
 
   useEffect(() => {
     const updateTabVisibility = () => setTabVisible(document.visibilityState === 'visible');
@@ -404,8 +426,8 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
               <div className="relative min-h-[19rem] flex-1 overflow-hidden rounded-[19px] bg-[#ececec]">
                 <video
                   ref={productVideoRef}
-                  src="/assets/landing/calai.webm"
                   className="absolute inset-0 h-full w-full object-cover object-[52%_35%]"
+                  poster="/assets/landing/calai.jpg"
                   muted
                   autoPlay={shouldPlayProductDemo}
                   loop
@@ -414,7 +436,10 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
                   onCanPlay={resumeProductDemo}
                   onEnded={resumeProductDemo}
                   onPause={resumeProductDemo}
-                />
+                >
+                  <source src="/assets/landing/calai.mp4" type="video/mp4" />
+                  <source src="/assets/landing/calai.webm" type="video/webm" />
+                </video>
               </div>
             </article>
           </div>
@@ -453,7 +478,7 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
               <span className="production-output-dot" />
               <span className="production-output-dot" />
             </div>
-            {reducedMotion ? (
+            {reducedMotion || isCompactViewport ? (
               <div className="production-reel-static absolute inset-0 z-[2] flex snap-x snap-mandatory items-center gap-4 overflow-x-auto px-8 pb-4 pt-10">
                 {reelPreviews.map((reel, index) => (
                   <div key={reel.id} className="relative h-[18rem] w-[10.125rem] shrink-0 snap-center">
@@ -647,9 +672,9 @@ export default function LandingPage() {
             transition={{ duration: 0.8, ease: 'easeOut' }}
             className="relative z-10 flex w-full items-end justify-center px-2 sm:px-4"
           >
-            <div className="relative flex items-end justify-center overflow-visible px-3 sm:px-0">
+            <div className="relative flex max-w-full items-end justify-start gap-4 overflow-x-auto px-3 pb-4 sm:justify-center sm:gap-0 sm:overflow-visible sm:px-0 sm:pb-0">
               {previewCards.map((card, index) => (
-                <div key={card.id} className={index === 0 ? '' : '-ml-11 sm:-ml-12'}>
+                <div key={card.id} className={index === 0 ? 'shrink-0' : 'shrink-0 sm:-ml-12'}>
                   <PreviewCard {...card} />
                 </div>
               ))}
