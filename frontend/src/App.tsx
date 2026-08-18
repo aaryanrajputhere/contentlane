@@ -8,6 +8,12 @@ import CampaignWorkspacePage from './components/CampaignWorkspacePage';
 import ProjectsPage from './components/ProjectsPage';
 import BillingPage from './components/BillingPage';
 import AdminSupportPage from './components/AdminSupportPage';
+import AdminDashboardPage from './components/AdminDashboardPage';
+import AdminUsersPage from './components/AdminUsersPage';
+import AdminProjectsPage from './components/AdminProjectsPage';
+import AdminProjectDetailPage from './components/AdminProjectDetailPage';
+import AdminUserDetailPage from './components/AdminUserDetailPage';
+import AdminJobsPage from './components/AdminJobsPage';
 import SupportWidget from './components/SupportWidget';
 import { PublicOnlyRoute, RequireAdmin, RequireAuth, RequireSubscription } from './lib/auth';
 
@@ -51,7 +57,12 @@ export default function App() {
         </Route>
       </Route>
       <Route element={<RequireAdmin />}>
-        <Route path="/admin" element={<Navigate to="/admin/support" replace />} />
+        <Route path="/admin" element={<AdminDashboardPage />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
+        <Route path="/admin/users/:id" element={<AdminUserDetailPage />} />
+        <Route path="/admin/projects" element={<AdminProjectsPage />} />
+        <Route path="/admin/projects/:id" element={<AdminProjectDetailPage />} />
+        <Route path="/admin/jobs" element={<AdminJobsPage />} />
         <Route path="/admin/support" element={<AdminSupportPage />} />
         <Route path="/admin/creators" element={<AdminCreatorsPage />} />
       </Route>
