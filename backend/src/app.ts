@@ -19,6 +19,7 @@ import { handleDodoWebhook } from './controllers/dodo-webhook.controller';
 import { requireSubscription } from './middleware/subscription';
 import supportRouter from './routes/support.router';
 import adminSupportRouter from './routes/admin-support.router';
+import adminRouter from './routes/admin.router';
 
 export function createApp() {
   const app = express();
@@ -48,6 +49,7 @@ export function createApp() {
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/support', supportRouter);
   app.use('/api/v1/admin/support', adminSupportRouter);
+  app.use('/api/v1/admin', adminRouter);
   app.use('/api/v1/billing', requireAuth, billingRouter);
   app.use('/api/v1/projects', requireAuth, requireSubscription, projectsRouter);
   app.use('/api/v1/jobs', requireAuth, requireSubscription, jobsRouter);
