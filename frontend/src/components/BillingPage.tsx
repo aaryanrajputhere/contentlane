@@ -1,4 +1,4 @@
-import { Check, CreditCard, Loader2, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Check, CreditCard, Loader2, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, post } from '../lib/api';
@@ -17,6 +17,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showCancel, setShowCancel] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -55,6 +56,20 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
       window.location.assign(url);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to open billing');
+      setLoading(false);
+    }
+  };
+
+  const cancelSubscription = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await post<{ cancelAtPeriodEnd: boolean }>('/billing/cancel');
+      setShowCancel(false);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to cancel subscription');
+    } finally {
       setLoading(false);
     }
   };
@@ -99,6 +114,30 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
               {loading || waiting ? <Loader2 size={17} className="animate-spin" /> : <CreditCard size={17} />}
               {waiting ? 'Confirming payment' : billing?.hasAccess ? 'Manage billing' : 'Start 3-day free trial'}
             </button>
+            {billing?.hasAccess && billing.cancelAtPeriodEnd ? (
+              <div className="mt-6 rounded-2xl border border-[#e8e8e8] bg-[#fafafa] p-4 text-sm text-[#555555]">
+                <p className="font-semibold text-[#111111]">Cancellation scheduled</p>
+                <p className="mt-1 leading-6">You can keep using ContentLane until {billing.renewalDate ? new Date(billing.renewalDate).toLocaleDateString() : 'the end of this billing period'}.</p>
+                <button type="button" onClick={() => void openHostedPage('portal')} className="mt-3 font-semibold text-[#111111] underline underline-offset-4 hover:no-underline">Reopen billing management</button>
+              </div>
+            ) : billing?.hasAccess && billing.status === 'active' ? (
+              <button type="button" onClick={() => setShowCancel(true)} className="mt-5 text-sm font-medium text-[#777777] underline decoration-[#cccccc] underline-offset-4 transition hover:text-[#111111] hover:decoration-[#111111]">Cancel subscription</button>
+            ) : null}
+            {showCancel ? (
+              <div className="mt-5 rounded-2xl border border-[#f0d9d2] bg-[#fff8f5] p-4" role="dialog" aria-label="Cancel subscription">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 shrink-0 text-[#b5472d]" size={18} />
+                  <div>
+                    <p className="text-sm font-semibold text-[#111111]">Cancel at the end of your billing period?</p>
+                    <p className="mt-1 text-sm leading-6 text-[#6d5148]">Your access will stay active until {billing?.renewalDate ? new Date(billing.renewalDate).toLocaleDateString() : 'your next billing date'}. You won’t be charged again.</p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <button type="button" disabled={loading} onClick={() => void cancelSubscription()} className="rounded-full bg-[#b5472d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#963b25] disabled:opacity-50">{loading ? 'Cancelling…' : 'Confirm cancellation'}</button>
+                      <button type="button" disabled={loading} onClick={() => setShowCancel(false)} className="rounded-full border border-[#dfc8bf] px-4 py-2 text-sm font-semibold text-[#6d5148] transition hover:bg-white disabled:opacity-50">Keep subscription</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <button type="button" onClick={() => navigate('/')} className="mt-4 text-sm font-medium text-[#666666] hover:text-[#111111]">Back to ContentLane</button>
           </div>
         </div>

@@ -71,3 +71,32 @@ export const createPortal: RequestHandler = async (req, res, next) => {
     next(error);
   }
 };
+
+export const cancelSubscription: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+    if (req.user.role === 'ADMIN') throw new ApiError(409, 'NOT_APPLICABLE', 'Admin access does not have a subscription to cancel');
+
+    const subscription = await prisma.subscription.findFirst({
+      where: { userId: req.user.id, dodoProductId: config.DODO_PAYMENTS_PRODUCT_ID, status: 'active' },
+      orderBy: { latestProviderEventAt: 'desc' },
+    });
+    if (!subscription) throw new ApiError(404, 'SUBSCRIPTION_NOT_FOUND', 'No active subscription is available to cancel');
+    if (subscription.cancelAtNextBillingDate) {
+      res.json({ cancelAtPeriodEnd: true });
+      return;
+    }
+
+    await getDodoClient().subscriptions.update(subscription.dodoSubscriptionId, {
+      cancel_at_next_billing_date: true,
+      cancel_reason: 'cancelled_by_customer',
+    });
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: { cancelAtNextBillingDate: true },
+    });
+    res.json({ cancelAtPeriodEnd: true });
+  } catch (error) {
+    next(error);
+  }
+};
