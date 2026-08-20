@@ -72,6 +72,61 @@ export const createPortal: RequestHandler = async (req, res, next) => {
   }
 };
 
+export const syncSubscription: RequestHandler = async (req, res, next) => {
+  try {
+    if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+    const subscriptionId = req.body?.subscriptionId;
+    if (typeof subscriptionId !== 'string' || !/^sub_[A-Za-z0-9_-]+$/.test(subscriptionId)) {
+      throw new ApiError(400, 'INVALID_SUBSCRIPTION', 'A valid subscription is required');
+    }
+
+    const providerSubscription = await getDodoClient().subscriptions.retrieve(subscriptionId);
+    const metadataUserId = typeof providerSubscription.metadata?.contentlane_user_id === 'string'
+      ? providerSubscription.metadata.contentlane_user_id
+      : undefined;
+    if (
+      providerSubscription.product_id !== config.DODO_PAYMENTS_PRODUCT_ID
+      || providerSubscription.customer.email.toLowerCase() !== req.user.email.toLowerCase()
+      || (metadataUserId && metadataUserId !== req.user.id)
+    ) {
+      throw new ApiError(403, 'SUBSCRIPTION_MISMATCH', 'This subscription does not belong to your account');
+    }
+
+    const existing = await prisma.subscription.findUnique({
+      where: { dodoSubscriptionId: providerSubscription.subscription_id },
+      select: { latestProviderEventAt: true },
+    });
+    await prisma.user.update({ where: { id: req.user.id }, data: { dodoCustomerId: providerSubscription.customer.customer_id } });
+    await prisma.subscription.upsert({
+      where: { dodoSubscriptionId: providerSubscription.subscription_id },
+      create: {
+        userId: req.user.id,
+        dodoCustomerId: providerSubscription.customer.customer_id,
+        dodoSubscriptionId: providerSubscription.subscription_id,
+        dodoProductId: providerSubscription.product_id,
+        status: providerSubscription.status,
+        currentPeriodStart: new Date(providerSubscription.previous_billing_date),
+        currentPeriodEnd: new Date(providerSubscription.next_billing_date),
+        cancelAtNextBillingDate: providerSubscription.cancel_at_next_billing_date,
+        latestProviderEventAt: new Date(0),
+      },
+      update: {
+        userId: req.user.id,
+        dodoCustomerId: providerSubscription.customer.customer_id,
+        dodoProductId: providerSubscription.product_id,
+        status: providerSubscription.status,
+        currentPeriodStart: new Date(providerSubscription.previous_billing_date),
+        currentPeriodEnd: new Date(providerSubscription.next_billing_date),
+        cancelAtNextBillingDate: providerSubscription.cancel_at_next_billing_date,
+        latestProviderEventAt: existing?.latestProviderEventAt ?? new Date(0),
+      },
+    });
+    res.json({ status: providerSubscription.status });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const cancelSubscription: RequestHandler = async (req, res, next) => {
   try {
     if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');

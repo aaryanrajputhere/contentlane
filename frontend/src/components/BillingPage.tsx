@@ -31,8 +31,14 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
     let cancelled = false;
     let timer: number | undefined;
     let attempts = 0;
+    let syncAttempted = false;
     const check = async () => {
       try {
+        if (success && !syncAttempted) {
+          syncAttempted = true;
+          const subscriptionId = searchParams.get('subscription_id');
+          if (subscriptionId) await post('/billing/sync', { subscriptionId });
+        }
         const status = await refresh();
         if (cancelled) return;
         if (success && status.hasAccess) {
@@ -46,7 +52,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
     };
     void check();
     return () => { cancelled = true; if (timer) window.clearTimeout(timer); };
-  }, [navigate, refresh, success]);
+  }, [navigate, refresh, searchParams, success]);
 
   const openHostedPage = async (kind: 'checkout' | 'portal') => {
     setLoading(true);
