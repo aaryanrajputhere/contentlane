@@ -3,6 +3,7 @@ import { config } from '../config';
 import { getDodoClient } from '../lib/dodo';
 import { ApiError } from '../lib/errors';
 import prisma from '../lib/prisma';
+import { getFreeAccess, hasPaidAccess } from '../lib/access';
 
 export const getBillingStatus: RequestHandler = async (req, res, next) => {
   try {
@@ -12,12 +13,16 @@ export const getBillingStatus: RequestHandler = async (req, res, next) => {
       orderBy: { latestProviderEventAt: 'desc' },
     });
     const isAdmin = req.user.role === 'ADMIN';
+    const paid = await hasPaidAccess(req.user.id, req.user.role);
+    const freeAccess = await getFreeAccess(req.user.id);
     res.json({
       plan: 'ContentLane',
       price: 19,
       currency: 'USD',
       status: isAdmin ? 'active' : subscription?.status ?? 'none',
-      hasAccess: isAdmin || subscription?.status === 'active',
+      hasAccess: paid,
+      accessTier: isAdmin ? 'admin' : paid ? 'subscriber' : (!freeAccess.ended ? 'free' : 'none'),
+      freeAccess,
       renewalDate: subscription?.currentPeriodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: subscription?.cancelAtNextBillingDate ?? false,
     });
@@ -30,21 +35,27 @@ export const createCheckout: RequestHandler = async (req, res, next) => {
   try {
     if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
     if (req.user.role === 'ADMIN') throw new ApiError(409, 'ALREADY_SUBSCRIBED', 'This account already has access');
-    const active = await prisma.subscription.findFirst({
-      where: { userId: req.user.id, dodoProductId: config.DODO_PAYMENTS_PRODUCT_ID, status: 'active' },
-      select: { id: true },
+    const subscriptions = await prisma.subscription.findMany({
+      where: { userId: req.user.id, dodoProductId: config.DODO_PAYMENTS_PRODUCT_ID },
+      select: { id: true, status: true },
     });
-    if (active) throw new ApiError(409, 'ALREADY_SUBSCRIBED', 'You already have an active subscription');
+    if (subscriptions.some((subscription) => subscription.status === 'active')) throw new ApiError(409, 'ALREADY_SUBSCRIBED', 'You already have an active subscription');
+    const projectId = typeof req.body?.projectId === 'string' ? req.body.projectId : undefined;
+    if (projectId) {
+      const owned = await prisma.project.findFirst({ where: { id: projectId, userId: req.user.id }, select: { id: true } });
+      if (!owned) throw new ApiError(404, 'NOT_FOUND', 'Project not found');
+    }
+    const returnSuffix = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
 
     const session = await getDodoClient().checkoutSessions.create({
       product_cart: [{ product_id: config.DODO_PAYMENTS_PRODUCT_ID, quantity: 1 }],
-      subscription_data: { trial_period_days: 3 },
+      subscription_data: subscriptions.length === 0 ? { trial_period_days: 3 } : undefined,
       customer: req.user.name
         ? { email: req.user.email, name: req.user.name }
         : { email: req.user.email },
       metadata: { contentlane_user_id: req.user.id },
-      return_url: `${config.FRONTEND_URL}/billing/success`,
-      cancel_url: `${config.FRONTEND_URL}/billing?cancelled=1`,
+      return_url: `${config.FRONTEND_URL}/billing/success${returnSuffix}`,
+      cancel_url: `${config.FRONTEND_URL}/billing?cancelled=1${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`,
       feature_flags: {
         allow_customer_editing_email: false,
         allow_customer_editing_name: true,
@@ -97,6 +108,9 @@ export const syncSubscription: RequestHandler = async (req, res, next) => {
       select: { latestProviderEventAt: true },
     });
     await prisma.user.update({ where: { id: req.user.id }, data: { dodoCustomerId: providerSubscription.customer.customer_id } });
+    if (providerSubscription.status === 'active') {
+      await prisma.$executeRaw`UPDATE "User" SET "freeAccessEndedAt" = COALESCE("freeAccessEndedAt", NOW()) WHERE "id" = ${req.user.id}`;
+    }
     await prisma.subscription.upsert({
       where: { dodoSubscriptionId: providerSubscription.subscription_id },
       create: {

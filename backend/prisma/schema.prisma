@@ -66,7 +66,10 @@ model User {
   role              UserRole         @default(USER)
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
-  projects          Project[]
+  projects          Project[]        @relation("OwnedProjects")
+  freeHookLimit     Int              @default(24)
+  freeAccessEndedAt DateTime?
+  freeOnboardingProject Project?     @relation("FreeOnboardingProject")
   allowedEmailsMade AllowedEmail[]   @relation("AllowedEmailCreatedBy")
   dodoCustomerId    String?          @unique
   subscriptions     Subscription[]
@@ -126,7 +129,9 @@ model AllowedEmail {
 model Project {
   id                  String           @id @default(cuid())
   userId              String?
-  user                User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User?            @relation("OwnedProjects", fields: [userId], references: [id], onDelete: Cascade)
+  freeOnboardingOwnerId String?         @unique
+  freeOnboardingOwner User?             @relation("FreeOnboardingProject", fields: [freeOnboardingOwnerId], references: [id], onDelete: SetNull)
   website             String
   normalizedWebsite   String
   status              ProjectStatus    @default(DRAFT)
@@ -137,6 +142,7 @@ model Project {
   selectedCharacter   Json?            @map("selectedCharacter")
   creatorSelection    Json?            @map("creatorSelection")
   hookPreferences     Json?            @map("hookPreferences")
+  brandProfileConfirmedAt DateTime?
   selectedConcept     HookConcept?     @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
   brandProfile        BrandProfile?
   websiteAnalysis     WebsiteAnalysis?

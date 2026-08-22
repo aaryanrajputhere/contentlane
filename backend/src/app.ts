@@ -51,9 +51,9 @@ export function createApp() {
   app.use('/api/v1/admin/support', adminSupportRouter);
   app.use('/api/v1/admin', adminRouter);
   app.use('/api/v1/billing', requireAuth, billingRouter);
-  app.use('/api/v1/projects', requireAuth, requireSubscription, projectsRouter);
+  app.use('/api/v1/projects', requireAuth, projectsRouter);
   app.use('/api/v1/jobs', requireAuth, requireSubscription, jobsRouter);
-  app.use('/api/v1/creators', requireAuth, requireSubscription, creatorsRouter);
+  app.use('/api/v1/creators', requireAuth, creatorsRouter);
   app.use('/api/v1/clips', requireAuth, requireSubscription, clipsRouter);
   app.use(notFound);
   app.use(errorHandler);

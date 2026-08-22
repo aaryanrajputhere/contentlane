@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -15,11 +15,16 @@ import {
   LayoutDashboard,
 } from 'lucide-react';
 import { motion, useAnimationControls, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
+import { UserButton } from '@clerk/react';
 import { api, post } from '../lib/api';
 import { creatorToCharacter } from '../lib/creatorLibrary';
 import { getCaptionStyle } from '../lib/captionStyle';
 import { assignCreatorsToConcepts, effectiveCreatorSelection, eligibleCreators } from '../lib/creatorAssignments';
-import type { ConceptCard, CreatorClipRecord, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
+import { isFreeConversionRequired } from '../lib/onboarding.mjs';
+import BrandProfileConfirmationModal from './BrandProfileConfirmationModal';
+import type { BrandProfileConfirmation } from './BrandProfileConfirmationModal';
+import { requiresBrandProfileConfirmation } from '../lib/brand-profile-confirmation.mjs';
+import type { BillingStatus, ConceptCard, CreatorClipRecord, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
 
 const AI_STEPS = [
   'Reading homepage...',
@@ -301,10 +306,13 @@ function SwipeReview({
 export default function ProjectPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const prefersReducedMotion = useReducedMotion();
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [brandConfirmationError, setBrandConfirmationError] = useState('');
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
   
   const [creatorLibrary, setCreatorLibrary] = useState<CreatorRecord[]>([]);
   const [creatorLibraryLoading, setCreatorLibraryLoading] = useState(true);
@@ -316,6 +324,8 @@ export default function ProjectPage() {
   const automaticGenerationAttempt = useRef<string | null>(null);
   const automaticCreatorSelectionAttempt = useRef<string | null>(null);
   const uploadSectionRef = useRef<HTMLDivElement | null>(null);
+  const isFreeFlow = Boolean(billing && !billing.hasAccess && billing.freeAccess.projectId === id);
+  const hookCap = isFreeFlow ? 24 : MAX_HOOKS_PER_PROJECT;
 
   const load = useCallback(async () => {
     const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}`);
@@ -330,7 +340,7 @@ export default function ProjectPage() {
 
   useEffect(() => {
     setLoading(true);
-    void load()
+    void Promise.all([load(), api<BillingStatus>('/billing/status').then(setBilling)])
       .catch((caught) => setError(caught instanceof Error ? caught.message : 'Unable to load project'))
       .finally(() => setLoading(false));
   }, [load]);
@@ -376,6 +386,16 @@ export default function ProjectPage() {
     observer.observe(uploadSection);
     return () => observer.disconnect();
   }, [project]);
+
+  useEffect(() => {
+    if (!billing?.hasAccess || searchParams.get('unlocked') !== '1') return;
+    if (project?.concepts.filter((concept) => concept.reviewDecision === 'LIKED').length !== HOOK_SELECTION_TARGET) return;
+    const frame = window.requestAnimationFrame(() => {
+      uploadSectionRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+      navigate(`/projects/${id}/hooks`, { replace: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [billing?.hasAccess, id, navigate, prefersReducedMotion, project, searchParams]);
 
   const generateHooks = useCallback(async (forceRegenerate: boolean, append = false) => {
     if (busy) return;
@@ -451,9 +471,25 @@ export default function ProjectPage() {
     }
   }, [busy, id]);
 
+  const confirmBrandProfile = useCallback(async (profile: BrandProfileConfirmation) => {
+    if (busy) return;
+    setBusy('Confirming brand');
+    setBrandConfirmationError('');
+    try {
+      const response = await post<ProjectResponse>(`/projects/${id}/brand-profile/confirm`, profile);
+      setProject(response.project);
+      automaticGenerationAttempt.current = null;
+    } catch (caught) {
+      setBrandConfirmationError(caught instanceof Error ? caught.message : 'Unable to save the brand profile');
+    } finally {
+      setBusy(null);
+    }
+  }, [busy, id]);
+
   useEffect(() => {
     if (
       !project?.brandProfile
+      || !project.brandProfileConfirmedAt
       || project.concepts.length > 0
       || busy
       || project.jobs.some((job) => job.type === 'GENERATE_CONCEPTS' && ['QUEUED', 'ACTIVE'].includes(job.status))
@@ -472,7 +508,7 @@ export default function ProjectPage() {
     const unreviewedCount = project.concepts.filter((concept) => concept.reviewDecision === null).length;
     const attemptKey = `${project.id}:${project.concepts.length}`;
     const shouldAppendHooks = likedCount < HOOK_SELECTION_TARGET
-      && project.concepts.length < MAX_HOOKS_PER_PROJECT
+      && project.concepts.length < hookCap
       && (
         unreviewedCount === 0
         || (likedCount >= HOOK_PREFETCH_SELECTION_THRESHOLD && unreviewedCount <= HOOK_PREFETCH_REMAINING_THRESHOLD)
@@ -481,13 +517,14 @@ export default function ProjectPage() {
       automaticGenerationAttempt.current = attemptKey;
       void generateHooks(false, true);
     }
-  }, [busy, generateHooks, project]);
+  }, [busy, generateHooks, hookCap, project]);
 
   // New campaigns start with a mixed roster whenever at least two creators have clips.
   useEffect(() => {
     const availableCreators = eligibleCreators(creatorLibrary);
     if (
       project
+      && !isFreeFlow
       && !project.creatorSelection
       && !project.selectedCharacter
       && availableCreators.length > 0
@@ -505,7 +542,7 @@ export default function ProjectPage() {
         setError(caught instanceof Error ? caught.message : 'Unable to choose creators');
       });
     }
-  }, [project, creatorLibrary, busy, id]);
+  }, [project, creatorLibrary, busy, id, isFreeFlow]);
 
   const selectCreators = async (selection: { mode: 'mix' } | { mode: 'single'; creatorId: string }) => {
     if (!project || busy) return;
@@ -560,6 +597,23 @@ export default function ProjectPage() {
   }
 
   const isGeneratingHooks = busy === 'Generating hooks' || project.jobs.some(j => j.type === 'GENERATE_CONCEPTS' && ['QUEUED', 'ACTIVE'].includes(j.status));
+
+  if (requiresBrandProfileConfirmation(project)) {
+    return (
+      <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
+        <header className="relative z-[80] border-b border-black/5 bg-white/90 backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 py-5 sm:px-8 lg:px-12">
+            <p className="text-[13px] font-normal uppercase tracking-[0.34em]">ContentLane</p>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium transition hover:bg-[#f3f3f3]"><ArrowLeft size={16} /> Back</button>
+              <UserButton />
+            </div>
+          </div>
+        </header>
+        <BrandProfileConfirmationModal profile={project.brandProfile!} busy={busy === 'Confirming brand'} error={brandConfirmationError} onConfirm={confirmBrandProfile} />
+      </main>
+    );
+  }
 
   if (!project.concepts.length) {
     return (
@@ -619,7 +673,17 @@ export default function ProjectPage() {
     : undefined;
   const reviewAssignments = nextUnreviewedAssignment ? [nextUnreviewedAssignment] : [];
   const reviewComplete = likedConcepts.length === HOOK_SELECTION_TARGET;
-  const hookLimitReached = project.concepts.length >= MAX_HOOKS_PER_PROJECT;
+  const reviewedCount = project.concepts.length - unreviewedConcepts.length;
+  const hookLimitReached = project.concepts.length >= hookCap;
+  const reviewedAllFreeHooks = hookLimitReached && reviewedCount >= project.concepts.length;
+  const freeConversionRequired = isFreeConversionRequired({
+    isFreeFlow,
+    ended: billing?.freeAccess.ended ?? false,
+    selected: likedConcepts.length,
+    generated: project.concepts.length,
+    reviewed: reviewedCount,
+    limit: hookCap,
+  });
   const resetReviews = async () => {
     const hasDependentWork = Boolean(project.exportState || project.mediaAssets.some((asset) => asset.metadata?.kind !== 'brand-demo') || project.concepts.some((concept) => concept.generatedImageUrl || concept.generatedVideoUrl));
     if (hasDependentWork && !window.confirm('Reviewing again will remove generated hook media and render settings. Your analysis, creators, product demo, and generated hooks will stay. Continue?')) return;
@@ -636,6 +700,58 @@ export default function ProjectPage() {
       setBusy(null);
     }
   };
+  const startTrial = async () => {
+    setBusy('Starting trial');
+    setError('');
+    try {
+      const { url } = await post<{ url: string }>('/billing/checkout', { projectId: id });
+      window.location.assign(url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to start checkout');
+      setBusy(null);
+    }
+  };
+
+  if (freeConversionRequired) {
+    const conversionHeadline = reviewComplete
+      ? 'Your 8 hooks are ready to become Reels.'
+      : reviewedAllFreeHooks
+        ? 'You’ve reviewed all 24 free hooks.'
+        : 'Unlock your saved hooks and keep creating.';
+    return (
+      <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
+        <header className="border-b border-black/5 bg-white/70 backdrop-blur-md">
+          <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-5">
+            <p className="text-[13px] uppercase tracking-[0.34em]">ContentLane</p>
+            <div className="flex items-center gap-3"><button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium"><ArrowLeft size={16} /> Back</button><UserButton /></div>
+          </div>
+        </header>
+        <section className="mx-auto grid min-h-[calc(100dvh-78px)] max-w-5xl items-center gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr]">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#15803d]">Free hook review complete</p>
+            <h1 className="mt-4 max-w-xl text-[clamp(2.7rem,6vw,4.8rem)] font-extrabold leading-[0.94] tracking-[-0.065em]">
+              {conversionHeadline}
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-[#666666]">Start your 3-day free trial to unlock product-demo upload, full Reel rendering, the campaign workspace, and more hooks.</p>
+            {error ? <p role="alert" className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
+            <button type="button" onClick={() => void startTrial()} disabled={busy !== null} className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#111111] px-7 py-4 text-sm font-bold text-white shadow-[0_16px_35px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 disabled:opacity-50">
+              {busy === 'Starting trial' ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" /> : <Sparkles size={18} />}
+              Start 3-day free trial
+            </button>
+          </div>
+          <div className="rounded-[32px] border border-black/10 bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,0.08)]">
+            <p className="px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#8c8c8c]">Your saved hooks</p>
+            <ol className="mt-3 space-y-2">
+              {likedConcepts.map((concept, index) => (
+                <li key={concept.id} className="flex gap-3 rounded-2xl bg-[#f7f6f2] px-4 py-3 text-sm font-semibold leading-6"><span className="text-[#15803d]">{String(index + 1).padStart(2, '0')}</span><span>{concept.hookText}</span></li>
+              ))}
+              {likedConcepts.length === 0 ? <li className="rounded-2xl bg-[#f7f6f2] px-4 py-5 text-sm text-[#666666]">No hooks selected yet. Your review decisions are saved.</li> : null}
+            </ol>
+          </div>
+        </section>
+      </main>
+    );
+  }
   return (
     <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/50 backdrop-blur-md">
@@ -648,13 +764,13 @@ export default function ProjectPage() {
             <ArrowLeft size={16} />
             Back
           </button>
-          <button
+          {!isFreeFlow ? <button
             onClick={() => navigate(`/projects/${id}/dashboard`)}
             className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-[#111111] transition hover:bg-[#f3f3f3]"
           >
             <LayoutDashboard size={16} />
             Dashboard
-          </button>
+          </button> : <div className="flex items-center gap-3"><span className="text-xs font-bold uppercase tracking-[0.16em] text-[#15803d]">Free hooks</span><UserButton /></div>}
         </div>
       </header>
 
@@ -751,7 +867,7 @@ export default function ProjectPage() {
         {!reviewComplete ? (
           <section aria-labelledby="hook-review-title" className="flex flex-1 flex-col items-center justify-center py-2">
             <h1 id="hook-review-title" className="mb-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[#8c8c8c]">
-              {likedConcepts.length} of 8 hooks selected · {unreviewedConcepts.length} cards remaining
+              {isFreeFlow ? `${likedConcepts.length} of 8 selected · ${reviewedCount} of 24 reviewed` : `${likedConcepts.length} of 8 hooks selected · ${unreviewedConcepts.length} cards remaining`}
             </h1>
             <div className="mb-4 flex gap-1.5" role="img" aria-label={`${likedConcepts.length} of 8 hooks selected`}>
               {Array.from({ length: 8 }, (_, index) => (
@@ -765,11 +881,11 @@ export default function ProjectPage() {
               </div>
             ) : unreviewedConcepts.length === 0 && hookLimitReached ? (
               <div role="status" className="flex min-h-80 flex-col items-center justify-center gap-2 px-6 text-center">
-                <p className="font-semibold">You’ve reviewed the maximum of 96 hooks.</p>
+                <p className="font-semibold">You’ve reviewed the maximum of {hookCap} hooks.</p>
                 <p className="max-w-md text-sm text-[#666]">Open the campaign dashboard to choose a fresh batch from your hook library.</p>
-                <button type="button" onClick={() => void resetReviews()} disabled={busy !== null} className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold disabled:opacity-50">
+                {!isFreeFlow ? <button type="button" onClick={() => void resetReviews()} disabled={busy !== null} className="mt-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-3 text-sm font-bold disabled:opacity-50">
                   <RotateCcw size={16} /> Review all 24 again
-                </button>
+                </button> : null}
               </div>
             ) : <SwipeReview assignments={reviewAssignments} onDecision={decideHook} />}
             {hookRetryFailure?.phase === 'generation' && unreviewedConcepts.length === 0 && !hookLimitReached ? (

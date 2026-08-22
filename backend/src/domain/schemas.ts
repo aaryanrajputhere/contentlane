@@ -4,6 +4,7 @@ const emailSchema = z.string().trim().email().max(320);
 const passwordSchema = z.string().min(8).max(128);
 
 export const projectIdParamsSchema = z.object({ id: z.string().cuid() });
+export const checkoutInputSchema = z.object({ projectId: z.string().cuid().optional() }).strict().default({});
 export const jobIdParamsSchema = z.object({ id: z.string().cuid() });
 export const creatorParamsSchema = z.object({ id: z.string().cuid() });
 export const creatorClipParamsSchema = z.object({ clipId: z.string().cuid() });
@@ -280,6 +281,7 @@ export const brandProfileSchema = z.object({
   updatedAt: z.coerce.date(),
 }).strict();
 export const brandProfileUpdateSchema = brandProfileSchema.omit({ id: true, projectId: true, createdAt: true, updatedAt: true });
+export const brandProfileConfirmationSchema = brandProfileUpdateSchema;
 export const websiteAnalysisHomepageSchema = z.object({
   url: z.string().url(),
   title: z.string().min(1).nullable().optional(),
@@ -368,6 +370,7 @@ export const projectSchema = z.object({
   selectedConceptId: z.string().cuid().nullable(),
   selectedCharacterId: z.string().min(1).nullable(),
   hookPreferences: hookPreferencesSchema.nullable(),
+  brandProfileConfirmedAt: z.coerce.date().nullable(),
 }).strict();
 
 export const projectSnapshotSchema = projectSchema.extend({

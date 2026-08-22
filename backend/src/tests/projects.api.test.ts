@@ -60,8 +60,17 @@ async function waitForBrandProfile(baseUrl: string, projectId: string, cookie: s
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const response = await fetch(`${baseUrl}/api/v1/projects/${projectId}`, { headers: { cookie } });
     assert.equal(response.status, 200);
-    const payload = (await response.json()) as { project: { brandProfile: unknown } };
-    if (payload.project.brandProfile) return payload.project;
+    const payload = (await response.json()) as { project: { brandProfileConfirmedAt: string | null; brandProfile: null | { brandName: string; productSummary: string; targetAudience: string; customerProblems: string[]; keyBenefits: string[]; proofPoints: string[]; claimConstraints: string[] } } };
+    if (payload.project.brandProfile) {
+      if (payload.project.brandProfileConfirmedAt) return payload.project;
+      const confirmation = await fetch(`${baseUrl}/api/v1/projects/${projectId}/brand-profile/confirm`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: JSON.stringify(payload.project.brandProfile),
+      });
+      assert.equal(confirmation.status, 200);
+      return ((await confirmation.json()) as { project: typeof payload.project }).project;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert.fail("Project analysis did not complete in time");

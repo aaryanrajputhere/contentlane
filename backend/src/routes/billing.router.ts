@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { cancelSubscription, createCheckout, createPortal, getBillingStatus, syncSubscription } from '../controllers/billing.controller';
+import { checkoutInputSchema } from '../domain/schemas';
+import { validate } from '../lib/validation';
 
 const router = Router();
 router.get('/status', getBillingStatus);
-router.post('/checkout', createCheckout);
+router.post('/checkout', validate({ body: checkoutInputSchema }), createCheckout);
 router.post('/portal', createPortal);
 router.post('/sync', syncSubscription);
 router.post('/cancel', cancelSubscription);

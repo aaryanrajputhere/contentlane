@@ -24,7 +24,7 @@ export default function ProjectsPage() {
     setCreating(true); setError('');
     try {
       const response = await post<ProjectResponse>('/projects', { website: website.trim() });
-      navigate(`/projects/${response.project.id}`);
+      navigate(`/projects/${response.project.id}/hooks`);
     } catch (caught) {
       if (caught instanceof ApiClientError && caught.code === 'SUBSCRIPTION_REQUIRED') { navigate('/billing'); return; }
       setError(caught instanceof Error ? caught.message : 'Unable to start this website');

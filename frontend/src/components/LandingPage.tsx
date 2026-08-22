@@ -5,8 +5,9 @@ import { ArrowRight, Clock3, Check, Gauge, Globe2, Loader2, Play, Rocket, Shield
 import { AnimatePresence, motion, useInView, useReducedMotion } from 'framer-motion';
 import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react';
 import { useAuth } from '../lib/auth';
-import { ApiClientError, post } from '../lib/api';
-import type { ProjectResponse } from '../types/domain';
+import { ApiClientError, api, post } from '../lib/api';
+import { savePendingWebsite } from '../lib/onboarding.mjs';
+import type { BillingStatus, ProjectResponse } from '../types/domain';
 
 type PreviewCardProps = {
   id: string;
@@ -504,16 +505,30 @@ export default function LandingPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [activePreviewIndex, setActivePreviewIndex] = useState(0);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const isCompactViewport = useCompactViewport();
   const { status, user } = useAuth();
 
+  useEffect(() => {
+    if (status !== 'authenticated') { setBilling(null); return; }
+    let active = true;
+    api<BillingStatus>('/billing/status').then((value) => { if (active) setBilling(value); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [status]);
+
   const startProject = async () => {
     const value = website.trim();
     if (!value || loading) return;
+    const pendingWebsite = savePendingWebsite(value);
+    if (!pendingWebsite) { setError('Enter a valid website URL'); return; }
     if (status !== 'authenticated') {
-      navigate('/signup', { state: { from: { pathname: '/billing' } } });
+      navigate('/signup', { state: { from: { pathname: '/onboarding' } } });
+      return;
+    }
+    if (!billing?.hasAccess) {
+      navigate(billing?.freeAccess.projectId ? `/projects/${billing.freeAccess.projectId}/hooks` : '/onboarding');
       return;
     }
 
@@ -523,17 +538,9 @@ export default function LandingPage() {
 
     try {
       const analysisResponse = await post<ProjectResponse>('/projects', { website: value });
-      let project = analysisResponse.project;
-
-      if (project.brandProfile && project.concepts.length === 0) {
-        setMessage('Generating 8 hooks');
-        const hooksResponse = await post<ProjectResponse>(`/projects/${project.id}/concepts`, { count: 8 });
-        project = hooksResponse.project;
-      }
-
-      navigate(`/projects/${project.id}/hooks`);
+      navigate(`/projects/${analysisResponse.project.id}/hooks`);
     } catch (caught) {
-      if (caught instanceof ApiClientError && caught.code === 'SUBSCRIPTION_REQUIRED') {
+      if (caught instanceof ApiClientError && (caught.code === 'SUBSCRIPTION_REQUIRED' || caught.code === 'UPGRADE_REQUIRED')) {
         navigate('/billing');
         return;
       }
@@ -578,8 +585,8 @@ export default function LandingPage() {
             </button>
           ) : null}
           {status === 'authenticated' ? (
-            <button onClick={() => navigate('/projects')} className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black">
-              Dashboard
+            <button onClick={() => navigate(billing?.hasAccess ? '/projects' : billing?.freeAccess.projectId ? `/projects/${billing.freeAccess.projectId}/hooks` : '/onboarding')} className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black">
+              {billing?.hasAccess ? 'Dashboard' : 'Continue free hooks'}
             </button>
           ) : null}
           <Show when="signed-out">
@@ -642,10 +649,12 @@ export default function LandingPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-[#111111] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? <Loader2 className="animate-spin" size={17} /> : <Wand2 size={17} />}
-                Generate My First Reel
+                Generate 24 free hooks
               </button>
             </div>
           </div>
+
+          <p className="mt-4 max-w-xl text-sm leading-6 text-[#666666]">No subscription required. Choose up to 8, then start your free trial when you’re ready to make Reels.</p>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-[#666666]">
             <span>Creator hook first</span>
@@ -655,7 +664,7 @@ export default function LandingPage() {
             <span>Ready-to-post ad after approval</span>
           </div>
 
-          {status === 'authenticated' ? (
+          {status === 'authenticated' && billing?.hasAccess ? (
             <button type="button" onClick={() => navigate('/projects')} className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#666666] underline decoration-black/20 underline-offset-4 transition hover:text-[#111111]">
               Choose an existing website <ArrowRight size={14} />
             </button>
@@ -848,7 +857,7 @@ export default function LandingPage() {
               onClick={scrollToHero}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f4f4f4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
             >
-              Generate My First Reel
+              Generate 24 free hooks
               <Rocket size={16} />
             </button>
           </div>

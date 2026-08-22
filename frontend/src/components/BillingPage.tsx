@@ -2,16 +2,7 @@ import { AlertTriangle, Check, CreditCard, Loader2, ShieldCheck } from 'lucide-r
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, post } from '../lib/api';
-
-export type BillingStatus = {
-  plan: string;
-  price: number;
-  currency: string;
-  status: string;
-  hasAccess: boolean;
-  renewalDate: string | null;
-  cancelAtPeriodEnd: boolean;
-};
+import type { BillingStatus } from '../types/domain';
 
 export default function BillingPage({ success = false }: { success?: boolean }) {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
@@ -42,7 +33,8 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
         const status = await refresh();
         if (cancelled) return;
         if (success && status.hasAccess) {
-          navigate('/', { replace: true });
+          const projectId = searchParams.get('projectId');
+          navigate(projectId ? `/projects/${projectId}/hooks?unlocked=1` : '/', { replace: true });
           return;
         }
         if (success && attempts++ < 40) timer = window.setTimeout(() => void check(), 3000);
@@ -58,7 +50,8 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
     setLoading(true);
     setError('');
     try {
-      const { url } = await post<{ url: string }>(`/billing/${kind}`);
+      const projectId = searchParams.get('projectId');
+      const { url } = await post<{ url: string }>(`/billing/${kind}`, kind === 'checkout' && projectId ? { projectId } : undefined);
       window.location.assign(url);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to open billing');

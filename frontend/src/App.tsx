@@ -15,6 +15,7 @@ import AdminProjectDetailPage from './components/AdminProjectDetailPage';
 import AdminUserDetailPage from './components/AdminUserDetailPage';
 import AdminJobsPage from './components/AdminJobsPage';
 import SupportWidget from './components/SupportWidget';
+import OnboardingPage from './components/OnboardingPage';
 import { PublicOnlyRoute, RequireAdmin, RequireAuth, RequireSubscription } from './lib/auth';
 
 export default function App() {
@@ -38,6 +39,8 @@ export default function App() {
         )}
       />
       <Route element={<RequireAuth />}>
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/projects/:id/hooks" element={<ProjectPage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/billing/success" element={<BillingPage success />} />
         <Route element={<RequireSubscription />}>
@@ -49,7 +52,6 @@ export default function App() {
           <Route path="/projects/:id/batches" element={<Navigate to="content" replace />} />
           <Route path="/projects/:id/workflow" element={<ProjectPage />} />
           <Route path="/projects/:id/demo" element={<ProjectPage />} />
-          <Route path="/projects/:id/hooks" element={<ProjectPage />} />
           <Route path="/projects/:id/creator" element={<ProjectPage />} />
           <Route path="/projects/:id/export" element={<ProjectPage />} />
           <Route path="/projects/:id/render" element={<ProjectRenderPage />} />

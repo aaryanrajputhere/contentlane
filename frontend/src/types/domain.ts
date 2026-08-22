@@ -33,6 +33,27 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+export interface BillingStatus {
+  plan: string;
+  price: number;
+  currency: string;
+  status: string;
+  hasAccess: boolean;
+  accessTier: 'admin' | 'subscriber' | 'free' | 'none';
+  renewalDate: string | null;
+  cancelAtPeriodEnd: boolean;
+  freeAccess: {
+    projectId: string | null;
+    limit: number;
+    generated: number;
+    reviewed: number;
+    selected: number;
+    remaining: number;
+    conversionRequired: boolean;
+    ended: boolean;
+  };
+}
+
 export interface CreatorCharacter {
   id: string;
   source: CharacterSource;
@@ -233,6 +254,7 @@ export interface ProjectSnapshot {
   selectedCharacter: CreatorCharacter | null;
   creatorSelection: CreatorSelection | null;
   hookPreferences: HookPreferences | null;
+  brandProfileConfirmedAt: string | null;
 }
 
 export interface ProjectResponse {

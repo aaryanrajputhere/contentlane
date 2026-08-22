@@ -5,11 +5,35 @@ import { verifySession } from '../lib/auth';
 import { ApiError } from '../lib/errors';
 import { config } from '../config';
 
+const authenticatedUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+} as const;
+
 export async function resolveAuthenticatedUser(req: Request) {
   if (req.user) return req.user;
   const clerkAuth = config.NODE_ENV === 'test' ? null : getAuth(req);
   if (clerkAuth?.isAuthenticated && clerkAuth.userId) {
-    const clerkUser = await clerkClient.users.getUser(clerkAuth.userId);
+    // Clerk has already cryptographically verified the request token before this
+    // middleware runs. Prefer the linked local account so routine API requests and
+    // job polling do not depend on an additional Clerk network request.
+    const linkedUser = await prisma.user.findUnique({
+      where: { clerkId: clerkAuth.userId },
+      select: authenticatedUserSelect,
+    });
+    if (linkedUser) {
+      req.user = linkedUser;
+      return linkedUser;
+    }
+
+    let clerkUser;
+    try {
+      clerkUser = await clerkClient.users.getUser(clerkAuth.userId);
+    } catch {
+      throw new ApiError(503, 'AUTH_PROVIDER_UNAVAILABLE', 'Sign-in is temporarily unavailable. Please try again.');
+    }
     const email = clerkUser.primaryEmailAddress?.emailAddress.toLowerCase();
     if (!email) throw new ApiError(401, 'AUTH_REQUIRED', 'Your Clerk account needs an email address');
     const clerkRole = clerkUser.publicMetadata.role === 'ADMIN' ? 'ADMIN' : 'USER';
@@ -18,7 +42,7 @@ export async function resolveAuthenticatedUser(req: Request) {
       where: { email },
       update: { clerkId: clerkAuth.userId, name: clerkUser.fullName, role: clerkRole },
       create: { clerkId: clerkAuth.userId, email, name: clerkUser.fullName, role: clerkRole },
-      select: { id: true, email: true, name: true, role: true },
+      select: authenticatedUserSelect,
     });
 
     req.user = user;
@@ -37,7 +61,7 @@ export async function resolveAuthenticatedUser(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: claims.sub },
-    select: { id: true, email: true, name: true, role: true },
+    select: authenticatedUserSelect,
   });
 
   if (!user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');

@@ -73,6 +73,9 @@ export const handleDodoWebhook: RequestHandler = async (req, res, next) => {
 
       const status = eventType === 'subscription.paused' ? 'paused' : data.status;
       await tx.user.update({ where: { id: user.id }, data: { dodoCustomerId: data.customer.customer_id } });
+      if (status === 'active') {
+        await tx.$executeRaw`UPDATE "User" SET "freeAccessEndedAt" = COALESCE("freeAccessEndedAt", NOW()) WHERE "id" = ${user.id}`;
+      }
       await tx.subscription.upsert({
         where: { dodoSubscriptionId: data.subscription_id },
         create: {

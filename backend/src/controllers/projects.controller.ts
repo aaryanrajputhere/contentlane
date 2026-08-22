@@ -6,6 +6,7 @@ import type { BrandProfile, CreatorCharacter, HookPreferenceExample } from "../d
 import {
   characterSelectionSchema,
   brandProfileUpdateSchema,
+  brandProfileConfirmationSchema,
   conceptSelectionSchema,
   conceptStageInputSchema,
   conceptReviewParamsSchema,
@@ -45,6 +46,7 @@ import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
 import { creatorToCharacter } from "../lib/creator-library";
 import { renderQueue, type RenderJobInput } from "../lib/render-queue";
 import { resolveCreatorClipAssignments } from "../lib/creator-clip-matching";
+import { FREE_HOOK_SELECTION_LIMIT, getFreeAccess, hasPaidAccess, requireFreeProjectAccess } from "../lib/access";
 
 const HOOK_SELECTION_TARGET = 8;
 
@@ -106,6 +108,17 @@ async function createJob(
 ) {
   return prisma.generationJob.create({
     data: { projectId, type, input, status: JobStatus.QUEUED, progress: 0 },
+  });
+}
+
+async function findActiveAnalysisJob(projectId: string) {
+  return prisma.generationJob.findFirst({
+    where: {
+      projectId,
+      type: JobType.ANALYZE_WEBSITE,
+      status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE] },
+    },
+    orderBy: { createdAt: 'asc' },
   });
 }
 
@@ -441,6 +454,34 @@ export const createProject: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { website } = websiteInputSchema.parse(req.body);
   const normalizedWebsite = normalizeWebsiteInput(website);
+  const paid = await hasPaidAccess(userId, req.user!.role);
+  if (!paid) {
+    const access = await getFreeAccess(userId);
+    if (access.ended) throw new ApiError(402, "UPGRADE_REQUIRED", "Start a subscription to create a project");
+    if (access.projectId) {
+      res.status(200).json({ project: assertProject(await loadProjectSnapshot(access.projectId, userId)), cached: true });
+      return;
+    }
+    const claim = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+      const lockedAccess = await getFreeAccess(userId, tx);
+      if (lockedAccess.ended) throw new ApiError(402, "UPGRADE_REQUIRED", "Start a subscription to create a project");
+      if (lockedAccess.projectId) return { project: await tx.project.findUniqueOrThrow({ where: { id: lockedAccess.projectId } }), created: false };
+      const created = await tx.project.create({ data: { userId, website: website.trim(), normalizedWebsite, status: "DRAFT" } });
+      await tx.$executeRaw`UPDATE "Project" SET "freeOnboardingOwnerId" = ${userId} WHERE "id" = ${created.id}`;
+      return { project: created, created: true };
+    });
+    if (!claim.created) {
+      res.status(200).json({ project: assertProject(await loadProjectSnapshot(claim.project.id, userId)), cached: true });
+      return;
+    }
+    const project = claim.project;
+    const analysisJob = await createJob(project.id, JobType.ANALYZE_WEBSITE, { website: project.website, forceRegenerate: false });
+    await prisma.project.update({ where: { id: project.id }, data: { status: ProjectStatus.ANALYZING } });
+    void analyzeProjectById(project.id, userId, { forceRegenerate: false, existingJob: analysisJob }).catch((error) => console.error(`[projects] background analysis failed project=${project.id}:`, error));
+    res.status(201).json({ project: assertProject(await loadProjectSnapshot(project.id, userId)), job: analysisJob, cached: false });
+    return;
+  }
   const existingProject = await prisma.project.findFirst({
     where: { userId, normalizedWebsite },
   });
@@ -453,6 +494,11 @@ export const createProject: RequestHandler = async (req, res) => {
     const snapshot = assertProject(await loadProjectSnapshot(project.id, userId));
     if (snapshot.brandProfile) {
       res.status(200).json({ project: snapshot, cached: true });
+      return;
+    }
+    const activeAnalysisJob = await findActiveAnalysisJob(project.id);
+    if (activeAnalysisJob) {
+      res.status(200).json({ project: snapshot, job: activeAnalysisJob, cached: false });
       return;
     }
     const analysisJob = await createJob(project.id, JobType.ANALYZE_WEBSITE, {
@@ -510,9 +556,20 @@ export const analyzeProject: RequestHandler = async (req, res) => {
   const { id } = projectIdParamsSchema.parse(req.params);
   const { forceRegenerate } = req.body as { forceRegenerate?: boolean };
   const project = await getProjectOrFail(id, userId);
+  if (!await hasPaidAccess(userId, req.user!.role)) {
+    const access = await requireFreeProjectAccess(userId, id);
+    if (access.ended || forceRegenerate) throw new ApiError(402, "UPGRADE_REQUIRED", "Start a subscription to re-analyze this website");
+  }
   if (project.brandProfile && !forceRegenerate) {
     res.json({ project, cached: true });
     return;
+  }
+  if (!forceRegenerate) {
+    const activeAnalysisJob = await findActiveAnalysisJob(id);
+    if (activeAnalysisJob) {
+      res.json({ project, job: activeAnalysisJob, cached: false });
+      return;
+    }
   }
   const analysisJob = await createJob(id, JobType.ANALYZE_WEBSITE, {
     website: project.website,
@@ -593,6 +650,7 @@ export const getProject: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
   const project = await getProjectOrFail(id, userId);
+  if (!await hasPaidAccess(userId, req.user!.role)) await requireFreeProjectAccess(userId, id);
   res.json({ project });
 };
 
@@ -605,6 +663,31 @@ export const updateBrandProfile: RequestHandler = async (req, res) => {
     where: { projectId: project.id },
     update: profile,
     create: { projectId: project.id, ...profile },
+  });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
+export const confirmBrandProfile: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const profile = brandProfileConfirmationSchema.parse(req.body);
+  const paid = await hasPaidAccess(userId, req.user!.role);
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+    const project = await tx.project.findFirst({
+      where: { id, userId },
+      select: { id: true, brandProfileConfirmedAt: true, brandProfile: { select: { id: true } }, _count: { select: { concepts: true } } },
+    });
+    if (!project) throw new ApiError(404, "NOT_FOUND", "Project not found");
+    if (!project.brandProfile) throw new ApiError(409, "PROJECT_INCOMPLETE", "Analyze the website before confirming its brand profile");
+    if (project.brandProfileConfirmedAt) throw new ApiError(409, "BRAND_PROFILE_ALREADY_CONFIRMED", "This brand profile has already been confirmed");
+    if (project._count.concepts > 0) throw new ApiError(409, "HOOKS_ALREADY_GENERATED", "The brand profile cannot be confirmed after hooks are generated");
+    if (!paid) {
+      const access = await getFreeAccess(userId, tx);
+      if (access.projectId !== id || access.ended || access.conversionRequired) throw new ApiError(402, "UPGRADE_REQUIRED", "Start a subscription to edit this brand profile");
+    }
+    await tx.brandProfile.update({ where: { projectId: project.id }, data: profile });
+    await tx.project.update({ where: { id: project.id }, data: { brandProfileConfirmedAt: new Date() } });
   });
   res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
 };
@@ -684,12 +767,24 @@ export const reviewConcept: RequestHandler = async (req, res) => {
   if ((creatorId && !clipId) || (!creatorId && clipId)) {
     throw new ApiError(400, "INVALID_CLIP_ASSIGNMENT", "Creator and clip must be provided together");
   }
+  const paid = await hasPaidAccess(userId, req.user!.role);
   await prisma.$transaction(async (tx) => {
+    if (!paid) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      const access = await getFreeAccess(userId, tx);
+      if (access.projectId !== id || access.ended || access.conversionRequired) {
+        throw new ApiError(402, "UPGRADE_REQUIRED", "Start your free trial to continue");
+      }
+      if (decision === ReviewDecision.LIKED && access.selected >= FREE_HOOK_SELECTION_LIMIT) {
+        throw new ApiError(402, "UPGRADE_REQUIRED", "You have selected all 8 free hooks");
+      }
+    }
     const concept = await tx.hookConcept.findFirst({
       where: { id: conceptId, projectId: id, project: { userId } },
-      select: { id: true },
+      select: { id: true, reviewDecision: true },
     });
     if (!concept) throw new ApiError(404, "CONCEPT_NOT_FOUND", "Hook not found for this project");
+    if (!paid && concept.reviewDecision !== null) throw new ApiError(409, "REVIEW_ALREADY_SAVED", "This hook has already been reviewed");
     if (creatorId && clipId) {
       const clip = await tx.creatorClip.findFirst({ where: { id: clipId, creatorId }, select: { id: true } });
       if (!clip) throw new ApiError(400, "INVALID_CLIP_ASSIGNMENT", "The selected clip does not belong to the selected creator");
@@ -800,12 +895,22 @@ export const generateConcepts: RequestHandler = async (req, res) => {
   const { id } = projectIdParamsSchema.parse(req.params);
   const { count, forceRegenerate, useHookPreferences, append } = conceptStageInputSchema.parse(req.body);
   const project = await getProjectOrFail(id, userId);
+  const paid = await hasPaidAccess(userId, req.user!.role);
+  if (!paid) {
+    const access = await requireFreeProjectAccess(userId, id);
+    if (access.ended || access.conversionRequired || forceRegenerate || count !== 8 || access.remaining < count) {
+      throw new ApiError(402, "UPGRADE_REQUIRED", "Start your free trial to generate more hooks");
+    }
+  }
   if (!project.brandProfile)
     throw new ApiError(
       409,
       "PROJECT_INCOMPLETE",
       "Analyze the website before generating concepts",
     );
+  if (!project.brandProfileConfirmedAt && project.concepts.length === 0) {
+    throw new ApiError(409, "BRAND_PROFILE_CONFIRMATION_REQUIRED", "Confirm the brand profile before generating hooks");
+  }
   const profile = asBrandProfile(project.brandProfile);
   if (append && forceRegenerate) throw new ApiError(400, "INVALID_GENERATION_MODE", "Append and replacement modes cannot be combined");
   const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
@@ -839,13 +944,19 @@ export const generateConcepts: RequestHandler = async (req, res) => {
         startedAt: latestAnalysisJob.createdAt,
       })
     : null;
-  const reservedAppendJob = append
+  const reservedAppendJob = (append || !paid)
     ? await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${project.id}))`;
         const active = await tx.generationJob.findFirst({
           where: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE] } },
         });
         if (active) throw new ApiError(409, "GENERATION_IN_PROGRESS", "Another hook batch is already being generated");
+        if (!paid) {
+          const access = await getFreeAccess(userId, tx);
+          if (access.projectId !== project.id || access.ended || access.conversionRequired || access.remaining < count) {
+            throw new ApiError(402, "UPGRADE_REQUIRED", "Start your free trial to generate more hooks");
+          }
+        }
         return tx.generationJob.create({
           data: { projectId: project.id, type: JobType.GENERATE_CONCEPTS, input: { count, forceRegenerate, append }, status: JobStatus.QUEUED, progress: 0 },
         });
@@ -913,6 +1024,13 @@ export const generateConcepts: RequestHandler = async (req, res) => {
         }
         await recorder?.write('hooks', { source, concepts });
         await prisma.$transaction(async (tx) => {
+          if (!paid) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${project.id}))`;
+            const access = await getFreeAccess(userId, tx);
+            if (access.projectId !== project.id || access.ended || access.conversionRequired || access.remaining < concepts.length) {
+              throw new ApiError(402, "UPGRADE_REQUIRED", "Start your free trial to generate more hooks");
+            }
+          }
           if (!append) await tx.mediaAsset.deleteMany({
             where: { projectId: project.id, id: { in: staleAssets.map((asset) => asset.id) } },
           });
