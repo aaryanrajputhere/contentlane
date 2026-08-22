@@ -38,7 +38,7 @@ import {
 } from "../lib/workflow";
 import { runWebsiteIntelligencePipeline } from "../lib/website-intelligence/pipeline";
 import { findRepeatedHookLines, generateHooksFromLLM } from "../lib/website-intelligence/hooks";
-import { DEFAULT_HOOK_PATTERNS } from "../lib/website-intelligence/hook-patterns";
+import { containsOnlyLegacyDefaultHookPatterns } from "../lib/website-intelligence/hook-patterns";
 import { withLLMTelemetry } from "../lib/website-intelligence/llm";
 import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
 import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
@@ -82,12 +82,15 @@ function normalizeHookPreferences(value: unknown): HookPreferencePayload | null 
 async function ensureHookPatterns(projectId: string, value: unknown): Promise<HookPreferencePayload> {
   const existing = normalizeHookPreferences(value);
   const hasSavedPatterns = Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "patterns"));
-  if (existing && hasSavedPatterns) return existing;
+  const hasSeededDefaults = existing
+    ? containsOnlyLegacyDefaultHookPatterns(existing.patterns)
+    : false;
+  if (existing && hasSavedPatterns && !hasSeededDefaults) return existing;
 
   const preferences: HookPreferencePayload = {
     liked: existing?.liked ?? [],
     rejected: existing?.rejected ?? [],
-    patterns: [...DEFAULT_HOOK_PATTERNS],
+    patterns: [],
     updatedAt: new Date(),
   };
   await prisma.$executeRaw`
@@ -863,8 +866,9 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           ? rejectedReviewedConcepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }))
           : preferences?.rejected.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle })) ?? [];
         const allPriorConcepts = project.concepts.map(({ hookText, demoOverlayText, angle }) => ({ hookText, demoOverlayText, angle }));
-        const previousConcepts = append ? preferredConcepts : [
-          ...(forceRegenerate ? allPriorConcepts : []),
+        const previousConcepts = preferredConcepts;
+        const duplicateAvoidanceConcepts = [
+          ...((append || forceRegenerate) ? allPriorConcepts : []),
           ...preferredConcepts,
         ];
         await recorder?.write('hooks-request', {
@@ -877,6 +881,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           previousConcepts,
           preferredConcepts,
           rejectedConcepts,
+          duplicateAvoidanceConcepts,
         });
         let source: 'llm' | 'fallback' = 'llm';
         let concepts: ConceptBlueprint[];
@@ -887,7 +892,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
             previousConcepts,
             rejectedConcepts,
             recorder ?? undefined,
-            append ? allPriorConcepts : previousConcepts,
+            duplicateAvoidanceConcepts,
             preferences?.patterns ?? [],
           );
         } catch (error) {
@@ -896,7 +901,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           concepts = buildConceptCards(profile, count);
           const repeatedFallbackLines = findRepeatedHookLines(
             concepts,
-            append ? allPriorConcepts : previousConcepts,
+            duplicateAvoidanceConcepts,
           );
           if (repeatedFallbackLines.length > 0) {
             throw new ApiError(

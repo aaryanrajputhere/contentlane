@@ -52,15 +52,25 @@ function estimateUsd(model: string, inputTokens?: number | null, outputTokens?: 
   if (inputTokens == null || outputTokens == null) return null;
   const normalized = model.toLowerCase();
   const rates =
-    normalized.includes('nano') || normalized.includes('luna')
-      ? { input: 0.05, output: 0.4 }
-      : normalized.includes('mini')
-        ? { input: 0.15, output: 0.6 }
-        : normalized.startsWith('gpt-5')
-          ? { input: 1.25, output: 10 }
-          : normalized.startsWith('gpt-4o')
-            ? { input: 2.5, output: 10 }
-            : null;
+    normalized.startsWith('gpt-5.4-mini')
+      ? { input: 0.75, output: 4.5 }
+      : normalized.startsWith('gpt-5.4-nano')
+        ? { input: 0.2, output: 1.25 }
+        : normalized.startsWith('gpt-5.5-pro')
+          ? { input: 30, output: 180 }
+          : normalized.startsWith('gpt-5.5')
+            ? { input: 5, output: 30 }
+            : normalized.startsWith('gpt-5.4')
+              ? { input: 2.5, output: 15 }
+        : normalized.includes('nano') || normalized.includes('luna')
+          ? { input: 0.05, output: 0.4 }
+          : normalized.includes('mini')
+            ? { input: 0.15, output: 0.6 }
+            : normalized.startsWith('gpt-5')
+              ? { input: 1.25, output: 10 }
+              : normalized.startsWith('gpt-4o')
+                ? { input: 2.5, output: 10 }
+                : null;
   if (!rates) return null;
   return Number((((inputTokens / 1_000_000) * rates.input) + ((outputTokens / 1_000_000) * rates.output)).toFixed(6));
 }

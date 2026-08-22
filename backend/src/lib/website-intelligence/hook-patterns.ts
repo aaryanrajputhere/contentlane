@@ -1,4 +1,5 @@
-export const DEFAULT_HOOK_PATTERNS = [
+// Retained only so existing projects can recognize and remove the old seeded template bank.
+export const LEGACY_DEFAULT_HOOK_PATTERNS = [
   "how to actually use {app} without making it complicated",
   "everyone uses {app} wrong... here's the easier way",
   "they really hid this {category} feature 💀",
@@ -31,3 +32,9 @@ export const DEFAULT_HOOK_PATTERNS = [
   "okay this is actually useful",
   "POV: you finally stop doing {task} manually",
 ] as const;
+
+export function containsOnlyLegacyDefaultHookPatterns(patterns: readonly string[]): boolean {
+  return patterns.length > 0 && patterns.every((pattern) => LEGACY_DEFAULT_HOOK_PATTERNS.includes(
+    pattern as (typeof LEGACY_DEFAULT_HOOK_PATTERNS)[number],
+  ));
+}

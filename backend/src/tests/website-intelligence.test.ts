@@ -164,8 +164,11 @@ test("hook prompt applies automatic styles and brand constraints", () => {
   assert.match(prompt.user, /candid first-person admission/);
   assert.match(prompt.user, /Wasting ad spend/);
   assert.match(prompt.user, /Guaranteed ROAS/);
-  assert.match(prompt.user, /exactly these 3 fields/i);
+  assert.match(prompt.user, /hooks that would go as overlay text/i);
   assert.match(prompt.system, /Output ONLY valid JSON/);
+  assert.match(prompt.system, /never a topic or audience label/i);
+  assert.doesNotMatch(prompt.system + prompt.user, /how to actually use \{app\} without making it complicated/);
+  assert.ok(prompt.system.length + prompt.user.length < 5_000);
 });
 
 test("hook prompt uses saved patterns instead of the defaults", () => {
@@ -174,9 +177,17 @@ test("hook prompt uses saved patterns instead of the defaults", () => {
     "the feature nobody on your team uses",
   ]);
 
-  assert.match(prompt.system, /show the shortcut for \{task\}/);
-  assert.match(prompt.system, /the feature nobody on your team uses/);
-  assert.doesNotMatch(prompt.system, /how to actually use \{app\} without making it complicated/);
+  assert.match(prompt.user, /show the shortcut for \{task\}/);
+  assert.match(prompt.user, /the feature nobody on your team uses/);
+  assert.doesNotMatch(prompt.system + prompt.user, /how to actually use \{app\} without making it complicated/);
+});
+
+test("hook prompt ignores a partial selection of the old seeded defaults", () => {
+  const prompt = buildHooksPrompt(persistedProfile, 8, [], [], false, [], [
+    "i wish someone showed me this sooner",
+  ]);
+
+  assert.doesNotMatch(prompt.system + prompt.user, /i wish someone showed me this sooner/);
 });
 
 test("regeneration prompt excludes previous copy", () => {
@@ -187,7 +198,7 @@ test("regeneration prompt excludes previous copy", () => {
 
   assert.match(prompt.user, /i kept forgetting our best moments/);
   assert.match(prompt.user, /save every memory/);
-  assert.match(prompt.user, /previous attempt reused existing copy/i);
+  assert.match(prompt.user, /previous attempt repeated existing copy/i);
 });
 
 test("hook prompt uses selected examples as creative direction without copying them", () => {
@@ -197,9 +208,9 @@ test("hook prompt uses selected examples as creative direction without copying t
     angle: "manual work",
   }]);
 
-  assert.match(prompt.user, /Selected and previous hook references/);
+  assert.match(prompt.user, /Liked hook references/);
   assert.match(prompt.user, /manual work/);
-  assert.match(prompt.user, /do not repeat or lightly paraphrase/i);
+  assert.match(prompt.user, /without copying/i);
 });
 
 test("creative line comparison ignores casing, punctuation, and whitespace", () => {
