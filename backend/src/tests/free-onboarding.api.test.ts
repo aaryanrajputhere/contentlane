@@ -103,9 +103,20 @@ test('free onboarding exposes only its scoped project and locks at eight selecti
     assert.equal(blocked.status, 402);
     assert.equal(((await blocked.json()) as { error: { code: string } }).error.code, 'UPGRADE_REQUIRED');
 
-    const secondClaim = await fetch(`${baseUrl}/api/v1/projects`, { method: 'POST', headers, body: JSON.stringify({ website: 'https://second.example.com' }) });
-    assert.equal(secondClaim.status, 200);
-    assert.equal(((await secondClaim.json()) as { project: { id: string } }).project.id, project.id);
+    const sameClaim = await fetch(`${baseUrl}/api/v1/projects`, { method: 'POST', headers, body: JSON.stringify({ website: `${project.normalizedWebsite}/` }) });
+    assert.equal(sameClaim.status, 200);
+    assert.equal(((await sameClaim.json()) as { project: { id: string } }).project.id, project.id);
+
+    const blockedClaims = await Promise.all(['second', 'third'].map((host) => fetch(`${baseUrl}/api/v1/projects`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ website: `https://${host}.example.com` }),
+    })));
+    assert.deepEqual(blockedClaims.map((response) => response.status), [402, 402]);
+    for (const response of blockedClaims) {
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, 'ADDITIONAL_PROJECT_REQUIRES_SUBSCRIPTION');
+    }
+    assert.equal(await prisma.project.count({ where: { userId: user.id } }), 1);
   });
 });
 

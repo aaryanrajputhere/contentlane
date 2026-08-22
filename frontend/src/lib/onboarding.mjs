@@ -17,6 +17,15 @@ export function savePendingWebsite(value) {
   return normalized;
 }
 
+export function getPendingWebsite() {
+  const stored = sessionStorage.getItem(PENDING_WEBSITE_KEY);
+  return stored ? normalizePendingWebsite(stored) : null;
+}
+
+export function clearPendingWebsite() {
+  sessionStorage.removeItem(PENDING_WEBSITE_KEY);
+}
+
 export function isFreeConversionRequired({ isFreeFlow, ended, selected, generated, reviewed, limit = 24 }) {
   return isFreeFlow && (ended || selected >= 8 || (generated >= limit && reviewed >= generated));
 }

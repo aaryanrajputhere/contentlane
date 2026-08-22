@@ -459,14 +459,29 @@ export const createProject: RequestHandler = async (req, res) => {
     const access = await getFreeAccess(userId);
     if (access.ended) throw new ApiError(402, "UPGRADE_REQUIRED", "Start a subscription to create a project");
     if (access.projectId) {
-      res.status(200).json({ project: assertProject(await loadProjectSnapshot(access.projectId, userId)), cached: true });
+      const freeProject = await prisma.project.findFirst({
+        where: { id: access.projectId, userId },
+        select: { id: true, normalizedWebsite: true },
+      });
+      if (!freeProject) throw new ApiError(404, "NOT_FOUND", "Free onboarding project not found");
+      if (freeProject.normalizedWebsite !== normalizedWebsite) {
+        throw new ApiError(402, "ADDITIONAL_PROJECT_REQUIRES_SUBSCRIPTION", "Start your free trial to add another website");
+      }
+      res.status(200).json({ project: assertProject(await loadProjectSnapshot(freeProject.id, userId)), cached: true });
       return;
     }
     const claim = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
       const lockedAccess = await getFreeAccess(userId, tx);
       if (lockedAccess.ended) throw new ApiError(402, "UPGRADE_REQUIRED", "Start a subscription to create a project");
-      if (lockedAccess.projectId) return { project: await tx.project.findUniqueOrThrow({ where: { id: lockedAccess.projectId } }), created: false };
+      if (lockedAccess.projectId) {
+        const claimedProject = await tx.project.findFirst({ where: { id: lockedAccess.projectId, userId } });
+        if (!claimedProject) throw new ApiError(404, "NOT_FOUND", "Free onboarding project not found");
+        if (claimedProject.normalizedWebsite !== normalizedWebsite) {
+          throw new ApiError(402, "ADDITIONAL_PROJECT_REQUIRES_SUBSCRIPTION", "Start your free trial to add another website");
+        }
+        return { project: claimedProject, created: false };
+      }
       const created = await tx.project.create({ data: { userId, website: website.trim(), normalizedWebsite, status: "DRAFT" } });
       await tx.$executeRaw`UPDATE "Project" SET "freeOnboardingOwnerId" = ${userId} WHERE "id" = ${created.id}`;
       return { project: created, created: true };

@@ -6,8 +6,9 @@ import { AnimatePresence, motion, useInView, useReducedMotion } from 'framer-mot
 import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react';
 import { useAuth } from '../lib/auth';
 import { ApiClientError, api, post } from '../lib/api';
-import { savePendingWebsite } from '../lib/onboarding.mjs';
+import { clearPendingWebsite, getPendingWebsite, savePendingWebsite } from '../lib/onboarding.mjs';
 import type { BillingStatus, ProjectResponse } from '../types/domain';
+import AdditionalWebsiteUpgradeModal from './AdditionalWebsiteUpgradeModal';
 
 type PreviewCardProps = {
   id: string;
@@ -500,12 +501,15 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
 }
 
 export default function LandingPage() {
-  const [website, setWebsite] = useState('');
+  const [website, setWebsite] = useState(() => getPendingWebsite() ?? '');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [activePreviewIndex, setActivePreviewIndex] = useState(0);
   const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [upgradeWebsite, setUpgradeWebsite] = useState('');
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const [upgradeError, setUpgradeError] = useState('');
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const isCompactViewport = useCompactViewport();
@@ -527,19 +531,20 @@ export default function LandingPage() {
       navigate('/signup', { state: { from: { pathname: '/onboarding' } } });
       return;
     }
-    if (!billing?.hasAccess) {
-      navigate(billing?.freeAccess.projectId ? `/projects/${billing.freeAccess.projectId}/hooks` : '/onboarding');
-      return;
-    }
-
     setLoading(true);
     setError('');
     setMessage('Starting analysis');
 
     try {
-      const analysisResponse = await post<ProjectResponse>('/projects', { website: value });
+      const analysisResponse = await post<ProjectResponse>('/projects', { website: pendingWebsite });
+      clearPendingWebsite();
       navigate(`/projects/${analysisResponse.project.id}/hooks`);
     } catch (caught) {
+      if (caught instanceof ApiClientError && caught.code === 'ADDITIONAL_PROJECT_REQUIRES_SUBSCRIPTION') {
+        setUpgradeWebsite(pendingWebsite);
+        setUpgradeError('');
+        return;
+      }
       if (caught instanceof ApiClientError && (caught.code === 'SUBSCRIPTION_REQUIRED' || caught.code === 'UPGRADE_REQUIRED')) {
         navigate('/billing');
         return;
@@ -548,6 +553,24 @@ export default function LandingPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const startAdditionalWebsiteTrial = async () => {
+    setUpgradeBusy(true);
+    setUpgradeError('');
+    try {
+      const { url } = await post<{ url: string }>('/billing/checkout');
+      window.location.assign(url);
+    } catch (caught) {
+      setUpgradeError(caught instanceof Error ? caught.message : 'Unable to start checkout');
+      setUpgradeBusy(false);
+    }
+  };
+
+  const dismissUpgrade = () => {
+    if (upgradeBusy) return;
+    setUpgradeWebsite('');
+    setUpgradeError('');
   };
 
   const scrollToHero = () => {
@@ -863,6 +886,19 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      {upgradeWebsite ? (
+        <AdditionalWebsiteUpgradeModal
+          website={upgradeWebsite}
+          busy={upgradeBusy}
+          error={upgradeError}
+          onStartTrial={() => void startAdditionalWebsiteTrial()}
+          onContinueFreeProject={() => {
+            const projectId = billing?.freeAccess.projectId;
+            if (projectId) navigate(`/projects/${projectId}/hooks`);
+          }}
+          onDismiss={dismissUpgrade}
+        />
+      ) : null}
     </main>
   );
 }

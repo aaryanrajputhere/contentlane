@@ -2,7 +2,8 @@ import { AlertTriangle, Check, CreditCard, Loader2, ShieldCheck } from 'lucide-r
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, post } from '../lib/api';
-import type { BillingStatus } from '../types/domain';
+import { clearPendingWebsite, getPendingWebsite } from '../lib/onboarding.mjs';
+import type { BillingStatus, ProjectResponse } from '../types/domain';
 
 export default function BillingPage({ success = false }: { success?: boolean }) {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
@@ -34,12 +35,27 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
         if (cancelled) return;
         if (success && status.hasAccess) {
           const projectId = searchParams.get('projectId');
-          navigate(projectId ? `/projects/${projectId}/hooks?unlocked=1` : '/', { replace: true });
+          if (projectId) {
+            navigate(`/projects/${projectId}/hooks?unlocked=1`, { replace: true });
+            return;
+          }
+          const pendingWebsite = getPendingWebsite();
+          if (pendingWebsite) {
+            const response = await post<ProjectResponse>('/projects', { website: pendingWebsite });
+            if (cancelled) return;
+            clearPendingWebsite();
+            navigate(`/projects/${response.project.id}/hooks`, { replace: true });
+            return;
+          }
+          navigate('/', { replace: true });
           return;
         }
         if (success && attempts++ < 40) timer = window.setTimeout(() => void check(), 3000);
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : 'Unable to load billing');
+        if (!cancelled) {
+          setError(caught instanceof Error ? caught.message : 'Unable to load billing');
+          if (success && attempts++ < 40) timer = window.setTimeout(() => void check(), 3000);
+        }
       }
     };
     void check();

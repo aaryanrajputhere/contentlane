@@ -1,6 +1,8 @@
 export const PENDING_WEBSITE_KEY: string;
 export function normalizePendingWebsite(value: string): string | null;
 export function savePendingWebsite(value: string): string | null;
+export function getPendingWebsite(): string | null;
+export function clearPendingWebsite(): void;
 export function isFreeConversionRequired(input: {
   isFreeFlow: boolean;
   ended: boolean;

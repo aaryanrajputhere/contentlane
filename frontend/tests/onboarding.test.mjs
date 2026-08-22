@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PENDING_WEBSITE_KEY, isFreeConversionRequired, normalizePendingWebsite, savePendingWebsite } from '../src/lib/onboarding.mjs';
+import { PENDING_WEBSITE_KEY, clearPendingWebsite, getPendingWebsite, isFreeConversionRequired, normalizePendingWebsite, savePendingWebsite } from '../src/lib/onboarding.mjs';
 
 test('normalizes and validates pending onboarding websites', () => {
   assert.equal(normalizePendingWebsite('example.com'), 'https://example.com/');
@@ -11,10 +11,17 @@ test('normalizes and validates pending onboarding websites', () => {
 
 test('stores only a validated pending website', () => {
   const values = new Map();
-  globalThis.sessionStorage = { setItem: (key, value) => values.set(key, value) };
+  globalThis.sessionStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  };
   assert.equal(savePendingWebsite('contentlane.app'), 'https://contentlane.app/');
   assert.equal(values.get(PENDING_WEBSITE_KEY), 'https://contentlane.app/');
+  assert.equal(getPendingWebsite(), 'https://contentlane.app/');
   assert.equal(savePendingWebsite('bad url'), null);
+  clearPendingWebsite();
+  assert.equal(getPendingWebsite(), null);
 });
 
 test('free conversion locks at eight selections, 24 reviews, or permanent ending', () => {
