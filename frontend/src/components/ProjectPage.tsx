@@ -123,15 +123,23 @@ function ReelPreviewCard({
   clip,
   selected,
   onToggle,
+  compact = false,
 }: {
   concept: ConceptCard;
   creator: CreatorRecord | undefined;
   clip: CreatorClipRecord | null;
   selected: boolean;
   onToggle?: () => void;
+  compact?: boolean;
 }) {
   const captionStyle = getCaptionStyle(concept.sortOrder);
   const usesSnapchatCaptions = captionStyle === 'SNAPCHAT';
+  const fallbackBackgrounds = [
+    'from-[#171717] via-[#344c42] to-[#9b765e]',
+    'from-[#17171f] via-[#4c3f63] to-[#c09278]',
+    'from-[#101820] via-[#29475b] to-[#7b9ca5]',
+    'from-[#231814] via-[#684839] to-[#bd8b62]',
+  ];
 
   return (
     <motion.div
@@ -148,9 +156,9 @@ function ReelPreviewCard({
           onToggle();
         }
       }}
-      className={`relative group aspect-[9/16] overflow-hidden rounded-[28px] border bg-white shadow-[0_20px_40px_rgba(0,0,0,0.06)] transition hover:-translate-y-1 hover:shadow-[0_30px_60px_rgba(0,0,0,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 ${selected ? 'border-[#111111] ring-4 ring-[#111111]/10' : 'border-black/5'}`}
+      className={`relative group aspect-[9/16] overflow-hidden ${compact ? 'rounded-[22px]' : 'rounded-[28px]'} border bg-white shadow-[0_20px_40px_rgba(0,0,0,0.06)] transition hover:-translate-y-1 hover:shadow-[0_30px_60px_rgba(0,0,0,0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 ${selected ? 'border-[#111111] ring-4 ring-[#111111]/10' : 'border-black/5'}`}
     >
-      {clip && (
+      {clip ? (
         <video
           src={clip.url}
           className="absolute inset-0 w-full h-full object-cover"
@@ -159,32 +167,38 @@ function ReelPreviewCard({
           loop
           playsInline
         />
+      ) : (
+        <div className={`absolute inset-0 bg-gradient-to-br ${fallbackBackgrounds[concept.sortOrder % fallbackBackgrounds.length]}`}>
+          <div className="absolute -right-10 top-[18%] h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -left-12 bottom-[12%] h-36 w-36 rounded-full bg-white/10 blur-2xl" />
+          <Sparkles className="absolute left-1/2 top-[28%] -translate-x-1/2 text-white/25" size={compact ? 32 : 46} />
+        </div>
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/10" />
 
-      <div className="absolute top-5 left-5 right-5 flex justify-between items-start">
-        <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md rounded-full px-3 py-1.5 text-white text-xs font-semibold shadow-sm">
+      <div className={`absolute flex items-start justify-between ${compact ? 'left-3 right-3 top-3 gap-1.5' : 'left-5 right-5 top-5'}`}>
+        <div className={`flex items-center bg-black/40 text-white font-semibold shadow-sm backdrop-blur-md ${compact ? 'gap-1.5 rounded-full px-2 py-1 text-[10px]' : 'gap-2 rounded-full px-3 py-1.5 text-xs'}`}>
           {creator?.baseImageUrl ? (
-            <img src={creator.baseImageUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
+            <img src={creator.baseImageUrl} alt="" className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} rounded-full object-cover`} />
           ) : (
-            <div className="w-5 h-5 rounded-full bg-white/20" />
+            <div className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} rounded-full bg-white/20`} />
           )}
           {creator?.name || 'Creator'}
         </div>
-        <div className="flex items-center gap-1.5 bg-[#dcfce7] text-[#15803d] rounded-full px-3 py-1.5 text-xs font-bold shadow-sm">
-          <Sparkles size={12} />
+        <div className={`flex shrink-0 items-center bg-[#dcfce7] font-bold text-[#15803d] shadow-sm ${compact ? 'gap-1 rounded-full px-2 py-1 text-[10px]' : 'gap-1.5 rounded-full px-3 py-1.5 text-xs'}`}>
+          <Sparkles size={compact ? 10 : 12} />
           {concept.score} Score
         </div>
       </div>
 
-      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+      {!compact ? <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
         <button className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/40 hover:bg-white/30 transition">
           <Play size={28} className="ml-1" fill="currentColor" />
         </button>
-      </div>
+      </div> : null}
 
-      <div className={`absolute top-1/2 -translate-y-1/2 text-center ${usesSnapchatCaptions ? 'left-0 right-0 bg-black/60 px-5 py-1.5' : 'left-6 right-6'}`}>
-        <p className={`text-white ${usesSnapchatCaptions ? 'text-[0.875rem] font-medium leading-[1.25]' : 'text-base font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]'}`}>
+      <div className={`absolute top-1/2 -translate-y-1/2 text-center ${usesSnapchatCaptions ? `left-0 right-0 bg-black/60 ${compact ? 'px-3 py-1.5' : 'px-5 py-1.5'}` : compact ? 'left-3 right-3' : 'left-6 right-6'}`}>
+        <p className={`text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : `${compact ? 'text-[0.78rem] sm:text-sm' : 'text-base'} font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]`}`}>
           {concept.hookText}
         </p>
       </div>
@@ -718,35 +732,60 @@ export default function ProjectPage() {
       : reviewedAllFreeHooks
         ? 'You’ve reviewed all 24 free hooks.'
         : 'Unlock your saved hooks and keep creating.';
+    const conversionAssignments = likedConcepts.map((concept) => (
+      assignmentByConceptId.get(concept.id) ?? { concept, creator: undefined, clip: null }
+    ));
     return (
       <main className="min-h-screen bg-[#fafaf8] text-[#111111]">
-        <header className="border-b border-black/5 bg-white/70 backdrop-blur-md">
-          <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-5">
+        <header className="sticky top-0 z-50 border-b border-black/5 bg-white/85 backdrop-blur-md">
+          <div className="mx-auto flex max-w-[1480px] items-center justify-between px-5 py-4 sm:px-8">
             <p className="text-[13px] uppercase tracking-[0.34em]">ContentLane</p>
             <div className="flex items-center gap-3"><button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium"><ArrowLeft size={16} /> Back</button><UserButton /></div>
           </div>
         </header>
-        <section className="mx-auto grid min-h-[calc(100dvh-78px)] max-w-5xl items-center gap-10 px-6 py-12 lg:grid-cols-[1.05fr_0.95fr]">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#15803d]">Free hook review complete</p>
-            <h1 className="mt-4 max-w-xl text-[clamp(2.7rem,6vw,4.8rem)] font-extrabold leading-[0.94] tracking-[-0.065em]">
+        <section className="mx-auto grid w-full max-w-[1480px] items-start gap-10 px-5 py-10 sm:px-8 sm:py-14 xl:grid-cols-[minmax(320px,0.68fr)_minmax(0,1.55fr)] xl:gap-14 xl:py-16">
+          <div className="xl:sticky xl:top-32">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#15803d]">Your Reel lineup is ready</p>
+            <h1 className="mt-4 max-w-xl text-[clamp(2.7rem,5vw,4.8rem)] font-extrabold leading-[0.94] tracking-[-0.065em]">
               {conversionHeadline}
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-[#666666]">Start your 3-day free trial to unlock product-demo upload, full Reel rendering, the campaign workspace, and more hooks.</p>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-[#666666]">Your hooks are already paired with creator footage. Start your 3-day free trial, add one product demo, and turn this lineup into finished Reels.</p>
+            <ul className="mt-7 grid max-w-lg gap-3 text-sm font-semibold text-[#333333] sm:grid-cols-3 xl:grid-cols-1">
+              {['Upload your product demo', `Render ${Math.max(likedConcepts.length, 1)} ready-to-post Reels`, 'Generate more winning hooks'].map((benefit) => (
+                <li key={benefit} className="flex items-center gap-2.5"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#dcfce7] text-[#15803d]"><Check size={14} strokeWidth={3} /></span>{benefit}</li>
+              ))}
+            </ul>
             {error ? <p role="alert" className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
-            <button type="button" onClick={() => void startTrial()} disabled={busy !== null} className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#111111] px-7 py-4 text-sm font-bold text-white shadow-[0_16px_35px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 disabled:opacity-50">
+            <button type="button" onClick={() => void startTrial()} disabled={busy !== null} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#111111] px-7 py-4 text-sm font-bold text-white shadow-[0_16px_35px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_42px_rgba(0,0,0,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 disabled:opacity-50 sm:w-auto">
               {busy === 'Starting trial' ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" /> : <Sparkles size={18} />}
               Start 3-day free trial
             </button>
+            <p className="mt-3 text-xs leading-5 text-[#777777]">Continue with these exact hooks—your selections and progress stay saved.</p>
           </div>
-          <div className="rounded-[32px] border border-black/10 bg-white p-5 shadow-[0_24px_70px_rgba(0,0,0,0.08)]">
-            <p className="px-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#8c8c8c]">Your saved hooks</p>
-            <ol className="mt-3 space-y-2">
-              {likedConcepts.map((concept, index) => (
-                <li key={concept.id} className="flex gap-3 rounded-2xl bg-[#f7f6f2] px-4 py-3 text-sm font-semibold leading-6"><span className="text-[#15803d]">{String(index + 1).padStart(2, '0')}</span><span>{concept.hookText}</span></li>
-              ))}
-              {likedConcepts.length === 0 ? <li className="rounded-2xl bg-[#f7f6f2] px-4 py-5 text-sm text-[#666666]">No hooks selected yet. Your review decisions are saved.</li> : null}
-            </ol>
+          <div className="rounded-[32px] border border-black/10 bg-white p-4 shadow-[0_28px_90px_rgba(36,29,77,0.1)] sm:p-5">
+            <div className="flex items-end justify-between gap-4 px-1 pb-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8c8c8c]">Your saved hooks</p>
+                <h2 className="mt-1 text-xl font-extrabold tracking-[-0.035em]">Preview the Reels you’ll unlock</h2>
+              </div>
+              {likedConcepts.length > 0 ? <span className="shrink-0 rounded-full bg-[#dcfce7] px-3 py-1.5 text-xs font-bold text-[#15803d]">{likedConcepts.length} selected</span> : null}
+            </div>
+            {conversionAssignments.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Saved hook Reel previews">
+                {conversionAssignments.map((assignment) => (
+                  <ReelPreviewCard
+                    key={assignment.concept.id}
+                    concept={assignment.concept}
+                    creator={assignment.creator}
+                    clip={assignment.clip}
+                    selected={false}
+                    compact
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] bg-[#f7f6f2] px-5 py-10 text-center text-sm leading-6 text-[#666666]">Your review decisions are saved. Start the trial to generate a fresh Reel lineup.</div>
+            )}
           </div>
         </section>
       </main>
