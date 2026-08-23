@@ -525,11 +525,15 @@ export default function ProjectPage() {
     }
   }, [busy, id]);
 
-  const confirmBrandProfile = useCallback(async (profile: BrandProfileConfirmation) => {
+  const confirmBrandProfile = useCallback(async (profile: BrandProfileConfirmation, language: GenerationLanguage) => {
     if (busy) return;
     setBusy('Confirming brand');
     setBrandConfirmationError('');
     try {
+      await api<{ project: ProjectSnapshot }>(`/projects/${id}/language`, {
+        method: 'PATCH',
+        body: JSON.stringify({ language }),
+      });
       const response = await post<ProjectResponse>(`/projects/${id}/brand-profile/confirm`, profile);
       setProject(response.project);
       automaticGenerationAttempt.current = null;
@@ -682,7 +686,7 @@ export default function ProjectPage() {
             </div>
           </div>
         </header>
-        <BrandProfileConfirmationModal profile={project.brandProfile!} busy={busy === 'Confirming brand'} error={brandConfirmationError} onConfirm={confirmBrandProfile} />
+        <BrandProfileConfirmationModal profile={project.brandProfile!} language={project.hookPreferences?.language ?? 'English'} busy={busy === 'Confirming brand'} error={brandConfirmationError} onConfirm={confirmBrandProfile} />
       </main>
     );
   }

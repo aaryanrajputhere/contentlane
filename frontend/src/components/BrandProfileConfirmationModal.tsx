@@ -1,7 +1,7 @@
 import { ChevronDown, Loader2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import type { BrandProfile } from '../types/domain';
+import type { BrandProfile, GenerationLanguage } from '../types/domain';
 import { brandProfileValidationError } from '../lib/brand-profile-confirmation.mjs';
 
 export type BrandProfileConfirmation = Pick<
@@ -13,7 +13,8 @@ type Props = {
   profile: BrandProfile;
   busy: boolean;
   error: string;
-  onConfirm: (profile: BrandProfileConfirmation) => Promise<void>;
+  language: GenerationLanguage;
+  onConfirm: (profile: BrandProfileConfirmation, language: GenerationLanguage) => Promise<void>;
 };
 
 const fieldClass = 'mt-2 w-full rounded-2xl border border-black/10 bg-[#fafaf8] px-4 py-3 text-sm leading-6 text-[#111] outline-none transition placeholder:text-[#aaa] focus:border-black/30 focus:ring-4 focus:ring-black/5';
@@ -22,7 +23,7 @@ function lines(value: string) {
   return value.split('\n').map((item) => item.trim()).filter(Boolean);
 }
 
-export default function BrandProfileConfirmationModal({ profile, busy, error, onConfirm }: Props) {
+export default function BrandProfileConfirmationModal({ profile, language: initialLanguage, busy, error, onConfirm }: Props) {
   const [draft, setDraft] = useState<BrandProfileConfirmation>(() => ({
     brandName: profile.brandName,
     productSummary: profile.productSummary,
@@ -34,6 +35,7 @@ export default function BrandProfileConfirmationModal({ profile, busy, error, on
   }));
   const [advanced, setAdvanced] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [language, setLanguage] = useState<GenerationLanguage>(initialLanguage);
 
   const updateList = (key: 'customerProblems' | 'keyBenefits' | 'proofPoints' | 'claimConstraints', value: string) => {
     setDraft((current) => ({ ...current, [key]: lines(value) }));
@@ -52,7 +54,7 @@ export default function BrandProfileConfirmationModal({ profile, busy, error, on
       brandName: draft.brandName.trim(),
       productSummary: draft.productSummary.trim(),
       targetAudience: draft.targetAudience.trim(),
-    });
+    }, language);
   };
 
   return (
@@ -86,6 +88,12 @@ export default function BrandProfileConfirmationModal({ profile, busy, error, on
               </label>
               <label className="block text-sm font-bold">Key benefits <span className="font-medium text-[#888]">· one per line</span>
                 <textarea className={fieldClass} rows={4} value={draft.keyBenefits.join('\n')} onChange={(event) => updateList('keyBenefits', event.target.value)} />
+              </label>
+              <label className="block text-sm font-bold sm:col-span-2">Language for generated hooks and demo overlays
+                <select className={fieldClass} value={language} onChange={(event) => setLanguage(event.target.value as GenerationLanguage)} disabled={busy}>
+                  {['English', 'Spanish', 'French', 'German', 'Portuguese', 'Hindi', 'Arabic', 'Japanese', 'Korean'].map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+                <span className="mt-2 block text-xs font-medium leading-5 text-[#777]">Choose this before generating your first hooks. You can change it later for future batches.</span>
               </label>
             </div>
 
