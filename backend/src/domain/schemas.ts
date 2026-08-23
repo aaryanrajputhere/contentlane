@@ -75,16 +75,19 @@ export const hookPreferenceExampleSchema = z.object({
   score: z.number().int(),
   selectedAt: z.coerce.date(),
 }).strict();
+export const generationLanguageSchema = z.enum(['English', 'Spanish', 'French', 'German', 'Portuguese', 'Hindi', 'Arabic', 'Japanese', 'Korean']);
 const currentHookPreferencesSchema = z.object({
   liked: z.array(hookPreferenceExampleSchema).max(8),
   rejected: z.array(hookPreferenceExampleSchema).max(8),
   patterns: z.array(z.string().trim().min(1).max(240)).max(50).default([]),
+  language: generationLanguageSchema.optional(),
   updatedAt: z.coerce.date(),
 }).strict().refine((value) => value.liked.length + value.rejected.length <= 8, {
   message: "At most eight hook preferences are allowed",
 });
 const legacyHookPreferencesSchema = z.object({
   examples: z.array(hookPreferenceExampleSchema).min(1).max(8),
+  language: generationLanguageSchema.optional(),
   updatedAt: z.coerce.date(),
 }).strict();
 export const hookPreferencesSchema = z.union([currentHookPreferencesSchema, legacyHookPreferencesSchema]).transform((value) => "examples" in value
@@ -125,9 +128,11 @@ export const hookPreferencesUpdateSchema = z.object({
   liked: z.array(hookPreferenceExampleSchema).max(8),
   rejected: z.array(hookPreferenceExampleSchema).max(8),
   patterns: z.array(z.string().trim().min(1).max(240)).max(50).optional(),
+  language: generationLanguageSchema.optional(),
 }).strict().refine((value) => value.liked.length + value.rejected.length <= 8, {
   message: "At most eight hook preferences are allowed",
 });
+export const generationLanguageUpdateSchema = z.object({ language: generationLanguageSchema }).strict();
 export const conceptEditSchema = z.object({
   hookText: z.string().trim().min(1).max(240),
   demoOverlayText: z.string().trim().min(1).max(240),
@@ -391,6 +396,7 @@ export type WebsiteInput = z.infer<typeof websiteInputSchema>;
 export type StageInput = z.infer<typeof stageInputSchema>;
 export type ConceptStageInput = z.infer<typeof conceptStageInputSchema>;
 export type HookPreferenceExample = z.infer<typeof hookPreferenceExampleSchema>;
+export type GenerationLanguage = z.infer<typeof generationLanguageSchema>;
 export type HookPreferences = z.infer<typeof hookPreferencesSchema>;
 export type MediaStageInput = z.infer<typeof mediaStageInputSchema>;
 export type ExportState = z.infer<typeof exportStateSchema>;

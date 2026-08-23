@@ -182,10 +182,13 @@ export interface HookPreferences {
   liked: HookPreferenceExample[];
   rejected: HookPreferenceExample[];
   patterns: string[];
+  language?: GenerationLanguage;
   /** Legacy first-version preferences, normalized by the API when used. */
   examples?: HookPreferenceExample[];
   updatedAt: string;
 }
+
+export type GenerationLanguage = 'English' | 'Spanish' | 'French' | 'German' | 'Portuguese' | 'Hindi' | 'Arabic' | 'Japanese' | 'Korean';
 
 export interface MediaAsset {
   id: string;

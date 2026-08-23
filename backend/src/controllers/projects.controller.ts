@@ -15,6 +15,7 @@ import {
   conceptEditSchema,
   creatorCharacterSchema,
   exportPayloadSchema,
+  generationLanguageUpdateSchema,
   hookPreferencesSchema,
   hookPreferencesUpdateSchema,
   jobIdParamsSchema,
@@ -69,6 +70,7 @@ type HookPreferencePayload = {
   liked: HookPreferenceExample[];
   rejected: HookPreferenceExample[];
   patterns: string[];
+  language?: string;
   updatedAt: Date;
 };
 
@@ -76,7 +78,7 @@ function normalizeHookPreferences(value: unknown): HookPreferencePayload | null 
   const parsed = hookPreferencesSchema.safeParse(value);
   if (!parsed.success) return null;
   if (parsed.data.examples?.length) {
-    return { liked: parsed.data.examples, rejected: [], patterns: parsed.data.patterns, updatedAt: parsed.data.updatedAt };
+    return { liked: parsed.data.examples, rejected: [], patterns: parsed.data.patterns, language: parsed.data.language, updatedAt: parsed.data.updatedAt };
   }
   return parsed.data;
 }
@@ -93,6 +95,7 @@ async function ensureHookPatterns(projectId: string, value: unknown): Promise<Ho
     liked: existing?.liked ?? [],
     rejected: existing?.rejected ?? [],
     patterns: [],
+    language: existing?.language,
     updatedAt: new Date(),
   };
   await prisma.$executeRaw`
@@ -714,7 +717,25 @@ export const updateHookPreferences: RequestHandler = async (req, res) => {
   const value = hookPreferencesUpdateSchema.parse(req.body);
   const existing = normalizeHookPreferences(project.hookPreferences);
   await prisma.$executeRaw`
-    UPDATE "Project" SET "hookPreferences" = ${JSON.stringify({ ...value, patterns: value.patterns ?? existing?.patterns ?? [], updatedAt: new Date() })}::jsonb WHERE "id" = ${id}
+    UPDATE "Project" SET "hookPreferences" = ${JSON.stringify({ ...value, patterns: value.patterns ?? existing?.patterns ?? [], language: value.language ?? existing?.language, updatedAt: new Date() })}::jsonb WHERE "id" = ${id}
+  `;
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
+export const updateGenerationLanguage: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const { language } = generationLanguageUpdateSchema.parse(req.body);
+  const project = await getProjectOrFail(id, userId);
+  const existing = normalizeHookPreferences(project.hookPreferences);
+  await prisma.$executeRaw`
+    UPDATE "Project" SET "hookPreferences" = ${JSON.stringify({
+      liked: existing?.liked ?? [],
+      rejected: existing?.rejected ?? [],
+      patterns: existing?.patterns ?? [],
+      language,
+      updatedAt: new Date(),
+    })}::jsonb WHERE "id" = ${id}
   `;
   res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
 };
@@ -765,6 +786,7 @@ export const saveHookPreferences: RequestHandler = async (req, res) => {
     liked: likedConceptIds.map(findExample),
     rejected: rejectedConceptIds.map(findExample),
     patterns: normalizeHookPreferences(project.hookPreferences)?.patterns ?? [],
+    language: normalizeHookPreferences(project.hookPreferences)?.language,
     updatedAt: new Date(),
   };
   await prisma.$executeRaw`
@@ -1020,6 +1042,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
             recorder ?? undefined,
             duplicateAvoidanceConcepts,
             preferences?.patterns ?? [],
+            preferences?.language ?? 'English',
           );
         } catch (error) {
           if (forceRegenerate) throw error;

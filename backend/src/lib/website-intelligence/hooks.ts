@@ -60,6 +60,7 @@ export function buildHooksPrompt(
   isDuplicateRetry = false,
   duplicateAvoidanceConcepts: HookReference[] = [],
   patterns: readonly string[] = [],
+  language = 'English',
 ): LLMPrompt {
   const rejectedConcepts = Array.isArray(rejectedConceptsOrRetry)
     ? rejectedConceptsOrRetry
@@ -95,6 +96,8 @@ export function buildHooksPrompt(
 
   return {
     system: `You write excellent overlay hooks for short-form videos.
+
+Write all hook overlays and demo overlays in ${language}. Keep product and brand names unchanged when appropriate.
 
 The hook is the priority. Write like a sharp creator with a real observation, opinion, confession, question, or discovery—not like a brand or ad agency.
 
@@ -316,13 +319,14 @@ export async function generateHooksFromLLM(
   recorder?: AnalysisJsonRecorder,
   duplicateAvoidanceConcepts: HookReference[] = previousConcepts,
   patterns: readonly string[] = [],
+  language = 'English',
 ): Promise<ConceptBlueprint[]> {
   console.log(`[hooks] start brand="${profile.brandName}" count=${count}`);
 
   if (!hasLLMConfig()) {
     await recorder?.write(
       "hooks-prompt-attempt-1",
-      buildHooksPrompt(profile, count, previousConcepts, [], false, [], patterns),
+      buildHooksPrompt(profile, count, previousConcepts, [], false, [], patterns, language),
     );
     const error = new Error(
       "Hook generation is temporarily unavailable. No language model is configured.",
@@ -341,6 +345,7 @@ export async function generateHooksFromLLM(
         attempt === 1,
         duplicateAvoidanceConcepts,
         patterns,
+        language,
       );
       const attemptNumber = attempt + 1;
       await recorder?.write(`hooks-prompt-attempt-${attemptNumber}`, prompt);

@@ -24,7 +24,7 @@ import { isFreeConversionRequired } from '../lib/onboarding.mjs';
 import BrandProfileConfirmationModal from './BrandProfileConfirmationModal';
 import type { BrandProfileConfirmation } from './BrandProfileConfirmationModal';
 import { requiresBrandProfileConfirmation } from '../lib/brand-profile-confirmation.mjs';
-import type { BillingStatus, ConceptCard, CreatorClipRecord, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
+import type { BillingStatus, ConceptCard, CreatorClipRecord, GenerationLanguage, ProjectSnapshot, CreatorRecord, ProjectResponse } from '../types/domain';
 
 const AI_STEPS = [
   'Reading homepage...',
@@ -39,11 +39,50 @@ const HOOK_SELECTION_TARGET = 8;
 const HOOK_PREFETCH_SELECTION_THRESHOLD = 5;
 const HOOK_PREFETCH_REMAINING_THRESHOLD = 3;
 const MAX_HOOKS_PER_PROJECT = 96;
+const GENERATION_LANGUAGES: GenerationLanguage[] = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Hindi', 'Arabic', 'Japanese', 'Korean'];
 
 type HookRetryFailure = {
   phase: 'feedback' | 'generation';
   message: string;
 };
+
+function LanguageSelector({
+  value,
+  onChange,
+  saving,
+  message,
+  dark = false,
+}: {
+  value: GenerationLanguage;
+  onChange: (language: GenerationLanguage) => void;
+  saving: boolean;
+  message: string;
+  dark?: boolean;
+}) {
+  return (
+    <div className={`rounded-[22px] border p-4 ${dark ? 'border-white/15 bg-white/10' : 'border-black/8 bg-white'}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className={`text-[11px] font-bold uppercase tracking-[0.18em] ${dark ? 'text-[#b8f36b]' : 'text-[#15803d]'}`}>Content language</p>
+          <p className={`mt-1 text-sm ${dark ? 'text-white/70' : 'text-[#666]'}`}>Future hooks and demo overlays will use this language.</p>
+        </div>
+        <label className="sr-only" htmlFor="generation-language">Content language</label>
+        <select
+          id="generation-language"
+          value={value}
+          onChange={(event) => onChange(event.target.value as GenerationLanguage)}
+          disabled={saving}
+          className={`rounded-full border px-4 py-2.5 text-sm font-bold outline-none transition focus:ring-2 ${dark ? 'border-white/20 bg-[#222] text-white focus:border-white focus:ring-white/20' : 'border-black/10 bg-[#fafaf8] text-[#222] focus:border-black focus:ring-black/10'}`}
+        >
+          {GENERATION_LANGUAGES.map((language) => <option key={language} value={language}>{language}</option>)}
+        </select>
+      </div>
+      <p className={`mt-2 min-h-5 text-xs font-semibold ${message.startsWith('Unable') ? 'text-red-400' : dark ? 'text-white/60' : 'text-[#4b8125]'}`} role="status" aria-live="polite">
+        {saving ? 'Saving language…' : message}
+      </p>
+    </div>
+  );
+}
 
 function GenerationExperience() {
   const [currentStep, setCurrentStep] = useState(0);
@@ -332,6 +371,7 @@ export default function ProjectPage() {
   const [creatorLibraryLoading, setCreatorLibraryLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [regenerationMessage, setRegenerationMessage] = useState('');
+  const [languageMessage, setLanguageMessage] = useState('');
   const [hookRetryFailure, setHookRetryFailure] = useState<HookRetryFailure | null>(null);
   const [acceptedHookOrder, setAcceptedHookOrder] = useState<string[]>([]);
   const [isUploadSectionVisible, setIsUploadSectionVisible] = useState(false);
@@ -602,6 +642,24 @@ export default function ProjectPage() {
     }
   };
 
+  const saveGenerationLanguage = async (language: GenerationLanguage) => {
+    if (!project || busy) return;
+    setBusy('Saving language');
+    setLanguageMessage('');
+    try {
+      const response = await api<{ project: ProjectSnapshot }>(`/projects/${id}/language`, {
+        method: 'PATCH',
+        body: JSON.stringify({ language }),
+      });
+      setProject(response.project);
+      setLanguageMessage('Language saved.');
+    } catch (caught) {
+      setLanguageMessage(caught instanceof Error ? `Unable to save language: ${caught.message}` : 'Unable to save language.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (loading && !project) {
     return <div className="grid min-h-screen place-items-center bg-[#fafaf8] text-[#111111]">Loading...</div>;
   }
@@ -756,6 +814,14 @@ export default function ProjectPage() {
               ))}
             </ul>
             {error ? <p role="alert" className="mt-4 text-sm font-medium text-red-600">{error}</p> : null}
+            <div className="mt-6">
+              <LanguageSelector
+                value={project.hookPreferences?.language ?? 'English'}
+                onChange={(language) => void saveGenerationLanguage(language)}
+                saving={busy === 'Saving language'}
+                message={languageMessage}
+              />
+            </div>
             <button type="button" onClick={() => void startTrial()} disabled={busy !== null} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#111111] px-7 py-4 text-sm font-bold text-white shadow-[0_16px_35px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_42px_rgba(0,0,0,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 disabled:opacity-50 sm:w-auto">
               {busy === 'Starting trial' ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" /> : <Sparkles size={18} />}
               Start 3-day free trial
@@ -974,6 +1040,15 @@ export default function ProjectPage() {
               <p className="text-white/70 mb-10 text-[1.1rem] leading-[1.6] max-w-md">
                 Upload your product demo and we’ll render all {displayConcepts.length} Reels. Each one plays its matched hook first, followed by your full demo.
               </p>
+              <div className="mb-6">
+                <LanguageSelector
+                  value={project.hookPreferences?.language ?? 'English'}
+                  onChange={(language) => void saveGenerationLanguage(language)}
+                  saving={busy === 'Saving language'}
+                  message={languageMessage}
+                  dark
+                />
+              </div>
               
               <div className="flex flex-wrap gap-3">
                 {brandDemoAsset ? (

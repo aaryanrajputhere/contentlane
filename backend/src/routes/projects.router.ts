@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { analyzeProject, confirmBrandProfile, createProject, generateConceptImageAsset, generateConcepts, generateConceptVideoAsset, generateMedia, getProject, listProjects, renderProject, resetConceptReviews, reviewConcept, saveExportState, selectCharacter, selectConcept, saveHookPreferences, uploadBrandDemo, updateBrandProfile, updateConcept, updateHookPreferences } from '../controllers/projects.controller';
-import { brandProfileConfirmationSchema, brandProfileUpdateSchema, characterSelectionSchema, conceptEditSchema, conceptReviewParamsSchema, conceptReviewResetSchema, conceptReviewSchema, conceptSelectionSchema, conceptStageInputSchema, exportPayloadSchema, hookPreferenceSelectionSchema, hookPreferencesUpdateSchema, mediaStageInputSchema, projectIdParamsSchema, renderRequestSchema, websiteInputSchema } from '../domain/schemas';
+import { analyzeProject, confirmBrandProfile, createProject, generateConceptImageAsset, generateConcepts, generateConceptVideoAsset, generateMedia, getProject, listProjects, renderProject, resetConceptReviews, reviewConcept, saveExportState, selectCharacter, selectConcept, saveHookPreferences, uploadBrandDemo, updateBrandProfile, updateConcept, updateGenerationLanguage, updateHookPreferences } from '../controllers/projects.controller';
+import { brandProfileConfirmationSchema, brandProfileUpdateSchema, characterSelectionSchema, conceptEditSchema, conceptReviewParamsSchema, conceptReviewResetSchema, conceptReviewSchema, conceptSelectionSchema, conceptStageInputSchema, exportPayloadSchema, generationLanguageUpdateSchema, hookPreferenceSelectionSchema, hookPreferencesUpdateSchema, mediaStageInputSchema, projectIdParamsSchema, renderRequestSchema, websiteInputSchema } from '../domain/schemas';
 import { validate } from '../lib/validation';
 import { requireSubscription } from '../middleware/subscription';
 
@@ -18,6 +18,7 @@ router.get('/:id', validate({ params: projectIdParamsSchema }), getProject);
 router.post('/:id/brand-profile/confirm', validate({ params: projectIdParamsSchema, body: brandProfileConfirmationSchema }), confirmBrandProfile);
 router.patch('/:id/brand-profile', requireSubscription, validate({ params: projectIdParamsSchema, body: brandProfileUpdateSchema }), updateBrandProfile);
 router.patch('/:id/hook-preferences', requireSubscription, validate({ params: projectIdParamsSchema, body: hookPreferencesUpdateSchema }), updateHookPreferences);
+router.patch('/:id/language', validate({ params: projectIdParamsSchema, body: generationLanguageUpdateSchema }), updateGenerationLanguage);
 router.post('/:id/analyze', validate({ params: projectIdParamsSchema }), analyzeProject);
 router.post('/:id/brand-demo', requireSubscription, upload.single('demo'), validate({ params: projectIdParamsSchema }), uploadBrandDemo);
 router.post('/:id/concepts', validate({ params: projectIdParamsSchema, body: conceptStageInputSchema }), generateConcepts);
