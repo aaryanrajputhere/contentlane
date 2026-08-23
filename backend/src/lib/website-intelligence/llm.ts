@@ -19,6 +19,14 @@ export interface LLMPrompt {
   user: string;
 }
 
+export type LLMReasoningEffort = 'low' | 'medium' | 'high';
+
+export function resolveReasoningEffort(
+  reasoningEffort?: LLMReasoningEffort,
+): LLMReasoningEffort {
+  return reasoningEffort ?? 'low';
+}
+
 export interface LLMTelemetryRecord {
   model: string;
   inputTokens: number | null;
@@ -90,6 +98,7 @@ export async function callLLM(
     temperature?: number;
     maxTokens?: number;
     responseFormat?: 'json_object' | 'text';
+    reasoningEffort?: LLMReasoningEffort;
     projectId?: string;
     jobId?: string;
     onRawResponse?: (response: unknown) => void | Promise<void>;
@@ -102,6 +111,7 @@ export async function callLLM(
   const temperature = options?.temperature ?? 0.7;
   const maxTokens = options?.maxTokens ?? 2000;
   const format = options?.responseFormat === 'text' ? 'text' : 'json_object';
+  const reasoningEffort = resolveReasoningEffort(options?.reasoningEffort);
 
   console.log(`[llm] request model=${model} temp=${temperature} max_tokens=${maxTokens} format=${format}`);
 
@@ -114,7 +124,7 @@ export async function callLLM(
         instructions: prompt.system,
         input: prompt.user,
         max_output_tokens: maxTokens,
-        reasoning: { effort: 'low' },
+        reasoning: { effort: reasoningEffort },
         text: {
           format: format === 'text' ? { type: 'text' } : { type: 'json_object' },
           verbosity: 'low',

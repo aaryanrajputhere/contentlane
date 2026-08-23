@@ -8,6 +8,7 @@ import {
   buildHooksPrompt,
   extractCompleteObjects,
   findRepeatedCreativeLines,
+  HOOK_REASONING_EFFORT,
   normalizeCreativeLine,
   parseLLMHookItems,
 } from "../lib/website-intelligence/hooks";
@@ -17,6 +18,7 @@ import {
   HOMEPAGE_EVIDENCE_MAX_CHARS,
 } from "../lib/website-intelligence/utils";
 import type { BrandProfile } from "../domain/schemas";
+import { resolveReasoningEffort } from "../lib/website-intelligence/llm";
 
 const baseProfile = {
   brandName: "ContentLane",
@@ -156,19 +158,31 @@ const persistedProfile: BrandProfile = {
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
-test("hook prompt applies automatic styles and brand constraints", () => {
+test("hook prompt uses a concise product-category brief", () => {
   const prompt = buildHooksPrompt(persistedProfile, 8);
 
-  assert.match(prompt.user, /Create an information gap/);
-  assert.match(prompt.user, /Challenge a familiar assumption/);
-  assert.match(prompt.user, /candid first-person admission/);
-  assert.match(prompt.user, /Wasting ad spend/);
-  assert.match(prompt.user, /Guaranteed ROAS/);
-  assert.match(prompt.user, /hooks that would go as overlay text/i);
+  assert.match(prompt.user, /Create exactly 8 UGC-style overlay hooks for ContentLane/);
+  assert.match(prompt.user, /URL-to-video creative tool/);
+  assert.match(prompt.user, /natural, relatable hooks/i);
+  assert.match(prompt.user, /no longer than 15 words/i);
+  assert.match(prompt.user, /Mention ContentLane only when it makes the hook stronger/i);
+  assert.doesNotMatch(prompt.user, /Wasting ad spend/);
+  assert.doesNotMatch(prompt.user, /Launch creative faster/);
+  assert.doesNotMatch(prompt.user, /Creates hooks quickly/);
+  assert.doesNotMatch(prompt.user, /Guaranteed ROAS/);
+  assert.doesNotMatch(prompt.user, /Create an information gap/);
+  assert.doesNotMatch(prompt.user, /Challenge a familiar assumption/);
+  assert.doesNotMatch(prompt.user, /candid first-person admission/);
   assert.match(prompt.system, /Output ONLY valid JSON/);
   assert.match(prompt.system, /never a topic or audience label/i);
   assert.doesNotMatch(prompt.system + prompt.user, /how to actually use \{app\} without making it complicated/);
-  assert.ok(prompt.system.length + prompt.user.length < 5_000);
+  assert.ok(prompt.system.length + prompt.user.length < 2_500);
+});
+
+test("reasoning effort defaults to low and accepts the medium hook override", () => {
+  assert.equal(resolveReasoningEffort(), "low");
+  assert.equal(HOOK_REASONING_EFFORT, "medium");
+  assert.equal(resolveReasoningEffort(HOOK_REASONING_EFFORT), "medium");
 });
 
 test("hook prompt uses saved patterns instead of the defaults", () => {
@@ -211,6 +225,19 @@ test("hook prompt uses selected examples as creative direction without copying t
   assert.match(prompt.user, /Liked hook references/);
   assert.match(prompt.user, /manual work/);
   assert.match(prompt.user, /without copying/i);
+});
+
+test("hook prompt preserves rejected references and the requested language", () => {
+  const prompt = buildHooksPrompt(persistedProfile, 8, [], [{
+    hookText: "boost your productivity today",
+    demoOverlayText: "unlock your potential",
+    angle: "generic hype",
+  }], false, [], [], "Spanish");
+
+  assert.match(prompt.system, /in Spanish/);
+  assert.match(prompt.user, /Rejected references/);
+  assert.match(prompt.user, /boost your productivity today/);
+  assert.match(prompt.user, /generic hype/);
 });
 
 test("creative line comparison ignores casing, punctuation, and whitespace", () => {

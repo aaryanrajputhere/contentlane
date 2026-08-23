@@ -11,6 +11,8 @@ type HookReference = Pick<ConceptBlueprint, "hookText" | "demoOverlayText"> & {
   angle?: string;
 };
 
+export const HOOK_REASONING_EFFORT = "medium" as const;
+
 // Minimal overlay schema. Older LLM responses may include spoken_hook; zod ignores it.
 const llmHookSchema = z.object({
   hook_overlay_text: z.coerce.string().min(1),
@@ -36,12 +38,6 @@ function scoreToLabel(score: number): string {
 function clampScore(index: number): number {
   return Math.max(82, 97 - index * 2);
 }
-
-const automaticStyleGuidance = [
-  "Create an information gap that makes the viewer need the answer.",
-  "Challenge a familiar assumption with a credible opposing take.",
-  "Use a candid first-person admission that feels creator-native.",
-];
 
 function formatHookReferences(references: HookReference[]): string {
   return references
@@ -74,7 +70,6 @@ export function buildHooksPrompt(
     : patterns.slice(0, 8);
 
   const creativeContext = [
-    `Writing moves to vary across the batch:\n- ${automaticStyleGuidance.join("\n- ")}`,
     userPatterns.length
       ? `User-provided good examples. Use their creative DNA, not their wording:\n${userPatterns.map((pattern) => `- ${pattern}`).join("\n")}`
       : "",
@@ -95,33 +90,30 @@ export function buildHooksPrompt(
     .join("\n\n");
 
   return {
-    system: `You write excellent overlay hooks for short-form videos.
+    system: `You write natural UGC overlay hooks for short-form videos.
 
 Write all hook overlays and demo overlays in ${language}. Keep product and brand names unchanged when appropriate.
 
-The hook is the priority. Write like a sharp creator with a real observation, opinion, confession, question, or discovery—not like a brand or ad agency.
-
-A strong hook is specific to the supplied product and audience, understandable instantly, and creates curiosity, tension, surprise, or recognition. Keep it under 12 words. Avoid slogans, calls to action, buzzwords, generic hype, forced slang, and unsupported claims. Make every hook meaningfully different.
-
-For each hook, also write a demo overlay under 8 words that naturally pays it off, plus 2-4 observable creator emotion/action tags (for example: skeptical, pointing, looking at screen). Tags must describe what the creator visibly does or feels, never a topic or audience label.
+For each hook, also write a demo overlay under 8 words that naturally pays it off and 2-4 observable creator emotion/action tags (for example: skeptical, pointing, looking at screen). Tags must describe what the creator visibly does or feels, never a topic or audience label.
 
 Output ONLY valid JSON in this shape:
 {"hooks":[{"hook_overlay_text":"...","demo_vid_overlay_text":"...","hook_clip_ugc_tags":["..."]}]}
 
 Return exactly the requested number of objects and no other fields or commentary.`,
 
-    user: `Create exactly ${count} strong hooks that would go as overlay text on short videos about ${profile.brandName}.
+    user: `Create exactly ${count} UGC-style overlay hooks for ${profile.brandName}, described as:
+${profile.productSummary}
 
-Product: ${profile.productSummary}
-Audience: ${profile.targetAudience}
-Problems: ${profile.customerProblems.join(" | ")}
-Benefits: ${profile.keyBenefits.join(" | ")}
-Proof you may use: ${profile.proofPoints.length ? profile.proofPoints.join(" | ") : "None supplied"}
-Claims to avoid: ${profile.claimConstraints.length ? profile.claimConstraints.join(" | ") : "Any claim not supported above"}
+Write natural, relatable hooks that sound like a real person, not an ad.
+Make every hook meaningfully different and no longer than 15 words.
+Use curiosity, confessions, observations, questions, or POVs.
+Mention ${profile.brandName} only when it makes the hook stronger.
+Do not invent facts or results beyond the product description.
 
 ${creativeContext}
 
-Choose the hook lines before filling in the supporting demo text and tags. Return only the final JSON object.`,
+For each hook, add a short demo payoff and 2-4 visible creator-action tags.
+Return only the required JSON.`,
   };
 }
 
@@ -354,6 +346,7 @@ export async function generateHooksFromLLM(
         temperature: 0.8,
         maxTokens: 2200,
         responseFormat: "json_object",
+        reasoningEffort: HOOK_REASONING_EFFORT,
         onRawResponse: async (response) => {
           await recorder?.write(
             `hooks-raw-provider-response-attempt-${attemptNumber}`,
