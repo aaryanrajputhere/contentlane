@@ -1,10 +1,10 @@
 import type { RequestHandler } from 'express';
 import type { Subscription } from 'dodopayments/resources/subscriptions';
 import { Prisma } from '@prisma/client';
-import { config } from '../config';
 import { requireWebhookConfiguration } from '../lib/dodo';
 import { ApiError } from '../lib/errors';
 import prisma from '../lib/prisma';
+import { getPlanByProductId } from '../lib/billing-plans';
 
 const subscriptionEvents = new Set([
   'subscription.active',
@@ -55,7 +55,7 @@ export const handleDodoWebhook: RequestHandler = async (req, res, next) => {
 
     await prisma.$transaction(async (tx) => {
       await tx.dodoWebhookEvent.create({ data: { webhookId, eventType, eventAt } });
-      if (data.product_id !== config.DODO_PAYMENTS_PRODUCT_ID) return;
+      if (!getPlanByProductId(data.product_id)) return;
 
       const metadataUserId = typeof data.metadata?.contentlane_user_id === 'string'
         ? data.metadata.contentlane_user_id
@@ -67,7 +67,7 @@ export const handleDodoWebhook: RequestHandler = async (req, res, next) => {
 
       const current = await tx.subscription.findUnique({
         where: { dodoSubscriptionId: data.subscription_id },
-        select: { latestProviderEventAt: true },
+        select: { latestProviderEventAt: true, scheduledDodoProductId: true },
       });
       if (current && current.latestProviderEventAt >= eventAt) return;
 
@@ -88,6 +88,7 @@ export const handleDodoWebhook: RequestHandler = async (req, res, next) => {
           currentPeriodEnd: new Date(data.next_billing_date),
           cancelAtNextBillingDate: data.cancel_at_next_billing_date,
           latestProviderEventAt: eventAt,
+          scheduledDodoProductId: current?.scheduledDodoProductId === data.product_id ? null : current?.scheduledDodoProductId,
         },
         update: {
           userId: user.id,
@@ -98,6 +99,7 @@ export const handleDodoWebhook: RequestHandler = async (req, res, next) => {
           currentPeriodEnd: new Date(data.next_billing_date),
           cancelAtNextBillingDate: data.cancel_at_next_billing_date,
           latestProviderEventAt: eventAt,
+          scheduledDodoProductId: current?.scheduledDodoProductId === data.product_id ? null : current?.scheduledDodoProductId,
         },
       });
     });

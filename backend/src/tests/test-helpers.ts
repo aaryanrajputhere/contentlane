@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
+import './test-env';
 import prisma from '../lib/prisma';
 import { randomUUID } from 'node:crypto';
 
@@ -45,7 +46,7 @@ export async function grantTestSubscription(userId: string) {
       userId,
       dodoCustomerId: `cus_test_${id}`,
       dodoSubscriptionId: `sub_test_${id}`,
-      dodoProductId: process.env.DODO_PAYMENTS_PRODUCT_ID ?? '',
+      dodoProductId: process.env.DODO_PAYMENTS_PRODUCT_ID!,
       status: 'active',
       currentPeriodStart: new Date(),
       currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),

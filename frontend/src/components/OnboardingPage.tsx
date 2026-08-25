@@ -52,13 +52,7 @@ export default function OnboardingPage() {
   const startTrial = async () => {
     setUpgradeBusy(true);
     setUpgradeError('');
-    try {
-      const { url } = await post<{ url: string }>('/billing/checkout');
-      window.location.assign(url);
-    } catch (caught) {
-      setUpgradeError(caught instanceof Error ? caught.message : 'Unable to start checkout');
-      setUpgradeBusy(false);
-    }
+    navigate('/billing?plan=starter');
   };
 
   return (

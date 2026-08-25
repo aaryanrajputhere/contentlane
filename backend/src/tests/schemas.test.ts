@@ -3,6 +3,8 @@ import test from "node:test";
 import { Prisma } from "@prisma/client";
 import {
   characterSelectionSchema,
+  changePlanInputSchema,
+  checkoutInputSchema,
   conceptSelectionSchema,
   conceptStageInputSchema,
   creatorCharacterSchema,
@@ -14,6 +16,7 @@ import {
   hookPreferencesSchema,
   mediaStageInputSchema,
   projectCreatorSelectionSchema,
+  renderRequestSchema,
   websiteInputSchema,
 } from "../domain/schemas";
 import { creatorToCharacter } from "../lib/creator-library";
@@ -65,6 +68,17 @@ test("generation payload schemas set sane defaults", () => {
     conceptSelectionSchema.parse({ conceptId: null }).conceptId,
     null,
   );
+});
+
+test('billing and render payloads require known plans and flexible unique selections', () => {
+  assert.equal(checkoutInputSchema.parse({ planId: 'starter' }).planId, 'starter');
+  assert.equal(changePlanInputSchema.parse({ planId: 'pro' }).planId, 'pro');
+  assert.throws(() => checkoutInputSchema.parse({}));
+  assert.throws(() => checkoutInputSchema.parse({ planId: 'enterprise' }));
+  const conceptIds = Array.from({ length: 30 }, (_, index) => `c${String(index).padStart(24, '0')}`);
+  assert.equal(renderRequestSchema.parse({ conceptIds }).conceptIds?.length, 30);
+  assert.throws(() => renderRequestSchema.parse({ conceptIds: [conceptIds[0], conceptIds[0]] }));
+  assert.throws(() => renderRequestSchema.parse({ conceptIds: Array.from({ length: 101 }, (_, index) => `c${String(index).padStart(24, '0')}`) }));
 });
 
 test("hook preference schemas accept bounded project-scoped examples", () => {

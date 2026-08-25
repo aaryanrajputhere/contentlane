@@ -18,7 +18,7 @@
     "disallow-email": "ts-node src/scripts/allow-email.ts remove",
     "jobs:failed": "ts-node src/scripts/jobs.ts failed",
     "jobs:retry": "ts-node src/scripts/jobs.ts retry",
-    "test": "node --test dist/tests/*.test.js",
+    "test": "NODE_ENV=test DODO_STARTER_PRODUCT_ID=pdt_test_starter DODO_PRO_PRODUCT_ID=pdt_test_pro DODO_PAYMENTS_PRODUCT_ID=pdt_test_legacy_pro node --test dist/tests/*.test.js",
     "check": "npm run prisma:generate && prisma validate && npm run typecheck && npm run build && npm test"
   },
   "prisma": {

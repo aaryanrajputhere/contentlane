@@ -6,6 +6,7 @@ import { renderConnection } from './lib/render-queue';
 import { renderReel } from './lib/reel-renderer';
 import { composeDemoOverlayText } from './lib/render-overlay';
 import type { RenderJobInput } from './lib/render-queue';
+import { consumeRenderReservation, releaseRenderReservation } from './lib/render-quota';
 
 function captionStyleForSortOrder(sortOrder: number): 'SNAPCHAT' | 'STANDARD' {
   return sortOrder % 2 === 0 ? 'SNAPCHAT' : 'STANDARD';
@@ -18,12 +19,18 @@ const worker = new Worker<RenderJobInput>('contentlane-render-reels', async (job
     include: { concepts: { orderBy: { sortOrder: 'asc' } }, mediaAssets: true, brandProfile: true, websiteAnalysis: true },
   });
   if (!project) {
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Reel render failed', errorMessage: 'Project no longer exists' } });
+    await prisma.$transaction(async (tx) => {
+      await tx.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Reel render failed', errorMessage: 'Project no longer exists' } });
+      await releaseRenderReservation(job.id!, tx);
+    });
     throw new Error('Project no longer exists');
   }
   const demo = project.mediaAssets.find((asset) => asset.conceptId === null && asset.type === 'VIDEO' && typeof asset.metadata === 'object' && asset.metadata !== null && (asset.metadata as Record<string, unknown>).kind === 'brand-demo');
   if (!demo) {
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Reel render failed', errorMessage: 'Brand demo is missing' } });
+    await prisma.$transaction(async (tx) => {
+      await tx.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Reel render failed', errorMessage: 'Brand demo is missing' } });
+      await releaseRenderReservation(job.id!, tx);
+    });
     throw new Error('Brand demo is missing');
   }
   await prisma.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.ACTIVE, progress: 1, progressMessage: `Rendering 0 of ${input.conceptIds.length} Reels` } });
@@ -41,11 +48,17 @@ const worker = new Worker<RenderJobInput>('contentlane-render-reels', async (job
       outputs.push({ conceptId: concept.id, clipId: assignment.clipId, creatorName: assignment.creatorName, sortOrder: concept.sortOrder, url: output.url, provider: output.provider, providerId: output.providerId, mimeType: output.mimeType, format: output.format });
     }
     const result = { format: 'mp4', reels: outputs };
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.COMPLETED, progress: 100, progressMessage: `Rendered ${outputs.length} Reels`, result: result as unknown as Prisma.InputJsonValue } });
+    await prisma.$transaction(async (tx) => {
+      await tx.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.COMPLETED, progress: 100, progressMessage: `Rendered ${outputs.length} Reels`, result: result as unknown as Prisma.InputJsonValue } });
+      await consumeRenderReservation(job.id!, outputs.length, tx);
+    });
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Render failed';
-    await prisma.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Reel render failed', errorMessage: message } });
+    await prisma.$transaction(async (tx) => {
+      await tx.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Reel render failed', errorMessage: message } });
+      await releaseRenderReservation(job.id!, tx);
+    });
     throw error;
   }
 }, { connection: renderConnection, concurrency: 1 });

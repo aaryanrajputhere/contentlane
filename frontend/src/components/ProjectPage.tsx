@@ -779,13 +779,7 @@ export default function ProjectPage() {
   const startTrial = async () => {
     setBusy('Starting trial');
     setError('');
-    try {
-      const { url } = await post<{ url: string }>('/billing/checkout', { projectId: id });
-      window.location.assign(url);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to start checkout');
-      setBusy(null);
-    }
+    navigate(`/billing?plan=starter&projectId=${encodeURIComponent(id)}`);
   };
 
   if (freeConversionRequired) {
@@ -811,7 +805,7 @@ export default function ProjectPage() {
             <h1 className="mt-4 max-w-xl text-[clamp(2.7rem,5vw,4.8rem)] font-extrabold leading-[0.94] tracking-[-0.065em]">
               {conversionHeadline}
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-8 text-[#666666]">Your hooks are already paired with creator footage. Start your 3-day free trial, add one product demo, and turn this lineup into finished Reels.</p>
+            <p className="mt-6 max-w-xl text-lg leading-8 text-[#666666]">Your hooks are already paired with creator footage. Choose a plan, add one product demo, and turn this lineup into finished Reels.</p>
             <ul className="mt-7 grid max-w-lg gap-3 text-sm font-semibold text-[#333333] sm:grid-cols-3 xl:grid-cols-1">
               {['Upload your product demo', `Render ${Math.max(likedConcepts.length, 1)} ready-to-post Reels`, 'Generate more winning hooks'].map((benefit) => (
                 <li key={benefit} className="flex items-center gap-2.5"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#dcfce7] text-[#15803d]"><Check size={14} strokeWidth={3} /></span>{benefit}</li>
@@ -828,7 +822,7 @@ export default function ProjectPage() {
             </div>
             <button type="button" onClick={() => void startTrial()} disabled={busy !== null} className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#111111] px-7 py-4 text-sm font-bold text-white shadow-[0_16px_35px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_42px_rgba(0,0,0,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 disabled:opacity-50 sm:w-auto">
               {busy === 'Starting trial' ? <Loader2 size={18} className="animate-spin motion-reduce:animate-none" /> : <Sparkles size={18} />}
-              Start 3-day free trial
+              Choose a plan
             </button>
             <p className="mt-3 text-xs leading-5 text-[#777777]">Continue with these exact hooks—your selections and progress stay saved.</p>
           </div>

@@ -6,7 +6,7 @@ import { api, ApiClientError } from '../lib/api';
 import { assignCreatorsToConcepts, effectiveCreatorSelection } from '../lib/creatorAssignments';
 import { getCaptionStyle } from '../lib/captionStyle';
 import { DEFAULT_HOOK_PATTERNS } from '../data/hookPatterns';
-import type { ConceptCard, CreatorRecord, GenerationJob, GenerationLanguage, HookPreferenceExample, ProjectResponse, ProjectSnapshot } from '../types/domain';
+import type { BillingStatus, ConceptCard, CreatorRecord, GenerationJob, GenerationLanguage, HookPreferenceExample, ProjectResponse, ProjectSnapshot } from '../types/domain';
 
 const button = 'inline-flex items-center justify-center gap-2 rounded-full bg-[#111] px-5 py-3 text-sm font-bold text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-50';
 const secondary = 'inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-[#222] transition hover:border-black/25 hover:bg-[#f3f3f0] disabled:opacity-50';
@@ -63,12 +63,14 @@ export default function CampaignWorkspacePage() {
   const section = sectionFromPath(location.pathname);
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
   const [creators, setCreators] = useState<CreatorRecord[]>([]);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [error, setError] = useState('');
 
   const load = async () => {
-    const [projectResponse, creatorResponse] = await Promise.all([api<ProjectResponse>(`/projects/${id}`), api<{ creators: CreatorRecord[] }>('/creators')]);
+    const [projectResponse, creatorResponse, billingResponse] = await Promise.all([api<ProjectResponse>(`/projects/${id}`), api<{ creators: CreatorRecord[] }>('/creators'), api<BillingStatus>('/billing/status')]);
     setProject(projectResponse.project);
     setCreators(creatorResponse.creators);
+    setBilling(billingResponse);
   };
   useEffect(() => { void load().catch((caught) => setError(caught instanceof Error ? caught.message : 'Unable to load campaign')); }, [id]);
 
@@ -76,7 +78,7 @@ export default function CampaignWorkspacePage() {
   return <WorkspaceShell project={project} section={section}>
     {section === 'home' ? <HomeSection project={project} /> : null}
     {section === 'brand' ? <BrandSection project={project} onProjectChange={setProject} /> : null}
-    {section === 'content' ? <ContentSection project={project} creators={creators} onProjectChange={setProject} /> : null}
+    {section === 'content' ? <ContentSection project={project} creators={creators} billing={billing} onProjectChange={setProject} /> : null}
     {section === 'generate' ? <GenerateSection project={project} creators={creators} onProjectChange={setProject} /> : null}
   </WorkspaceShell>;
 }
@@ -93,7 +95,7 @@ function WorkspaceShell({ project, section, children }: { project: ProjectSnapsh
   const description = section === 'brand' ? 'Your strategy, feedback, and generation preferences.' : section === 'content' ? 'Your saved hooks and rendered videos.' : section === 'generate' ? 'Swipe through eight fresh ideas and keep the ones you want.' : '';
   return <main className="min-h-screen bg-[#f6f6f1] text-[#111]">
     <header className="border-b border-black/8 bg-[#f6f6f1]/90 backdrop-blur-xl"><div className="mx-auto flex max-w-[1240px] items-center justify-between gap-5 px-5 py-4 sm:px-8"><button onClick={() => navigate('/')} className="text-[11px] font-bold uppercase tracking-[.24em] text-[#777]">ContentLane</button><div className="hidden items-center gap-1 overflow-x-auto rounded-full border border-black/8 bg-white p-1 md:flex">{links.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(pathFor(key))} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${section === key ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f3f3f0]'}`}><Icon size={14} />{label}</button>)}</div><button onClick={() => navigate('/')} className={secondary}><ArrowLeft size={15} />Projects</button></div><div className="mx-auto flex max-w-[1240px] gap-1 overflow-x-auto px-5 pb-3 md:hidden sm:px-8">{links.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(pathFor(key))} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${section === key ? 'bg-[#111] text-white' : 'bg-white text-[#666]'}`}><Icon size={13} />{label}</button>)}</div></header>
-    <section className="mx-auto max-w-[1240px] px-5 py-7 sm:px-8 sm:py-10"><div className="mb-8 flex items-end justify-between gap-4"><div><p className="text-[11px] font-bold uppercase tracking-[.2em] text-[#888]">{project.brandProfile?.brandName ?? 'Campaign'}</p><h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-5xl">{section === 'home' ? 'Make the next batch.' : links.find((item) => item.key === section)?.label}</h1></div>{section === 'home' ? null : <p className="hidden max-w-sm text-right text-sm leading-6 text-[#777] sm:block">{description}</p>}</div>{children}</section>
+    <section className="mx-auto max-w-[1240px] px-5 py-7 sm:px-8 sm:py-10"><div className="mb-8 flex items-end justify-between gap-4"><div><p className="text-[11px] font-bold uppercase tracking-[.2em] text-[#888]">{project.brandProfile?.brandName ?? 'Campaign'}</p><h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-5xl">{section === 'home' ? 'Make the next render.' : links.find((item) => item.key === section)?.label}</h1></div>{section === 'home' ? null : <p className="hidden max-w-sm text-right text-sm leading-6 text-[#777] sm:block">{description}</p>}</div>{children}</section>
   </main>;
 }
 
@@ -103,7 +105,7 @@ function nextAction(project: ProjectSnapshot) {
   if (!project.brandProfile) return { label: 'Complete your brand profile', description: 'Give ContentLane the context it needs to make useful hooks.', route: 'brand' as Section };
   if (!saved) return { label: 'Generate more content', description: 'Swipe through fresh ideas and save the ones you want to use.', route: 'generate' as Section };
   if (!hasDemo) return { label: 'Add your product demo', description: 'Upload the product video that will follow the creator hook.', route: 'content' as Section };
-  return { label: 'Create another video batch', description: 'Select saved hooks from your content library and render a fresh set.', route: 'content' as Section };
+  return { label: 'Render more videos', description: 'Select any saved hooks from your content library and render the set you need.', route: 'content' as Section };
 }
 
 function HomeSection({ project }: { project: ProjectSnapshot }) {
@@ -134,7 +136,7 @@ function BrandSection({ project, onProjectChange }: { project: ProjectSnapshot; 
 }
 
 
-function ContentSection({ project, creators, onProjectChange }: { project: ProjectSnapshot; creators: CreatorRecord[]; onProjectChange: (project: ProjectSnapshot) => void }) {
+function ContentSection({ project, creators, billing, onProjectChange }: { project: ProjectSnapshot; creators: CreatorRecord[]; billing: BillingStatus | null; onProjectChange: (project: ProjectSnapshot) => void }) {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<string[]>([]);
   const [showRendered, setShowRendered] = useState(false);
@@ -148,9 +150,10 @@ function ContentSection({ project, creators, onProjectChange }: { project: Proje
   const savedIds = useMemo(() => new Set(savedConcepts.map((concept) => concept.id)), [savedConcepts]);
   const rendered = useMemo(() => projectOutputs(project).filter((output) => savedIds.has(output.conceptId)), [project, savedIds]);
   const conceptById = useMemo(() => new Map(project.concepts.map((concept) => [concept.id, concept])), [project.concepts]);
+  const renderCapacity = billing?.videoUsage.remaining ?? (billing?.accessTier === 'admin' ? 100 : 0);
   const editConcept = async (concept: ConceptCard) => { const hookText = window.prompt('Hook text', concept.hookText); if (!hookText) return; const demoOverlayText = window.prompt('Demo overlay text', concept.demoOverlayText); if (!demoOverlayText) return; setBusy(`edit:${concept.id}`); try { const response = await api<ProjectResponse>(`/projects/${project.id}/concepts/${concept.id}`, { method: 'PATCH', body: JSON.stringify({ hookText, demoOverlayText }) }); onProjectChange(response.project); setMessage('Hook copy saved.'); } catch (caught) { setError(caught instanceof ApiClientError ? caught.message : 'Unable to save hook copy.'); } finally { setBusy(''); } };
   const createBatch = async () => {
-    if (selected.length !== 8) return;
+    if (selected.length === 0 || selected.length > renderCapacity) return;
     const hasBrandDemo = project.mediaAssets.some((asset) => asset.type === 'VIDEO' && asset.metadata?.kind === 'brand-demo');
     if (!hasBrandDemo) {
       const addDemo = window.confirm('Add your product demo before rendering these videos. Go to the upload step now?');
@@ -162,11 +165,11 @@ function ContentSection({ project, creators, onProjectChange }: { project: Proje
       await api(`/projects/${project.id}/render`, { method: 'POST', body: JSON.stringify({ conceptIds: selected }) });
       navigate(`/projects/${project.id}/render`);
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : 'Unable to start batch.');
+      setError(caught instanceof ApiClientError ? caught.message : 'Unable to start render.');
       setBusy('');
     }
   };
-  return <div className="space-y-5"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm leading-6 text-[#666]">Only saved hooks appear here. Pick up to eight and pair them with your product demo.</p><p className="mt-2 text-xs font-bold uppercase tracking-[.16em] text-[#999]">{savedConcepts.length} saved hooks · {rendered.length} rendered outputs</p></div><button className={button} onClick={() => navigate(`/projects/${project.id}/generate`)}><Sparkles size={15} />Generate more</button></div><div className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f3f3f0] p-1"><button className={`rounded-full px-4 py-2 text-sm font-bold ${!showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(false)}>Saved content</button><button className={`rounded-full px-4 py-2 text-sm font-bold ${showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(true)}>Rendered videos</button></div></section>{message || error ? <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? 'bg-red-50 text-red-700' : 'bg-[#e8f8d4] text-[#315016]'}`}>{error || message}</p> : null}{showRendered ? <RenderedContent rendered={rendered} conceptById={conceptById} /> : <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-3 border-b border-black/8 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Saved content</p><h2 className="mt-2 text-2xl font-black tracking-[-.04em]">Choose up to eight</h2><p className="mt-2 text-sm text-[#666]">Select saved hooks for the next video batch.</p></div><button className={button} onClick={() => void createBatch()} disabled={selected.length !== 8 || busy === 'render'}><Video size={15} />{busy === 'render' ? 'Starting…' : `Render selected · ${selected.length}/8`}</button></div>{assignments.length ? <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{assignments.map((assignment) => <HookVideoCard key={assignment.concept.id} assignment={assignment} selected={selected.includes(assignment.concept.id)} disabled={busy === `edit:${assignment.concept.id}`} onToggle={() => setSelected((current) => current.includes(assignment.concept.id) ? current.filter((id) => id !== assignment.concept.id) : current.length < 8 ? [...current, assignment.concept.id] : current)} onEdit={() => void editConcept(assignment.concept)} />)}</div> : <EmptyPanel title="No saved content yet" action="Generate more" onClick={() => navigate(`/projects/${project.id}/generate`)} />}</section>}</div>;
+  return <div className="space-y-5"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm leading-6 text-[#666]">Only saved hooks appear here. Select any number up to your remaining render capacity.</p><p className="mt-2 text-xs font-bold uppercase tracking-[.16em] text-[#999]">{savedConcepts.length} saved hooks · {rendered.length} rendered outputs · {billing?.videoUsage.remaining ?? 'Unlimited'} remaining</p></div><button className={button} onClick={() => navigate(`/projects/${project.id}/generate`)}><Sparkles size={15} />Generate more</button></div><div className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f3f3f0] p-1"><button className={`rounded-full px-4 py-2 text-sm font-bold ${!showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(false)}>Saved content</button><button className={`rounded-full px-4 py-2 text-sm font-bold ${showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(true)}>Rendered videos</button></div></section>{message || error ? <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? 'bg-red-50 text-red-700' : 'bg-[#e8f8d4] text-[#315016]'}`}>{error || message}</p> : null}{showRendered ? <RenderedContent rendered={rendered} conceptById={conceptById} /> : <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-3 border-b border-black/8 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Saved content</p><h2 className="mt-2 text-2xl font-black tracking-[-.04em]">Choose what to render</h2><p className="mt-2 text-sm text-[#666]">Each selected hook becomes one rendered video.</p></div><button className={button} onClick={() => void createBatch()} disabled={selected.length === 0 || selected.length > renderCapacity || busy === 'render'}><Video size={15} />{busy === 'render' ? 'Starting…' : `Render selected · ${selected.length}`}</button></div>{renderCapacity === 0 ? <p className="mt-5 rounded-2xl bg-[#fff3ef] p-4 text-sm font-bold text-[#9a3e29]">Your render allowance is used for this billing period. Upgrade or wait for the reset.</p> : null}{assignments.length ? <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{assignments.map((assignment) => <HookVideoCard key={assignment.concept.id} assignment={assignment} selected={selected.includes(assignment.concept.id)} disabled={busy === `edit:${assignment.concept.id}`} onToggle={() => setSelected((current) => current.includes(assignment.concept.id) ? current.filter((conceptId) => conceptId !== assignment.concept.id) : current.length < renderCapacity ? [...current, assignment.concept.id] : current)} onEdit={() => void editConcept(assignment.concept)} />)}</div> : <EmptyPanel title="No saved content yet" action="Generate more" onClick={() => navigate(`/projects/${project.id}/generate`)} />}</section>}</div>;
 }
 
 function RenderedContent({ rendered, conceptById }: { rendered: ReelOutput[]; conceptById: Map<string, ConceptCard> }) {

@@ -57,6 +57,12 @@ enum SupportRequestStatus {
   RESOLVED
 }
 
+enum RenderUsageStatus {
+  RESERVED
+  CONSUMED
+  RELEASED
+}
+
 model User {
   id                String           @id @default(cuid())
   clerkId           String?          @unique
@@ -73,6 +79,7 @@ model User {
   allowedEmailsMade AllowedEmail[]   @relation("AllowedEmailCreatedBy")
   dodoCustomerId    String?          @unique
   subscriptions     Subscription[]
+  renderUsageReservations RenderUsageReservation[]
   supportRequests   SupportRequest[]
 }
 
@@ -99,6 +106,7 @@ model Subscription {
   dodoCustomerId          String
   dodoSubscriptionId      String    @unique
   dodoProductId           String
+  scheduledDodoProductId  String?
   status                  String
   currentPeriodStart      DateTime?
   currentPeriodEnd        DateTime?
@@ -116,6 +124,23 @@ model DodoWebhookEvent {
   eventType String
   eventAt   DateTime
   createdAt DateTime @default(now())
+}
+
+model RenderUsageReservation {
+  id                 String            @id @default(cuid())
+  userId             String
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generationJobId    String            @unique
+  generationJob      GenerationJob     @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  billingPeriodStart DateTime
+  billingPeriodEnd   DateTime
+  requestedCount     Int
+  consumedCount      Int               @default(0)
+  status             RenderUsageStatus @default(RESERVED)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([userId, billingPeriodStart, billingPeriodEnd, status])
 }
 
 model AllowedEmail {
@@ -288,6 +313,7 @@ model GenerationJob {
   errorMessage    String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  renderUsageReservation RenderUsageReservation?
 
   @@index([projectId, createdAt])
   @@index([status, createdAt])

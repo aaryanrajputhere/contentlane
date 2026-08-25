@@ -34,14 +34,33 @@ export interface AuthResponse {
 }
 
 export interface BillingStatus {
-  plan: string;
-  price: number;
+  planId: 'starter' | 'pro' | null;
+  planName: string | null;
+  price: number | null;
+  isLegacyPlan: boolean;
   currency: string;
+  plans: Array<{
+    id: 'starter' | 'pro';
+    name: 'Starter' | 'Pro';
+    price: number;
+    currency: 'USD';
+    interval: 'month';
+    videoLimit: number;
+  }>;
   status: string;
   hasAccess: boolean;
   accessTier: 'admin' | 'subscriber' | 'free' | 'none';
   renewalDate: string | null;
   cancelAtPeriodEnd: boolean;
+  scheduledPlanId: 'starter' | 'pro' | null;
+  videoUsage: {
+    limit: number | null;
+    consumed: number;
+    reserved: number;
+    remaining: number | null;
+    periodStart: string | null;
+    periodEnd: string | null;
+  };
   freeAccess: {
     projectId: string | null;
     limit: number;

@@ -104,8 +104,8 @@ export function PublicOnlyRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
   if (status === 'loading') return <LoadingScreen />;
   if (status === 'authenticated') {
-    const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/';
-    return <Navigate to={from} replace />;
+    const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+    return <Navigate to={from?.pathname ? `${from.pathname}${from.search ?? ''}` : '/'} replace />;
   }
   return <>{children}</>;
 }

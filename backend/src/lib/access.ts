@@ -1,7 +1,7 @@
 import type { Prisma, UserRole } from '@prisma/client';
-import { config } from '../config';
 import prisma from './prisma';
 import { ApiError } from './errors';
+import { getRecognizedProductIds } from './billing-plans';
 
 export const FREE_HOOK_SELECTION_LIMIT = 8;
 
@@ -10,7 +10,7 @@ type DbClient = Prisma.TransactionClient | typeof prisma;
 export async function hasPaidAccess(userId: string, role: UserRole, db: DbClient = prisma) {
   if (role === 'ADMIN') return true;
   return Boolean(await db.subscription.findFirst({
-    where: { userId, dodoProductId: config.DODO_PAYMENTS_PRODUCT_ID, status: 'active' },
+    where: { userId, dodoProductId: { in: getRecognizedProductIds() }, status: 'active' },
     select: { id: true },
   }));
 }

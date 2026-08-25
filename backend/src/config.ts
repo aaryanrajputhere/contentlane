@@ -33,6 +33,9 @@ const schema = z.object({
     .default(120_000),
   DODO_PAYMENTS_API_KEY: z.string().trim().default(""),
   DODO_PAYMENTS_WEBHOOK_KEY: z.string().trim().default(""),
+  DODO_STARTER_PRODUCT_ID: z.string().trim().default(""),
+  DODO_PRO_PRODUCT_ID: z.string().trim().default(""),
+  // Existing single-plan deployments keep this as a legacy Pro product.
   DODO_PAYMENTS_PRODUCT_ID: z.string().trim().default(""),
   DODO_PAYMENTS_ENVIRONMENT: z.enum(["test_mode", "live_mode"]).default("test_mode"),
 });

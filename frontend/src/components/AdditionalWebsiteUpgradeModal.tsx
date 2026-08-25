@@ -90,7 +90,7 @@ export default function AdditionalWebsiteUpgradeModal({
             Your first website was free.
           </h2>
           <p className="mt-5 max-w-lg text-base leading-7 text-[#626262]">
-            Start your 3-day free trial to build hooks for this website and turn your strongest ideas into finished Reels.
+            Choose a plan to build hooks for this website and turn your strongest ideas into finished Reels.
           </p>
 
           <ul className="mt-6 grid gap-3 text-sm font-semibold text-[#333333] sm:grid-cols-3">
@@ -113,7 +113,7 @@ export default function AdditionalWebsiteUpgradeModal({
               className="inline-flex items-center justify-center gap-2 rounded-full bg-[#111111] px-6 py-3.5 text-sm font-bold text-white shadow-[0_15px_34px_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-4 disabled:opacity-50"
             >
               {busy ? <Loader2 size={17} className="animate-spin motion-reduce:animate-none" /> : <Sparkles size={17} />}
-              Start 3-day free trial
+              Choose a plan
             </button>
             <button
               type="button"

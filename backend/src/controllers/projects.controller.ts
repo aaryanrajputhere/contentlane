@@ -48,6 +48,7 @@ import { creatorToCharacter } from "../lib/creator-library";
 import { renderQueue, type RenderJobInput } from "../lib/render-queue";
 import { resolveCreatorClipAssignments, resolveStoredCreatorClipAssignments } from "../lib/creator-clip-matching";
 import { FREE_HOOK_SELECTION_LIMIT, getFreeAccess, hasPaidAccess, requireFreeProjectAccess } from "../lib/access";
+import { createReservedRenderJob, releaseRenderReservation } from '../lib/render-quota';
 
 const HOOK_SELECTION_TARGET = 8;
 
@@ -1498,13 +1499,13 @@ export const renderProject: RequestHandler = async (req, res) => {
   const { conceptIds } = renderRequestSchema.parse(req.body);
   const project = await getProjectOrFail(id, userId);
   const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
-  if (!conceptIds?.length && likedConcepts.length !== 8) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select exactly eight hooks before rendering');
+  if (!conceptIds?.length && likedConcepts.length === 0) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select at least one hook before rendering');
   if (conceptIds?.some((conceptId) => !project.concepts.some((concept) => concept.id === conceptId))) {
     throw new ApiError(409, 'HOOK_NOT_SELECTED', 'Only selected hooks can be rendered');
   }
   const concepts = (conceptIds?.length ? project.concepts.filter((concept) => conceptIds.includes(concept.id)) : likedConcepts)
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  if (concepts.length !== 8) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Render all eight selected hooks together');
+  if (concepts.length === 0) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Select at least one hook to render');
   const demo = project.mediaAssets.find(isBrandDemoAsset);
   if (!demo) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Upload a product demo before rendering');
   const selection = project.creatorSelection && projectCreatorSelectionSchema.safeParse(project.creatorSelection).success
@@ -1528,8 +1529,22 @@ export const renderProject: RequestHandler = async (req, res) => {
       : [];
   if (assignments.length !== concepts.length) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'A matching creator clip is missing for one or more hooks');
   const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments };
-  const job = await createJob(project.id, JobType.RENDER_REELS, input as unknown as Prisma.InputJsonValue);
-  await renderQueue.add('render-reels', input, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
+  const job = await createReservedRenderJob({
+    userId,
+    role: req.user!.role,
+    projectId: project.id,
+    renderInput: input as unknown as Prisma.InputJsonValue,
+    requestedCount: concepts.length,
+  });
+  try {
+    await renderQueue.add('render-reels', input, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
+  } catch (error) {
+    await prisma.$transaction(async (tx) => {
+      await tx.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Unable to queue render', errorMessage: 'Render queue is unavailable' } });
+      await releaseRenderReservation(job.id, tx);
+    });
+    throw error;
+  }
   res.status(202).json({ job: await prisma.generationJob.findUnique({ where: { id: job.id } }) });
 };
 

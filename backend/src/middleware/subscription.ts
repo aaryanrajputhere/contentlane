@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
-import { config } from '../config';
 import prisma from '../lib/prisma';
 import { ApiError } from '../lib/errors';
+import { getRecognizedProductIds } from '../lib/billing-plans';
 
 export const requireSubscription: RequestHandler = async (req, _res, next) => {
   try {
@@ -11,7 +11,7 @@ export const requireSubscription: RequestHandler = async (req, _res, next) => {
     const subscription = await prisma.subscription.findFirst({
       where: {
         userId: req.user.id,
-        dodoProductId: config.DODO_PAYMENTS_PRODUCT_ID,
+        dodoProductId: { in: getRecognizedProductIds() },
         status: 'active',
       },
       select: { id: true },

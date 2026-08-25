@@ -4,7 +4,9 @@ const emailSchema = z.string().trim().email().max(320);
 const passwordSchema = z.string().min(8).max(128);
 
 export const projectIdParamsSchema = z.object({ id: z.string().cuid() });
-export const checkoutInputSchema = z.object({ projectId: z.string().cuid().optional() }).strict().default({});
+export const billingPlanIdSchema = z.enum(['starter', 'pro']);
+export const checkoutInputSchema = z.object({ planId: billingPlanIdSchema, projectId: z.string().cuid().optional() }).strict();
+export const changePlanInputSchema = z.object({ planId: billingPlanIdSchema }).strict();
 export const jobIdParamsSchema = z.object({ id: z.string().cuid() });
 export const creatorParamsSchema = z.object({ id: z.string().cuid() });
 export const creatorClipParamsSchema = z.object({ clipId: z.string().cuid() });
@@ -257,11 +259,11 @@ export const jobStatusSchema = z.enum(['QUEUED', 'ACTIVE', 'COMPLETED', 'FAILED'
 export const jobTypeSchema = z.enum(['ANALYZE_WEBSITE', 'GENERATE_CONCEPTS', 'GENERATE_MEDIA', 'SAVE_EXPORT', 'GENERATE_HOOKS', 'GENERATE_SCRIPTS', 'RENDER_REELS']);
 
 export const renderRequestSchema = z.object({
-  conceptIds: z.array(z.string().cuid()).min(1).max(8).optional(),
+  conceptIds: z.array(z.string().cuid()).min(1).max(100).refine((ids) => new Set(ids).size === ids.length, { message: 'A hook cannot be rendered more than once in the same request' }).optional(),
   assignments: z.array(z.object({
     conceptId: z.string().cuid(),
     clipId: z.string().cuid(),
-  }).strict()).min(1).max(8).optional(),
+  }).strict()).min(1).max(100).optional(),
 }).strict();
 export const mediaTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 
