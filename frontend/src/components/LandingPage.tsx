@@ -138,24 +138,67 @@ const featureCards = [
   },
 ] as const;
 
-const pricingPlans = [
-  {
-    name: 'Starter',
-    price: '9.99',
-    renders: 30,
-    description: 'For founders building a steady weekly content habit.',
-    features: ['30 video renders every month', 'Website and brand analysis', 'Hook-first scripts and visuals', 'Browser editing and exports'],
-    featured: false,
-  },
-  {
-    name: 'Growth',
-    price: '19.99',
-    renders: 100,
-    description: 'For teams testing more hooks, offers, and creative angles.',
-    features: ['100 video renders every month', 'Website and brand analysis', 'Hook-first scripts and visuals', 'Browser editing and exports'],
-    featured: true,
-  },
-] as const;
+const pricingPlan = {
+  name: 'ContentLane',
+  originalPrice: 29,
+  price: 19,
+  period: '/month',
+  description: '3-day free trial, then $19 USD per month for the full website-to-video workflow.',
+  features: ['Website and brand analysis', 'Hook-first scripts and visuals', 'Browser editing and exports'],
+} as const;
+
+function AnimatedPrice({ reducedMotion }: { reducedMotion: boolean | null }) {
+  const priceRef = useRef<HTMLSpanElement>(null);
+  const priceVisible = useInView(priceRef, { once: true, amount: 0.8 });
+  const [priceState, setPriceState] = useState<{ currentPrice: number; showOriginalPrice: boolean }>({
+    currentPrice: pricingPlan.originalPrice,
+    showOriginalPrice: false,
+  });
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    if (!priceVisible || reducedMotion === null) return;
+
+    let countdown: number | undefined;
+    const reveal = window.setTimeout(() => {
+      setPriceState({ currentPrice: pricingPlan.originalPrice - 1, showOriginalPrice: true });
+      let nextPrice = pricingPlan.originalPrice - 2;
+
+      countdown = window.setInterval(() => {
+        setPriceState({ currentPrice: nextPrice, showOriginalPrice: true });
+        if (nextPrice === pricingPlan.price) {
+          window.clearInterval(countdown);
+          countdown = undefined;
+        } else {
+          nextPrice -= 1;
+        }
+      }, 145);
+    }, 700);
+
+    return () => {
+      window.clearTimeout(reveal);
+      if (countdown !== undefined) window.clearInterval(countdown);
+    };
+  }, [priceVisible, reducedMotion]);
+
+  if (reducedMotion) {
+    return (
+      <span className="relative inline-grid h-[3.75rem] min-w-[5.25rem] items-end" aria-label="3-day free trial, then $19 per month, reduced from $29">
+        <span aria-hidden="true" className="absolute left-0 top-0 text-base font-bold leading-none tracking-[-0.03em] text-white/55 line-through decoration-[#ad9cff] decoration-2">${pricingPlan.originalPrice}</span>
+        <span aria-hidden="true" className="text-[2.5rem] font-extrabold leading-none tracking-[-0.07em]">${pricingPlan.price}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span ref={priceRef} className="relative inline-grid h-[3.75rem] min-w-[5.25rem] items-end" aria-label="3-day free trial, then $19 per month, reduced from $29">
+      <motion.span aria-hidden="true" initial={false} animate={{ opacity: priceState.showOriginalPrice ? 1 : 0, y: priceState.showOriginalPrice ? 0 : 4 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }} className="absolute left-0 top-0 text-base font-bold leading-none tracking-[-0.03em] text-white/55 line-through decoration-[#ad9cff] decoration-2">${pricingPlan.originalPrice}</motion.span>
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span key={priceState.currentPrice} aria-hidden="true" initial={{ y: -12, opacity: 0, filter: 'blur(2px)' }} animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }} exit={{ y: 12, opacity: 0, filter: 'blur(2px)' }} transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }} className="col-start-1 row-start-1 text-[2.5rem] font-extrabold leading-none tracking-[-0.07em] tabular-nums">${priceState.currentPrice}</motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
 
 const faqs = [
   {
@@ -849,72 +892,56 @@ export default function LandingPage() {
       <section id="pricing" className="mx-auto w-full max-w-[1440px] px-6 pb-8 pt-10 sm:px-8 lg:px-12 lg:pt-14">
         <SectionHeading
           eyebrow="Pricing"
-          title="Pick the pace that fits your content calendar"
-          description="Every plan includes the complete website-to-video workflow. Choose how many finished videos you want to render each month."
+          title="One plan for the whole creative lane"
+          description="Start with a 3-day free trial, then continue for $19 USD each month. Cancel anytime before renewal."
         />
 
-        <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-2 md:items-stretch">
-          {pricingPlans.map((plan, planIndex) => (
-            <motion.div
-              key={plan.name}
-              initial={reducedMotion ? false : { opacity: 0, y: 24 }}
-              whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.35 }}
-              whileHover={reducedMotion ? undefined : { y: -6 }}
-              transition={{ duration: 0.55, delay: planIndex * 0.08, ease: [0.22, 1, 0.36, 1] }}
-              className={`group relative flex overflow-hidden rounded-[30px] border p-8 transition duration-500 sm:p-9 ${plan.featured
-                ? 'border-[#111111] bg-[#111111] text-white shadow-[0_22px_60px_rgba(17,17,17,0.18)] hover:shadow-[0_30px_76px_rgba(17,17,17,0.24)]'
-                : 'border-[#e5e5e5] bg-white text-[#111111] shadow-[0_16px_44px_rgba(0,0,0,0.06)] hover:border-[#d4d4d4] hover:shadow-[0_24px_60px_rgba(0,0,0,0.1)]'
-              }`}
-            >
-              {plan.featured ? <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[#a99cff]/25 blur-3xl transition duration-700 group-hover:bg-[#a99cff]/35" /> : null}
-              <div className="relative flex w-full flex-col">
-                <div className="flex min-h-8 items-center justify-between gap-4">
-                  <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{plan.name}</h3>
-                  {plan.featured ? (
-                    <span className="rounded-full bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#111111]">Best value</span>
-                  ) : null}
+        <div className="mx-auto mt-10 max-w-2xl">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 24 }}
+            whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.35 }}
+            whileHover={reducedMotion ? undefined : { y: -8, scale: 1.012 }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            className="group relative overflow-hidden rounded-[30px] border border-white/10 bg-[#111111] p-8 text-white shadow-[0_18px_42px_rgba(0,0,0,0.12)] transition-shadow duration-500 hover:shadow-[0_28px_70px_rgba(17,17,17,0.24)] sm:p-10"
+          >
+            <div className="pointer-events-none absolute -right-24 -top-28 h-64 w-64 rounded-full bg-[#a99cff]/20 blur-3xl transition duration-700 group-hover:bg-[#a99cff]/35" />
+            <div className="pointer-events-none absolute -bottom-32 -left-20 h-56 w-56 rounded-full bg-[#6fe4c0]/10 blur-3xl transition duration-700 group-hover:bg-[#6fe4c0]/20" />
+            <div className="relative flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-[#6fe4c0] shadow-[0_0_0_5px_rgba(111,228,192,0.1)]" />
+                  <h3 className="text-[1.2rem] font-semibold tracking-[-0.04em]">{pricingPlan.name}</h3>
                 </div>
-
-                <div className="mt-7 flex items-end gap-2">
-                  <span className="text-[3.35rem] font-extrabold leading-none tracking-[-0.075em] tabular-nums">${plan.price}</span>
-                  <span className={`pb-1 text-sm ${plan.featured ? 'text-white/60' : 'text-[#777777]'}`}>USD / month</span>
-                </div>
-                <p className={`mt-4 min-h-12 text-sm leading-6 ${plan.featured ? 'text-white/68' : 'text-[#666666]'}`}>{plan.description}</p>
-
-                <div className={`mt-7 rounded-[22px] border px-5 py-4 ${plan.featured ? 'border-white/12 bg-white/[0.07]' : 'border-[#e9e9e9] bg-[#fafafa]'}`}>
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="text-3xl font-extrabold tracking-[-0.06em] tabular-nums">{plan.renders}</span>
-                    <span className={`text-xs font-semibold uppercase tracking-[0.15em] ${plan.featured ? 'text-[#a99cff]' : 'text-[#7667ff]'}`}>renders / month</span>
-                  </div>
-                  <p className={`mt-1 text-xs leading-5 ${plan.featured ? 'text-white/55' : 'text-[#777777]'}`}>One render means one finished video export.</p>
-                </div>
-
-                <ul className="mt-7 space-y-3">
-                  {plan.features.map((feature, index) => (
-                    <li key={feature} className={`flex items-start gap-3 text-sm leading-6 transition-transform duration-300 group-hover:translate-x-1 ${plan.featured ? 'text-white/88' : 'text-[#444444]'}`} style={{ transitionDelay: `${index * 35}ms` }}>
-                      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${plan.featured ? 'bg-white text-[#111111]' : 'bg-[#111111] text-white'}`}>
-                        <Check size={12} strokeWidth={3} />
-                      </span>
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  type="button"
-                  onClick={() => navigate(status === 'authenticated' ? '/billing' : '/signup', status === 'authenticated' ? undefined : { state: { from: { pathname: '/billing' } } })}
-                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold transition duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${plan.featured
-                    ? 'bg-white text-[#111111] hover:bg-[#f3f3f3] hover:shadow-[0_12px_28px_rgba(255,255,255,0.14)] focus-visible:ring-white/40 focus-visible:ring-offset-[#111111]'
-                    : 'bg-[#111111] text-white hover:bg-[#282828] hover:shadow-[0_12px_28px_rgba(17,17,17,0.18)] focus-visible:ring-[#111111]/30 focus-visible:ring-offset-white'
-                  }`}
-                >
-                  Choose {plan.name}
-                  <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
-                </button>
+                <p className="mt-2 text-sm leading-6 text-white/70">{pricingPlan.description}</p>
               </div>
-            </motion.div>
-          ))}
+              <span className="shrink-0 rounded-full border border-white/15 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#111111] shadow-[0_8px_20px_rgba(255,255,255,0.08)] transition-transform duration-300 group-hover:rotate-2">3-day free trial</span>
+            </div>
+
+            <div className="relative mt-8 flex items-end gap-1">
+              <AnimatedPrice reducedMotion={reducedMotion} />
+              <span className="pb-1 text-sm text-white/70">{pricingPlan.period}</span>
+            </div>
+            <p className="relative mt-2 text-xs font-medium uppercase tracking-[0.16em] text-[#6fe4c0]">Nothing charged today</p>
+
+            <ul className="relative mt-7 space-y-3">
+              {pricingPlan.features.map((feature, index) => (
+                <li key={feature} className="flex items-start gap-3 text-sm leading-6 text-white/90 transition-transform duration-300 group-hover:translate-x-1" style={{ transitionDelay: `${index * 35}ms` }}>
+                  <Check size={16} className="mt-0.5 shrink-0 text-white" />
+                  <span>{feature}</span>
+                </li>
+              ))}
+            </ul>
+
+            <button
+              type="button"
+              onClick={() => navigate(status === 'authenticated' ? '/billing' : '/signup', status === 'authenticated' ? undefined : { state: { from: { pathname: '/billing' } } })}
+              className="relative mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3.5 text-sm font-semibold text-[#111111] transition duration-300 hover:-translate-y-1 hover:bg-[#f3f3f3] hover:shadow-[0_12px_28px_rgba(255,255,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
+            >
+              Start 3-day free trial
+              <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
+            </button>
+          </motion.div>
         </div>
       </section>
 
