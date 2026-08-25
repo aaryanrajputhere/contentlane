@@ -49,6 +49,20 @@ function useCompactViewport() {
   return isCompact;
 }
 
+function useMobileViewport() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener('change', update);
+    return () => mediaQuery.removeEventListener('change', update);
+  }, []);
+
+  return isMobile;
+}
+
 const navLinks = [
   { label: 'Workflow', href: '#workflow' },
   { label: 'Features', href: '#features' },
@@ -175,7 +189,7 @@ function PreviewCard({
       whileInView={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
       viewport={{ once: true, margin: '-80px' }}
       transition={{ duration: 0.7, ease: 'easeOut' }}
-      className={`group relative h-[26.5rem] w-[15.5rem] overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_30px_80px_rgba(0,0,0,0.12)] sm:w-[16rem] lg:w-[16.5rem] ${mobile ? '' : className ?? ''}`}
+      className={`group relative overflow-hidden rounded-[28px] border border-black/10 bg-white shadow-[0_24px_64px_rgba(0,0,0,0.1)] ${mobile ? 'aspect-[9/16] h-auto w-[min(72vw,17rem)]' : `h-[26.5rem] w-[15.5rem] sm:w-[16rem] lg:w-[16.5rem] ${className ?? ''}`}`}
     >
       <div className={`absolute inset-0 bg-gradient-to-b ${accent}`} />
       <video
@@ -207,13 +221,13 @@ function SectionHeading({
 }) {
   return (
     <div className="mx-auto max-w-3xl text-center">
-      <div className="inline-flex items-center gap-2 rounded-full border border-[#ececec] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#666666] shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#ececec] bg-white px-3.5 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#666666] shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:px-4 sm:text-xs sm:tracking-[0.24em]">
         {eyebrow}
       </div>
-      <h2 className="mt-5 text-[clamp(2rem,4vw,3.3rem)] font-extrabold leading-[0.98] tracking-[-0.06em] text-[#111111]">
+      <h2 className="mx-auto mt-5 max-w-[18ch] text-[2.15rem] font-extrabold leading-[1] tracking-[-0.05em] text-[#111111] sm:max-w-none sm:text-[clamp(2rem,4vw,3.3rem)] sm:leading-[0.98] sm:tracking-[-0.06em]">
         {title}
       </h2>
-      <p className="mx-auto mt-4 max-w-2xl text-[1.02rem] leading-8 text-[#666666]">{description}</p>
+      <p className="mx-auto mt-4 max-w-[34rem] text-[0.98rem] leading-7 text-[#666666] sm:max-w-2xl sm:text-[1.02rem] sm:leading-8">{description}</p>
     </div>
   );
 }
@@ -263,28 +277,39 @@ const reelWallCardHeight = 344;
 
 function ReelWallCard({
   reel,
-  index,
   shouldPlay,
-  registerVideo,
 }: {
   reel: ReelPreview;
-  index: number;
   shouldPlay: boolean;
-  registerVideo: (index: number, node: HTMLVideoElement | null) => void;
 }) {
+  const cardRef = useRef<HTMLElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const isVisible = useInView(cardRef, { amount: 0.6 });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (shouldPlay && isVisible) {
+      void video.play().catch(() => undefined);
+    } else {
+      video.pause();
+    }
+  }, [isVisible, shouldPlay]);
+
   return (
     <article
+      ref={cardRef}
       className="reel-wall-card relative w-[10.125rem] shrink-0 overflow-hidden rounded-[24px] border border-white/15 bg-[#17171b] shadow-[0_24px_55px_rgba(0,0,0,0.34)] sm:w-[11rem]"
       style={{ height: `${reelWallCardHeight}px` }}
       aria-label={`${reel.angle} Reel: ${reel.hook}`}
     >
       <video
-        ref={(node) => registerVideo(index, node)}
+        ref={videoRef}
         src={reel.clip}
         poster={posterFor(reel.clip)}
         className={`h-full w-full object-cover ${reel.crop}`}
         muted
-        autoPlay={shouldPlay}
+        autoPlay={shouldPlay && isVisible}
         loop
         playsInline
         preload="metadata"
@@ -299,11 +324,11 @@ function ReelWallCard({
 
 function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
   const sectionRef = useRef<HTMLElement>(null);
-  const videoRefs = useRef<Array<HTMLVideoElement | null>>([]);
   const sectionVisible = useInView(sectionRef, { amount: 0.12 });
   const [tabVisible, setTabVisible] = useState(() => document.visibilityState === 'visible');
   const [creatorReels, setCreatorReels] = useState<ReelPreview[] | null>(null);
-  const shouldPlay = sectionVisible && tabVisible;
+  const isMobileViewport = useMobileViewport();
+  const shouldPlay = sectionVisible && tabVisible && reducedMotion !== true;
 
   useEffect(() => {
     let active = true;
@@ -334,35 +359,23 @@ function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
     return () => document.removeEventListener('visibilitychange', updateTabVisibility);
   }, []);
 
-  useEffect(() => {
-    for (const video of videoRefs.current) {
-      if (!video) continue;
-      if (shouldPlay) {
-        void video.play().catch(() => undefined);
-      } else {
-        video.pause();
-      }
-    }
-  }, [shouldPlay]);
-
-  const registerVideo = (index: number, node: HTMLVideoElement | null) => {
-    videoRefs.current[index] = node;
-  };
-
   const wallSource = creatorReels ?? reelPreviews;
-  const wallCards = Array.from({ length: Math.max(16, wallSource.length) }, (_, index) => wallSource[index % wallSource.length]);
+  const wallCards = isMobileViewport
+    ? wallSource
+    : Array.from({ length: Math.max(16, wallSource.length) }, (_, index) => wallSource[index % wallSource.length]);
+  const wallGroups = isMobileViewport ? [0] : [0, 1];
 
   return (
-    <section ref={sectionRef} aria-labelledby="reel-wall-title" className="reel-wall relative isolate overflow-hidden py-16 text-[#111111] sm:py-20 lg:py-24">
+    <section ref={sectionRef} aria-labelledby="reel-wall-title" className="reel-wall relative isolate overflow-hidden py-20 text-[#111111] sm:py-20 lg:py-24">
       <div className="pointer-events-none absolute -left-32 top-10 h-80 w-80 rounded-full bg-[#9a8cff]/10 blur-[100px]" />
       <div className="pointer-events-none absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-[#72b8ff]/10 blur-[110px]" />
-      <div className="relative z-10 mx-auto max-w-[1440px] px-6 sm:px-8 lg:px-12">
+      <div className="relative z-10 mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-2xl text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#e8e8e8] bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#777777] shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#e8e8e8] bg-white px-3.5 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#777777] shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:px-4 sm:text-xs sm:tracking-[0.24em]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#7667ff] shadow-[0_0_0_4px_rgba(118,103,255,0.1)]" />
             UGC clip library
           </div>
-          <h2 id="reel-wall-title" className="mt-5 text-[clamp(2.25rem,5vw,4rem)] font-extrabold leading-[0.96] tracking-[-0.065em] text-[#111111]">
+          <h2 id="reel-wall-title" className="mx-auto mt-5 max-w-[17ch] text-[2.15rem] font-extrabold leading-[1] tracking-[-0.05em] text-[#111111] sm:max-w-none sm:text-[clamp(2.25rem,5vw,4rem)] sm:leading-[0.96] sm:tracking-[-0.065em]">
             A library of UGC clips, ready for your next Reel.
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-[1.02rem] leading-7 text-[#666666]">
@@ -371,12 +384,12 @@ function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
         </div>
       </div>
 
-      <div className={`reel-wall-viewport relative z-10 mt-14 ${reducedMotion ? 'reel-wall-reduced-motion' : ''}`} aria-label="Generated Reel examples">
+      <div className={`reel-wall-viewport relative z-10 mt-10 sm:mt-14 ${reducedMotion ? 'reel-wall-reduced-motion' : ''}`} aria-label="Generated Reel examples">
         <div className="reel-wall-track mx-auto flex w-max">
-          {[0, 1].map((groupIndex) => (
+          {wallGroups.map((groupIndex) => (
             <div key={`reel-wall-group-${groupIndex}`} className="reel-wall-group flex items-center gap-4 pr-4 sm:gap-5 sm:pr-5 lg:gap-6 lg:pr-6">
               {wallCards.map((reel, index) => (
-                <ReelWallCard key={`${groupIndex}-${reel.id}-${index}`} reel={reel} index={index} shouldPlay={shouldPlay} registerVideo={(videoIndex, node) => registerVideo(groupIndex * wallCards.length + videoIndex, node)} />
+                <ReelWallCard key={`${groupIndex}-${reel.id}-${index}`} reel={reel} shouldPlay={shouldPlay} />
               ))}
             </div>
           ))}
@@ -441,7 +454,7 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
   };
 
   return (
-    <section ref={sectionRef} id="workflow" className="mx-auto w-full max-w-[1440px] scroll-mt-8 px-6 pb-12 pt-16 sm:px-8 lg:px-12 lg:pb-20 lg:pt-24">
+    <section ref={sectionRef} id="workflow" className="mx-auto w-full max-w-[1440px] scroll-mt-8 px-5 pb-10 pt-20 sm:px-8 sm:pb-12 sm:pt-16 lg:px-12 lg:pb-20 lg:pt-24">
       <SectionHeading
         eyebrow="Your always-on content lane"
         title="One website. One demo. Infinite Reels."
@@ -453,11 +466,11 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
         whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
         viewport={{ once: true, margin: '-80px' }}
         transition={{ duration: 0.65, ease: 'easeOut' }}
-        className="relative mx-auto mt-12 max-w-[1320px]"
+        className="relative mx-auto mt-10 max-w-[1320px] sm:mt-12"
       >
         <div className="grid gap-5 xl:grid-cols-[18rem_6rem_17rem_minmax(0,1fr)] xl:items-center xl:gap-0">
-          <div className="grid justify-items-center gap-5 xl:h-[31rem] xl:grid-rows-[auto_1fr] xl:content-between xl:justify-items-start xl:gap-7">
-            <article className="flex w-full max-w-[10rem] items-center gap-3 rounded-[20px] border border-[#e5e5e5] bg-white p-3 shadow-[0_14px_36px_rgba(0,0,0,0.07)] xl:ml-6" aria-label="Website URL: calai.app">
+          <div className="grid justify-items-center gap-4 sm:gap-5 xl:h-[31rem] xl:grid-rows-[auto_1fr] xl:content-between xl:justify-items-start xl:gap-7">
+            <article className="flex w-full max-w-[11rem] items-center gap-3 rounded-[20px] border border-[#e5e5e5] bg-white p-3 shadow-[0_12px_30px_rgba(0,0,0,0.06)] xl:ml-6 xl:max-w-[10rem]" aria-label="Website URL: calai.app">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eeeaff] text-[#6d58d6]">
                 <Globe2 size={16} strokeWidth={2} />
               </span>
@@ -467,12 +480,12 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
               </span>
             </article>
 
-            <article className="flex min-h-[23rem] w-full max-w-[15rem] flex-col overflow-hidden rounded-[26px] border border-[#e5e5e5] bg-white p-2.5 shadow-[0_16px_45px_rgba(0,0,0,0.06)] xl:h-[25rem] xl:min-h-[25rem]">
+            <article className="flex aspect-[3/4] w-full max-w-[18rem] flex-col overflow-hidden rounded-[26px] border border-[#e5e5e5] bg-white p-2.5 shadow-[0_14px_38px_rgba(0,0,0,0.055)] sm:min-h-[23rem] sm:max-w-[15rem] xl:h-[25rem] xl:min-h-[25rem]">
               <div className="flex items-center justify-between px-2 pb-2 pt-1">
                 <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#666]">Your product demo</span>
                 <Play size={11} fill="currentColor" />
               </div>
-              <div className="relative min-h-[19rem] flex-1 overflow-hidden rounded-[19px] bg-[#ececec]">
+              <div className="relative min-h-0 flex-1 overflow-hidden rounded-[19px] bg-[#ececec] sm:min-h-[19rem]">
                 <video
                   ref={productVideoRef}
                   className="absolute inset-0 h-full w-full object-cover object-[52%_35%]"
@@ -501,7 +514,7 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
             </svg>
           </div>
 
-          <div className="relative z-20 flex min-h-[16rem] flex-col rounded-[24px] border border-white/10 bg-[#111111] p-5 text-white shadow-[0_20px_48px_rgba(0,0,0,0.16)] before:absolute before:-top-5 before:left-1/2 before:h-5 before:w-px before:bg-[#d2d2d2] xl:h-[19rem] xl:before:hidden">
+          <div className="relative z-20 mx-auto flex min-h-[15rem] w-full max-w-[28rem] flex-col rounded-[24px] border border-white/10 bg-[#111111] p-5 text-white shadow-[0_18px_42px_rgba(0,0,0,0.14)] before:absolute before:-top-5 before:left-1/2 before:h-5 before:w-px before:bg-[#d2d2d2] xl:h-[19rem] xl:max-w-none xl:before:hidden">
             <div>
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/50">ContentLane engine</span>
@@ -521,14 +534,14 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
             <span className="production-output-port pointer-events-none absolute right-0 top-1/2 hidden xl:block" aria-hidden="true" />
           </div>
 
-          <div className="production-reel-lane relative z-10 h-[22rem] min-w-0 overflow-hidden rounded-[28px] border border-[#e7e7e7] bg-[linear-gradient(90deg,#f0f0f0_0%,#fafafa_24%,#f4f2ff_100%)] xl:-ml-10" aria-label="Sample Reels generated for calai.app">
+          <div className="production-reel-lane relative z-10 h-[21rem] min-w-0 overflow-hidden rounded-[26px] border border-[#e7e7e7] bg-[linear-gradient(90deg,#f0f0f0_0%,#fafafa_24%,#f4f2ff_100%)] sm:h-[22rem] sm:rounded-[28px] xl:-ml-10" aria-label="Sample Reels generated for calai.app">
             <div className="production-output-trail pointer-events-none absolute inset-x-0 top-1/2 z-0 hidden xl:block" aria-hidden="true">
               <span className="production-output-dot" />
               <span className="production-output-dot" />
               <span className="production-output-dot" />
             </div>
             {reducedMotion || isCompactViewport ? (
-              <div className="production-reel-static absolute inset-0 z-[2] flex snap-x snap-mandatory items-center gap-4 overflow-x-auto px-8 pb-4 pt-10">
+              <div className="production-reel-static absolute inset-0 z-[2] flex snap-x snap-mandatory items-center gap-4 overflow-x-auto px-5 pb-4 pt-8 sm:px-8 sm:pt-10">
                 {reelPreviews.map((reel, index) => (
                   <div key={reel.id} className="relative h-[18rem] w-[10.125rem] shrink-0 snap-center">
                     <ReelCard reel={reel} index={index} shouldPlay={false} registerVideo={registerVideo} />
@@ -619,15 +632,15 @@ export default function LandingPage() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#fcfcfc] text-[#111111]">
+    <main className="relative min-h-screen overflow-x-clip bg-[#fcfcfc] text-[#111111]">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-[-10%] top-[-8%] h-[34rem] w-[34rem] rounded-full bg-[radial-gradient(circle,rgba(48,128,255,0.11),transparent_68%)] blur-3xl" />
         <div className="absolute right-[-8%] top-[18rem] h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,rgba(17,17,17,0.06),transparent_68%)] blur-3xl" />
         <div className="absolute inset-x-0 top-[56rem] h-[40rem] bg-[linear-gradient(180deg,transparent,rgba(17,17,17,0.02),transparent)]" />
       </div>
 
-      <header className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-6 pt-5 sm:px-8 lg:px-12">
-        <div className="text-[13px] font-normal uppercase tracking-[0.34em] text-[#111111]" aria-label="ContentLane">
+      <header className="mx-auto grid w-full max-w-[1400px] grid-cols-1 items-center gap-y-3 px-5 pt-5 sm:flex sm:justify-between sm:px-8 lg:px-12">
+        <div className="min-w-0 text-[12px] font-normal uppercase tracking-[0.3em] text-[#111111] sm:text-[13px] sm:tracking-[0.34em]" aria-label="ContentLane">
           ContentLane
         </div>
         <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-10 text-sm font-medium text-[#666666] md:flex">
@@ -637,28 +650,28 @@ export default function LandingPage() {
             </a>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
           {user?.role === 'ADMIN' ? (
             <button
               onClick={() => navigate('/admin')}
-              className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black"
+              className="min-h-11 min-w-0 flex-1 rounded-full border border-black/10 bg-white px-3 py-2.5 text-xs font-medium text-[#111111] transition hover:border-black sm:min-h-0 sm:flex-none sm:px-4 sm:text-sm"
             >
               Admin panel
             </button>
           ) : null}
           {status === 'authenticated' ? (
-            <button onClick={() => navigate(billing?.hasAccess ? '/projects' : billing?.freeAccess.projectId ? `/projects/${billing.freeAccess.projectId}/hooks` : '/onboarding')} className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black">
+            <button onClick={() => navigate(billing?.hasAccess ? '/projects' : billing?.freeAccess.projectId ? `/projects/${billing.freeAccess.projectId}/hooks` : '/onboarding')} className="min-h-11 min-w-0 flex-1 rounded-full border border-black/10 bg-white px-3 py-2.5 text-xs font-medium text-[#111111] transition hover:border-black sm:min-h-0 sm:flex-none sm:px-4 sm:text-sm">
               {billing?.hasAccess ? 'Dashboard' : 'Continue free hooks'}
             </button>
           ) : null}
           <Show when="signed-out">
             <SignInButton mode="modal">
-              <button className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black">
+              <button className="min-h-11 flex-1 rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium text-[#111111] transition hover:border-black sm:min-h-0 sm:flex-none">
                 Sign in
               </button>
             </SignInButton>
             <SignUpButton mode="modal">
-              <button className="rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white shadow-[0_10px_26px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcfcfc]">
+              <button className="min-h-11 flex-1 rounded-full bg-[#111111] px-5 py-2.5 text-sm font-medium text-white shadow-[0_10px_26px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fcfcfc] sm:min-h-0 sm:flex-none">
                 Sign up
               </button>
             </SignUpButton>
@@ -670,7 +683,7 @@ export default function LandingPage() {
       </header>
 
       <section
-        className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1440px] flex-col px-6 pt-14 sm:px-8 lg:px-12 lg:pt-16"
+        className="mx-auto flex w-full max-w-[1440px] flex-col px-5 pt-12 sm:min-h-[calc(100vh-72px)] sm:px-8 sm:pt-14 lg:px-12 lg:pt-16"
       >
         <motion.div
           initial={reducedMotion ? undefined : { opacity: 0, y: 14, filter: 'blur(8px)' }}
@@ -678,20 +691,20 @@ export default function LandingPage() {
           transition={reducedMotion ? undefined : { duration: 0.7, ease: 'easeOut' }}
           className="mx-auto flex w-full max-w-5xl flex-col items-center text-center"
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#ececec] bg-white px-4 py-2 text-sm font-medium text-[#666666] shadow-[0_8px_24px_rgba(0,0,0,0.04)]">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#ececec] bg-white px-3.5 py-2 text-[0.78rem] font-medium text-[#666666] shadow-[0_8px_24px_rgba(0,0,0,0.04)] sm:px-4 sm:text-sm">
             <span className="h-1.5 w-1.5 rounded-full bg-[#111111]" />
             Demo-led content for SaaS founders
           </div>
 
-          <h1 className="mt-7 max-w-[11ch] cursor-default text-[clamp(3.55rem,7vw,5.15rem)] font-extrabold leading-[0.94] tracking-[-0.06em] text-[#111111] sm:max-w-[12ch]">
+          <h1 className="mt-6 max-w-[12ch] cursor-default text-[2.7rem] font-extrabold leading-[0.96] tracking-[-0.052em] text-[#111111] min-[390px]:text-[2.85rem] sm:mt-7 sm:text-[clamp(3.55rem,7vw,5.15rem)] sm:leading-[0.94] sm:tracking-[-0.06em]">
             Generate your first viral SaaS Reel in under a minute.
           </h1>
 
-          <p className="mt-6 max-w-2xl text-[1.04rem] leading-8 text-[#666666] sm:text-[1.08rem]">
+          <p className="mt-5 max-w-[35rem] text-[0.98rem] leading-7 text-[#666666] sm:mt-6 sm:max-w-2xl sm:text-[1.08rem] sm:leading-8">
             Paste your website. ContentLane creates the first few seconds that stop the scroll, then combines them with your real product demo.
           </p>
 
-          <div className="mt-8 w-full max-w-[41rem] rounded-[30px] border border-[#ececec] bg-white p-2 shadow-[0_18px_48px_rgba(0,0,0,0.08)]">
+          <div className="mt-7 w-full max-w-[41rem] rounded-[26px] border border-[#ececec] bg-white p-2 shadow-[0_16px_40px_rgba(0,0,0,0.07)] sm:mt-8 sm:rounded-[30px]">
             <label className="sr-only" htmlFor="website">
               Website URL
             </label>
@@ -702,13 +715,13 @@ export default function LandingPage() {
                 value={website}
                 onChange={(event) => setWebsite(event.target.value)}
                 placeholder="https://yourcompany.com"
-                className="min-w-0 flex-1 rounded-[24px] border-0 bg-transparent px-5 py-4 text-[0.95rem] font-medium text-[#111111] outline-none placeholder:text-[#999999] focus:ring-0"
+                className="min-h-12 min-w-0 flex-1 rounded-[22px] border-0 bg-transparent px-4 py-3 text-[0.95rem] font-medium text-[#111111] outline-none placeholder:text-[#999999] focus:ring-0 sm:rounded-[24px] sm:px-5 sm:py-4"
               />
               <button
                 type="button"
                 onClick={() => void startProject()}
                 disabled={loading || !website.trim()}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-[#111111] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#111111] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(0,0,0,0.14)] transition hover:-translate-y-0.5 hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? <Loader2 className="animate-spin" size={17} /> : <Wand2 size={17} />}
                 Generate 24 free hooks
@@ -718,7 +731,16 @@ export default function LandingPage() {
 
           <p className="mt-4 max-w-xl text-sm leading-6 text-[#666666]">No subscription required. Choose up to 8, then start your free trial when you’re ready to make Reels.</p>
 
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-[#666666]">
+          <ol className="mt-5 grid w-full max-w-[22rem] text-left sm:hidden" aria-label="How ContentLane creates a Reel">
+            {['Creator hook first', 'Product demo second', 'Ready-to-post ad after approval'].map((step, index) => (
+              <li key={step} className="relative flex min-h-11 items-center gap-3 pl-1 text-[0.82rem] font-medium text-[#666666] not-last:after:absolute not-last:after:bottom-[-0.35rem] not-last:after:left-[0.9rem] not-last:after:top-[2.45rem] not-last:after:w-px not-last:after:bg-[#dedede]">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#e5e5e5] bg-white font-mono text-[0.62rem] text-[#777777] shadow-[0_6px_18px_rgba(0,0,0,0.04)]">0{index + 1}</span>
+                {step}
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-5 hidden flex-wrap items-center justify-center gap-4 text-sm text-[#666666] sm:flex">
             <span>Creator hook first</span>
             <span className="hidden text-[#b0b0b0] sm:inline">-&gt;</span>
             <span>Product demo second</span>
@@ -739,7 +761,7 @@ export default function LandingPage() {
           )}
         </motion.div>
 
-        <div className="relative isolate mt-8 flex flex-1 items-end justify-center overflow-hidden pb-20 pt-4 sm:pb-24">
+        <div className="relative isolate mt-10 flex items-end justify-center overflow-hidden pb-10 pt-2 sm:mt-8 sm:flex-1 sm:pb-24 sm:pt-4">
           <motion.div
             initial={reducedMotion ? undefined : { opacity: 0, y: 18, filter: 'blur(10px)' }}
             whileInView={reducedMotion ? undefined : { opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -757,11 +779,19 @@ export default function LandingPage() {
                     exit={reducedMotion ? undefined : { opacity: 0, x: -18 }}
                     transition={{ duration: 0.24, ease: 'easeOut' }}
                     className="landing-preview-card"
+                    drag={reducedMotion ? false : 'x'}
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.14}
+                    onDragEnd={(_, info) => {
+                      if (Math.abs(info.offset.x) < 45 && Math.abs(info.velocity.x) < 350) return;
+                      const direction = info.offset.x < 0 || info.velocity.x < -350 ? 1 : -1;
+                      setActivePreviewIndex((current) => (current + direction + previewCards.length) % previewCards.length);
+                    }}
                   >
                     <PreviewCard {...previewCards[activePreviewIndex]} mobile />
                   </motion.div>
                 </AnimatePresence>
-                <div className="flex items-center gap-1.5" role="tablist" aria-label="Preview videos">
+                <div className="flex items-center" role="tablist" aria-label="Preview videos">
                   {previewCards.map((card, index) => (
                     <button
                       key={card.id}
@@ -770,8 +800,10 @@ export default function LandingPage() {
                       aria-label={`Show preview ${index + 1}`}
                       aria-selected={activePreviewIndex === index}
                       onClick={() => setActivePreviewIndex(index)}
-                      className={`h-1.5 rounded-full transition-all ${activePreviewIndex === index ? 'w-6 bg-[#111111]' : 'w-1.5 bg-black/20'}`}
-                    />
+                      className="grid h-11 w-11 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20"
+                    >
+                      <span className={`h-1.5 rounded-full transition-all ${activePreviewIndex === index ? 'w-6 bg-[#111111]' : 'w-1.5 bg-black/20'}`} />
+                    </button>
                   ))}
                 </div>
               </div>
@@ -796,14 +828,14 @@ export default function LandingPage() {
 
       <ReelWall reducedMotion={reducedMotion} />
 
-      <section id="features" className="mx-auto w-full max-w-[1440px] px-6 pb-8 pt-10 sm:px-8 lg:px-12 lg:pt-14">
+      <section id="features" className="mx-auto w-full max-w-[1440px] px-5 pb-8 pt-20 sm:px-8 sm:pt-10 lg:px-12 lg:pt-14">
         <SectionHeading
           eyebrow="Features"
           title="Everything needed to turn a website into a campaign"
           description="The page should communicate a clear funnel: find the brand, shape the hooks, generate the visuals, and hand it to the editor."
         />
 
-        <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-9 grid gap-4 sm:mt-10 sm:gap-5 md:grid-cols-2 xl:grid-cols-3">
           {featureCards.map((feature, index) => {
             const Icon = feature.icon;
             return (
@@ -813,7 +845,7 @@ export default function LandingPage() {
                 whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-80px' }}
                 transition={{ duration: 0.55, delay: index * 0.04, ease: 'easeOut' }}
-                className="rounded-[28px] border border-[#ececec] bg-white p-6 shadow-[0_14px_38px_rgba(0,0,0,0.05)]"
+                className="rounded-[24px] border border-[#ececec] bg-white p-5 shadow-[0_12px_30px_rgba(0,0,0,0.045)] sm:rounded-[28px] sm:p-6"
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#111111] text-white shadow-[0_12px_24px_rgba(0,0,0,0.12)]">
                   <Icon size={18} />
@@ -826,7 +858,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="pricing" className="mx-auto w-full max-w-[1440px] px-6 pb-8 pt-10 sm:px-8 lg:px-12 lg:pt-14">
+      <section id="pricing" className="mx-auto w-full max-w-[1440px] px-5 pb-8 pt-20 sm:px-8 sm:pt-10 lg:px-12 lg:pt-14">
         <SectionHeading
           eyebrow="Pricing"
           title="Choose how much you want to ship"
@@ -834,9 +866,9 @@ export default function LandingPage() {
         />
 
         <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-2">
-          {pricingPlans.map((plan, planIndex) => <motion.article key={plan.id} initial={reducedMotion ? false : { opacity: 0, y: 24 }} whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: .5, delay: planIndex * .08 }} className={`overflow-hidden rounded-[30px] p-8 sm:p-10 ${plan.id === 'pro' ? 'bg-[#111] text-white shadow-[0_22px_55px_rgba(0,0,0,.18)]' : 'border border-black/10 bg-white text-[#111]'}`}>
-            <div className="flex items-start justify-between gap-4"><div><h3 className="text-2xl font-black tracking-[-.05em]">{plan.name}</h3><p className={`mt-2 text-sm ${plan.id === 'pro' ? 'text-white/60' : 'text-[#666]'}`}>{plan.description}</p></div><span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[.14em] ${plan.id === 'pro' ? 'bg-[#b8f36b] text-[#111]' : 'bg-[#f0f0eb]'}`}>7-day trial</span></div>
-            <p className="mt-8 text-5xl font-black tracking-[-.07em]">${plan.price}<span className={`ml-1 text-sm font-medium tracking-normal ${plan.id === 'pro' ? 'text-white/55' : 'text-[#777]'}`}>/ month</span></p>
+          {pricingPlans.map((plan, planIndex) => <motion.article key={plan.id} initial={reducedMotion ? false : { opacity: 0, y: 24 }} whileInView={reducedMotion ? undefined : { opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: .5, delay: planIndex * .08 }} className={`overflow-hidden rounded-[26px] p-6 sm:rounded-[30px] sm:p-10 ${plan.id === 'pro' ? 'bg-[#111] text-white shadow-[0_22px_55px_rgba(0,0,0,.18)]' : 'border border-black/10 bg-white text-[#111]'}`}>
+            <div className="flex flex-col items-start gap-4 min-[390px]:flex-row min-[390px]:justify-between"><div><h3 className="text-2xl font-black tracking-[-.05em]">{plan.name}</h3><p className={`mt-2 text-sm ${plan.id === 'pro' ? 'text-white/60' : 'text-[#666]'}`}>{plan.description}</p></div><span className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black uppercase tracking-[.14em] ${plan.id === 'pro' ? 'bg-[#b8f36b] text-[#111]' : 'bg-[#f0f0eb]'}`}>7-day trial</span></div>
+            <p className="mt-7 text-[2.75rem] font-black tracking-[-.07em] sm:mt-8 sm:text-5xl">${plan.price}<span className={`ml-1 text-sm font-medium tracking-normal ${plan.id === 'pro' ? 'text-white/55' : 'text-[#777]'}`}>/ month</span></p>
             <div className="mt-7 flex h-12 items-end gap-1" aria-hidden="true">{Array.from({ length: plan.id === 'pro' ? 10 : 6 }, (_, index) => <span key={index} className={`flex-1 rounded-t-sm ${plan.id === 'pro' ? 'bg-[#b8f36b]' : 'bg-[#111]'}`} style={{ height: `${30 + index * 7}%` }} />)}</div>
             <ul className="mt-7 space-y-3 text-sm"><li className="flex gap-3"><Check size={16} />Unlimited hook generation</li><li className="flex gap-3"><Check size={16} />{plan.videos} rendered videos per billing period</li><li className="flex gap-3"><Check size={16} />Website analysis, editing, and exports</li></ul>
             <button type="button" onClick={() => navigate(status === 'authenticated' ? `/billing?plan=${plan.id}` : '/signup', status === 'authenticated' ? undefined : { state: { from: { pathname: '/billing', search: `?plan=${plan.id}` } } })} className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-black transition hover:-translate-y-1 ${plan.id === 'pro' ? 'bg-white text-[#111]' : 'bg-[#111] text-white'}`}>Choose {plan.name}<ArrowRight size={16} /></button>
@@ -844,7 +876,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section id="faq" className="mx-auto w-full max-w-[1440px] px-6 pb-20 pt-10 sm:px-8 lg:px-12 lg:pt-14">
+      <section id="faq" className="mx-auto w-full max-w-[1440px] px-5 pb-20 pt-20 sm:px-8 sm:pt-10 lg:px-12 lg:pt-14">
         <SectionHeading
           eyebrow="FAQ"
           title="Answers to the questions buyers ask before they start"
@@ -853,7 +885,7 @@ export default function LandingPage() {
 
         <div className="mx-auto mt-10 grid max-w-5xl gap-4">
           {faqs.map((faq) => (
-            <details key={faq.question} className="group rounded-[24px] border border-[#ececec] bg-white p-6 shadow-[0_12px_30px_rgba(0,0,0,0.04)]">
+            <details key={faq.question} className="group rounded-[22px] border border-[#ececec] bg-white p-5 shadow-[0_10px_26px_rgba(0,0,0,0.035)] sm:rounded-[24px] sm:p-6">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left text-[1.02rem] font-semibold tracking-[-0.03em] text-[#111111]">
                 {faq.question}
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#ececec] bg-[#fcfcfc] text-[#666666] transition group-open:rotate-45">
@@ -866,12 +898,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-[1440px] px-6 pb-16 sm:px-8 lg:px-12">
-        <div className="rounded-[36px] bg-[#111111] px-6 py-8 text-white shadow-[0_24px_60px_rgba(0,0,0,0.18)] sm:px-8 sm:py-10">
+      <section className="mx-auto w-full max-w-[1440px] px-5 pb-20 sm:px-8 sm:pb-16 lg:px-12">
+        <div className="rounded-[30px] bg-[#111111] px-5 py-8 text-white shadow-[0_22px_54px_rgba(0,0,0,0.16)] sm:rounded-[36px] sm:px-8 sm:py-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">Final CTA</p>
-              <h2 className="mt-4 text-[clamp(2rem,4vw,3.15rem)] font-extrabold leading-[0.98] tracking-[-0.06em]">
+              <h2 className="mt-4 text-[2.15rem] font-extrabold leading-[1] tracking-[-0.05em] sm:text-[clamp(2rem,4vw,3.15rem)] sm:leading-[0.98] sm:tracking-[-0.06em]">
                 Start from one website and turn it into a content system.
               </h2>
               <p className="mt-4 max-w-xl text-[1rem] leading-7 text-white/72">
@@ -881,7 +913,7 @@ export default function LandingPage() {
             <button
               type="button"
               onClick={scrollToHero}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f4f4f4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111]"
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3.5 text-sm font-semibold text-[#111111] transition hover:-translate-y-0.5 hover:bg-[#f4f4f4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[#111111] sm:w-auto"
             >
               Generate 24 free hooks
               <Rocket size={16} />

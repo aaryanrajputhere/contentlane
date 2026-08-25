@@ -147,6 +147,8 @@ body.project-generation-active .support-widget {
   .reel-wall-viewport {
     overflow-x: auto;
     overscroll-behavior-x: contain;
+    scroll-padding-inline: 1.25rem;
+    scroll-snap-type: x mandatory;
     -webkit-mask-image: none;
     mask-image: none;
     scrollbar-width: none;
@@ -158,12 +160,21 @@ body.project-generation-active .support-widget {
 
   .reel-wall-track {
     animation: none;
-    padding: 0 1.5rem 1.25rem;
-    scroll-snap-type: x mandatory;
+    padding: 0 1.25rem 1.25rem;
   }
 
   .reel-wall-card {
     scroll-snap-align: center;
+  }
+
+  .production-reel-static {
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: 1.25rem;
+    scrollbar-width: none;
+  }
+
+  .production-reel-static::-webkit-scrollbar {
+    display: none;
   }
 }
 
