@@ -46,7 +46,7 @@ import { deleteStoredAsset, storeUploadedAsset } from "../lib/asset-storage";
 import { createAnalysisJsonRecorder, errorJson } from "../lib/analysis-json";
 import { creatorToCharacter } from "../lib/creator-library";
 import { renderQueue, type RenderJobInput } from "../lib/render-queue";
-import { resolveCreatorClipAssignments } from "../lib/creator-clip-matching";
+import { resolveCreatorClipAssignments, resolveStoredCreatorClipAssignments } from "../lib/creator-clip-matching";
 import { FREE_HOOK_SELECTION_LIMIT, getFreeAccess, hasPaidAccess, requireFreeProjectAccess } from "../lib/access";
 
 const HOOK_SELECTION_TARGET = 8;
@@ -196,6 +196,37 @@ function resolveSelectedCharacter(
   }
   if (!project.selectedCharacter) return null;
   return creatorCharacterSchema.parse(project.selectedCharacter);
+}
+
+async function loadGenerationCreatorContext(project: Awaited<ReturnType<typeof getProjectOrFail>>) {
+  const parsedSelection = project.creatorSelection
+    ? projectCreatorSelectionSchema.safeParse(project.creatorSelection)
+    : null;
+  const selectedIds = parsedSelection?.success
+    ? parsedSelection.data.characters.map((character) => character.id)
+    : project.selectedCharacter
+      ? [creatorCharacterSchema.parse(project.selectedCharacter).id]
+      : [];
+  const creators = await prisma.creator.findMany({
+    where: selectedIds.length > 0
+      ? { id: { in: selectedIds }, clips: { some: {} } }
+      : { clips: { some: {} } },
+    include: { clips: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  if (creators.length === 0) {
+    throw new ApiError(409, "PROJECT_INCOMPLETE", "Add at least one creator clip before generating hooks");
+  }
+
+  const selection = parsedSelection?.success
+    ? parsedSelection.data
+    : project.selectedCharacter
+      ? { mode: "single" as const, characters: [creatorToCharacter(creators[0]!)] }
+      : {
+          mode: creators.length >= 2 ? "mix" as const : "single" as const,
+          characters: creators.map(creatorToCharacter),
+        };
+  return { creators, selection };
 }
 
 async function clearCreativeArtifacts(projectId: string) {
@@ -949,6 +980,7 @@ export const generateConcepts: RequestHandler = async (req, res) => {
     throw new ApiError(409, "BRAND_PROFILE_CONFIRMATION_REQUIRED", "Confirm the brand profile before generating hooks");
   }
   const profile = asBrandProfile(project.brandProfile);
+  const creatorContext = await loadGenerationCreatorContext(project);
   if (append && forceRegenerate) throw new ApiError(400, "INVALID_GENERATION_MODE", "Append and replacement modes cannot be combined");
   const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
   const rejectedReviewedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.REJECTED);
@@ -1061,6 +1093,27 @@ export const generateConcepts: RequestHandler = async (req, res) => {
           }
         }
         await recorder?.write('hooks', { source, concepts });
+        const sortOrderOffset = append
+          ? project.concepts.reduce((maximum, concept) => Math.max(maximum, concept.sortOrder), -1) + 1
+          : 0;
+        const generatedMatchConcepts = concepts.map((concept, index) => ({
+          id: `generated-${index}`,
+          videoDirection: concept.videoDirection,
+          sortOrder: sortOrderOffset + index,
+        }));
+        const persistedConcepts = append
+          ? project.concepts.filter((concept) => concept.assignedCreatorId && concept.assignedClipId)
+          : [];
+        const assignments = resolveCreatorClipAssignments(
+          [...persistedConcepts, ...generatedMatchConcepts],
+          creatorContext.creators,
+          creatorContext.selection,
+        );
+        const assignmentsByConceptId = new Map(assignments.map((assignment) => [assignment.conceptId, assignment]));
+        const generatedAssignments = concepts.map((concept, index) => assignmentsByConceptId.get(`generated-${index}`));
+        if (generatedAssignments.some((assignment) => !assignment)) {
+          throw new ApiError(409, "PROJECT_INCOMPLETE", "A matching creator clip is missing for one or more hooks");
+        }
         await prisma.$transaction(async (tx) => {
           if (!paid) {
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${project.id}))`;
@@ -1078,11 +1131,10 @@ export const generateConcepts: RequestHandler = async (req, res) => {
             data: { selectedConceptId: null },
           });
           if (!append) await tx.hookConcept.deleteMany({ where: { projectId: project.id } });
-          const sortOrderOffset = append
-            ? project.concepts.reduce((maximum, concept) => Math.max(maximum, concept.sortOrder), -1) + 1
-            : 0;
           await tx.hookConcept.createMany({
-            data: concepts.map((concept) => ({
+            data: concepts.map((concept, index) => ({
+              assignedCreatorId: generatedAssignments[index]!.creatorId,
+              assignedClipId: generatedAssignments[index]!.clipId,
               projectId: project.id,
               angle: concept.angle,
               hookText: concept.hookText,
@@ -1460,12 +1512,20 @@ export const renderProject: RequestHandler = async (req, res) => {
     : project.selectedCharacter
       ? { mode: 'single' as const, characters: [creatorCharacterSchema.parse(project.selectedCharacter)] }
       : null;
-  if (!selection) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Select a creator before rendering');
+  const assignedCreatorIds = concepts.map((concept) => concept.assignedCreatorId).filter((creatorId): creatorId is string => Boolean(creatorId));
+  if (!selection && assignedCreatorIds.length !== concepts.length) {
+    throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Select a creator before rendering');
+  }
   const creators = await prisma.creator.findMany({
-    where: { id: { in: selection.characters.map((character) => character.id) } },
+    where: { id: { in: selection?.characters.map((character) => character.id) ?? assignedCreatorIds } },
     include: { clips: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
   });
-  const assignments = resolveCreatorClipAssignments(concepts, creators, selection);
+  const storedAssignments = resolveStoredCreatorClipAssignments(concepts, creators);
+  const assignments = storedAssignments.length === concepts.length
+    ? storedAssignments
+    : selection
+      ? resolveCreatorClipAssignments(concepts, creators, selection)
+      : [];
   if (assignments.length !== concepts.length) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'A matching creator clip is missing for one or more hooks');
   const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments };
   const job = await createJob(project.id, JobType.RENDER_REELS, input as unknown as Prisma.InputJsonValue);

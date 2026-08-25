@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveCreatorClipAssignments } from '../lib/creator-clip-matching';
+import { resolveCreatorClipAssignments, resolveStoredCreatorClipAssignments } from '../lib/creator-clip-matching';
 
 const creator = (id: string, clips: Array<{ id: string; tags: string[] }>) => ({
   id,
@@ -84,4 +84,22 @@ test('rebalances duplicate persisted clips across the remaining clip library', (
   );
 
   assert.deepEqual(result.map((item) => item.clipId), ['clip-1', 'clip-2']);
+});
+
+test('keeps valid persisted creator and clip assignments authoritative', () => {
+  const concepts = [
+    { ...concept('hook-1', 'office'), assignedCreatorId: 'creator-1', assignedClipId: 'clip-office' },
+    { ...concept('hook-2', 'outdoors'), assignedCreatorId: 'creator-1', assignedClipId: 'clip-outdoors' },
+  ];
+  const creators = [creator('creator-1', [
+    { id: 'clip-office', tags: ['office'] },
+    { id: 'clip-outdoors', tags: ['outdoors'] },
+    { id: 'clip-other', tags: ['other'] },
+  ])];
+
+  const stored = resolveStoredCreatorClipAssignments(concepts, creators);
+  const resolved = resolveCreatorClipAssignments(concepts, creators, { mode: 'single', characters: [{ id: 'creator-1' }] });
+
+  assert.deepEqual(stored.map((item) => item.clipId), ['clip-office', 'clip-outdoors']);
+  assert.deepEqual(resolved.map((item) => item.clipId), ['clip-office', 'clip-outdoors']);
 });

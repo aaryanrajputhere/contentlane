@@ -13,6 +13,7 @@ import authRouter from './routes/auth.router';
 import projectsRouter from './routes/projects.router';
 import jobsRouter from './routes/jobs.router';
 import creatorsRouter from './routes/creators.router';
+import { getPublicCreatorClips } from './controllers/creators.controller';
 import clipsRouter from './routes/clips.router';
 import billingRouter from './routes/billing.router';
 import { handleDodoWebhook } from './controllers/dodo-webhook.controller';
@@ -48,6 +49,7 @@ export function createApp() {
   app.get('/health/ready', async (_req, res) => res.json({ status: 'ready' }));
   app.use('/api/v1/auth', authRouter);
   app.use('/api/v1/support', supportRouter);
+  app.get('/api/v1/creator-showcase', getPublicCreatorClips);
   app.use('/api/v1/admin/support', adminSupportRouter);
   app.use('/api/v1/admin', adminRouter);
   app.use('/api/v1/billing', requireAuth, billingRouter);

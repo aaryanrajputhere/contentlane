@@ -525,13 +525,15 @@ test("hook batches prefetch after five selections and stop at 24 hooks", async (
 
     const initialResponse = await generate();
     assert.equal(initialResponse.status, 200);
-    const initial = (await initialResponse.json()) as { project: { concepts: Array<{ id: string }> } };
+    const initial = (await initialResponse.json()) as { project: { concepts: Array<{ id: string; assignedCreatorId: string | null; assignedClipId: string | null }> } };
     assert.equal(initial.project.concepts.length, 8);
+    assert.equal(initial.project.concepts.every((concept) => Boolean(concept.assignedCreatorId && concept.assignedClipId)), true);
 
     const earlyAppend = await generate(true);
     assert.equal(earlyAppend.status, 200);
-    const early = (await earlyAppend.json()) as { project: { concepts: Array<{ id: string }> } };
+    const early = (await earlyAppend.json()) as { project: { concepts: Array<{ id: string; assignedClipId: string | null }> } };
     assert.equal(early.project.concepts.length, 16);
+    assert.equal(early.project.concepts.slice(8).every((concept) => Boolean(concept.assignedClipId)), true);
 
     for (const concept of initial.project.concepts.slice(0, 5)) {
       const response = await review(concept.id, "LIKED");

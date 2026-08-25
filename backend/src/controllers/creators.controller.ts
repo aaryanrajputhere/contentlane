@@ -93,6 +93,38 @@ export const getCreators: RequestHandler = async (req, res) => {
   res.json({ creators: creators.map(mapCreator) });
 };
 
+export const getPublicCreatorClips: RequestHandler = async (_req, res) => {
+  const creators = await prisma.creator.findMany({
+    where: {
+      clips: {
+        some: { provider: 'cloudinary', mimeType: { startsWith: 'video/' } },
+      },
+    },
+    select: {
+      name: true,
+      clips: {
+        where: { provider: 'cloudinary', mimeType: { startsWith: 'video/' } },
+        select: { url: true, title: true, tags: true },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        take: 4,
+      },
+    },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    take: 2,
+  });
+
+  const clips = Array.from({ length: 4 }, (_, clipIndex) =>
+    creators.flatMap((creator) => {
+      const clip = creator.clips[clipIndex];
+      return clip ? [{ ...clip, creatorName: creator.name }] : [];
+    }),
+  ).flat();
+
+  res.json({
+    clips,
+  });
+};
+
 export const createCreator: RequestHandler = async (req, res) => {
   const { name, description, sortOrder } = creatorMutationSchema.parse(
     req.body,

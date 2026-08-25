@@ -25,10 +25,31 @@ type CreatorSelection = {
 
 export type ResolvedCreatorClipAssignment = {
   conceptId: string;
+  creatorId: string;
   clipId: string;
   clipUrl: string;
   creatorName: string;
 };
+
+export function resolveStoredCreatorClipAssignments(
+  concepts: MatchConcept[],
+  creators: MatchCreator[],
+): ResolvedCreatorClipAssignment[] {
+  const creatorsById = new Map(creators.map((creator) => [creator.id, creator]));
+  const usedClipIds = new Set<string>();
+  const assignments: ResolvedCreatorClipAssignment[] = [];
+
+  for (const concept of concepts) {
+    if (!concept.assignedCreatorId || !concept.assignedClipId) return [];
+    const creator = creatorsById.get(concept.assignedCreatorId);
+    const clip = creator?.clips.find((candidate) => candidate.id === concept.assignedClipId);
+    if (!creator || !clip || usedClipIds.has(clip.id)) return [];
+    usedClipIds.add(clip.id);
+    assignments.push({ conceptId: concept.id, creatorId: creator.id, clipId: clip.id, clipUrl: clip.url, creatorName: creator.name });
+  }
+
+  return assignments;
+}
 
 function normalizeTags(tags: string[]) {
   return tags.flatMap((tag) => tag.toLowerCase().split(/[\s_-]+/)).filter(Boolean);
@@ -124,7 +145,7 @@ export function resolveCreatorClipAssignments(
     if (usedClipIds.has(clip.id)) return;
     usedClipIds.add(clip.id);
     persistedClipIdsByCreator.set(creator.id, usedClipIds);
-    persisted.set(concept.id, { conceptId: concept.id, clipId: clip.id, clipUrl: clip.url, creatorName: creator.name });
+    persisted.set(concept.id, { conceptId: concept.id, creatorId: creator.id, clipId: clip.id, clipUrl: clip.url, creatorName: creator.name });
   });
   const fallbackConcepts = concepts
     .filter((concept) => !persisted.has(concept.id))
@@ -142,7 +163,7 @@ export function resolveCreatorClipAssignments(
   fallbackConcepts.forEach((concept, index) => {
     const creator = creatorByConcept[index];
     const clip = clipsByConcept.get(concept.id);
-    if (creator && clip) fallbackAssignments.set(concept.id, { conceptId: concept.id, clipId: clip.id, clipUrl: clip.url, creatorName: creator.name });
+    if (creator && clip) fallbackAssignments.set(concept.id, { conceptId: concept.id, creatorId: creator.id, clipId: clip.id, clipUrl: clip.url, creatorName: creator.name });
   });
 
   return concepts.flatMap((concept) => {
