@@ -110,7 +110,7 @@ export const getPublicCreatorClips: RequestHandler = async (_req, res) => {
       },
     },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-    take: 2,
+    take: 3,
   });
 
   const clips = Array.from({ length: 4 }, (_, clipIndex) =>
