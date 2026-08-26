@@ -6,12 +6,14 @@ import {
   changePlanInputSchema,
   checkoutInputSchema,
   conceptSelectionSchema,
+  conceptEditSchema,
   conceptStageInputSchema,
   creatorCharacterSchema,
   creatorClipMutationSchema,
   creatorListQuerySchema,
   creatorMutationSchema,
   exportPayloadSchema,
+  brandDemoRenameSchema,
   hookPreferenceSelectionSchema,
   hookPreferencesSchema,
   mediaStageInputSchema,
@@ -68,6 +70,30 @@ test("generation payload schemas set sane defaults", () => {
     conceptSelectionSchema.parse({ conceptId: null }).conceptId,
     null,
   );
+});
+
+test('concept edits require bounded copy and paired clip assignments', () => {
+  const creatorId = 'cm00000000000000000000001';
+  const clipId = 'cm00000000000000000000002';
+  const value = conceptEditSchema.parse({
+    hookText: '  A sharper opening line  ',
+    demoOverlayText: '  Show the result  ',
+    creatorId,
+    clipId,
+  });
+  assert.equal(value.hookText, 'A sharper opening line');
+  assert.equal(value.clipId, clipId);
+  assert.equal(conceptEditSchema.parse({ hookText: 'Hook', demoOverlayText: 'Demo', brandDemoAssetId: null }).brandDemoAssetId, null);
+  assert.equal(conceptEditSchema.parse({ hookText: 'Hook', demoOverlayText: 'Demo', brandDemoAssetId: clipId }).brandDemoAssetId, clipId);
+  assert.throws(() => conceptEditSchema.parse({ hookText: '', demoOverlayText: 'Demo' }));
+  assert.throws(() => conceptEditSchema.parse({ hookText: 'Hook', demoOverlayText: 'Demo', creatorId }), /provided together/);
+  assert.throws(() => conceptEditSchema.parse({ hookText: 'x'.repeat(241), demoOverlayText: 'Demo' }));
+});
+
+test('brand demo names are trimmed and bounded', () => {
+  assert.equal(brandDemoRenameSchema.parse({ name: '  Dashboard tour  ' }).name, 'Dashboard tour');
+  assert.throws(() => brandDemoRenameSchema.parse({ name: '' }));
+  assert.throws(() => brandDemoRenameSchema.parse({ name: 'x'.repeat(81) }));
 });
 
 test('billing and render payloads require known plans and flexible unique selections', () => {

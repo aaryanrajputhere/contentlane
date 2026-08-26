@@ -1,25 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent, ReactNode } from 'react';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Edit3, Home, Layers3, Save, Settings2, Sparkles, ThumbsDown, ThumbsUp, Video } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, Edit3, Home, Layers3, Save, Settings2, Sparkles, Video } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiClientError } from '../lib/api';
 import { assignCreatorsToConcepts, effectiveCreatorSelection } from '../lib/creatorAssignments';
-import { getCaptionStyle } from '../lib/captionStyle';
 import { DEFAULT_HOOK_PATTERNS } from '../data/hookPatterns';
 import type { BillingStatus, ConceptCard, CreatorRecord, GenerationJob, GenerationLanguage, HookPreferenceExample, ProjectResponse, ProjectSnapshot } from '../types/domain';
+import BrandDemoLibrary from './BrandDemoLibrary';
+import { HookEditSheet, SwipeReview } from './ProjectPage';
+import type { ReviewAssignment } from './ProjectPage';
+import { brandDemoName, brandDemos } from '../lib/brandDemos';
+import HookVideoPreview from './HookVideoPreview';
 
 const button = 'inline-flex items-center justify-center gap-2 rounded-full bg-[#111] px-5 py-3 text-sm font-bold text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-50';
 const secondary = 'inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold text-[#222] transition hover:border-black/25 hover:bg-[#f3f3f0] disabled:opacity-50';
 const input = 'mt-2 w-full rounded-2xl border border-black/10 bg-[#fafaf8] px-4 py-3 text-sm outline-none transition focus:border-[#111] focus:ring-2 focus:ring-black/10';
 const generationLanguages: GenerationLanguage[] = ['English', 'Spanish', 'French', 'German', 'Portuguese', 'Hindi', 'Arabic', 'Japanese', 'Korean'];
 
-type Section = 'home' | 'brand' | 'content' | 'generate';
+type Section = 'home' | 'brand' | 'demos' | 'content' | 'generate';
 type PreferenceDraft = { liked: string; rejected: string; patterns: string };
-type ReviewDecision = 'LIKED' | 'REJECTED' | null;
 type ReelOutput = { url: string; conceptId: string };
 
 function sectionFromPath(pathname: string): Section {
   if (pathname.endsWith('/brand')) return 'brand';
+  if (pathname.endsWith('/demos')) return 'demos';
   if (pathname.endsWith('/content')) return 'content';
   if (pathname.endsWith('/generate')) return 'generate';
   return 'home';
@@ -78,6 +82,7 @@ export default function CampaignWorkspacePage() {
   return <WorkspaceShell project={project} section={section}>
     {section === 'home' ? <HomeSection project={project} /> : null}
     {section === 'brand' ? <BrandSection project={project} onProjectChange={setProject} /> : null}
+    {section === 'demos' ? <BrandDemosSection project={project} onProjectChange={setProject} /> : null}
     {section === 'content' ? <ContentSection project={project} creators={creators} billing={billing} onProjectChange={setProject} /> : null}
     {section === 'generate' ? <GenerateSection project={project} creators={creators} onProjectChange={setProject} /> : null}
   </WorkspaceShell>;
@@ -88,13 +93,14 @@ function WorkspaceShell({ project, section, children }: { project: ProjectSnapsh
   const links: Array<{ key: Section; label: string; icon: typeof Home }> = [
     { key: 'home', label: 'Home', icon: Home },
     { key: 'brand', label: 'Brand', icon: Settings2 },
+    { key: 'demos', label: 'Brand demos', icon: Video },
     { key: 'content', label: 'Content', icon: Layers3 },
     { key: 'generate', label: 'Generate more', icon: Sparkles },
   ];
   const pathFor = (key: Section) => key === 'home' ? `/projects/${project.id}` : `/projects/${project.id}/${key}`;
-  const description = section === 'brand' ? 'Your strategy, feedback, and generation preferences.' : section === 'content' ? 'Your saved hooks and rendered videos.' : section === 'generate' ? 'Swipe through eight fresh ideas and keep the ones you want.' : '';
+  const description = section === 'brand' ? 'Your strategy, feedback, and generation preferences.' : section === 'demos' ? 'The product footage available to every hook in this campaign.' : section === 'content' ? 'Your saved hooks and rendered videos.' : section === 'generate' ? 'Swipe through eight fresh ideas and keep the ones you want.' : '';
   return <main className="min-h-screen bg-[#f6f6f1] text-[#111]">
-    <header className="border-b border-black/8 bg-[#f6f6f1]/90 backdrop-blur-xl"><div className="mx-auto flex max-w-[1240px] items-center justify-between gap-5 px-5 py-4 sm:px-8"><button onClick={() => navigate('/')} className="text-[11px] font-bold uppercase tracking-[.24em] text-[#777]">ContentLane</button><div className="hidden items-center gap-1 overflow-x-auto rounded-full border border-black/8 bg-white p-1 md:flex">{links.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(pathFor(key))} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${section === key ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f3f3f0]'}`}><Icon size={14} />{label}</button>)}</div><button onClick={() => navigate('/')} className={secondary}><ArrowLeft size={15} />Projects</button></div><div className="mx-auto flex max-w-[1240px] gap-1 overflow-x-auto px-5 pb-3 md:hidden sm:px-8">{links.map(({ key, label, icon: Icon }) => <button key={key} onClick={() => navigate(pathFor(key))} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${section === key ? 'bg-[#111] text-white' : 'bg-white text-[#666]'}`}><Icon size={13} />{label}</button>)}</div></header>
+    <header className="border-b border-black/8 bg-[#f6f6f1]/90 backdrop-blur-xl"><div className="mx-auto flex max-w-[1240px] items-center justify-between gap-5 px-5 py-4 sm:px-8"><button onClick={() => navigate('/')} className="text-[11px] font-bold uppercase tracking-[.24em] text-[#777]">ContentLane</button><div className="hidden items-center gap-1 overflow-x-auto rounded-full border border-black/8 bg-white p-1 md:flex">{links.map(({ key, label, icon: Icon }) => <button key={key} aria-current={section === key ? 'page' : undefined} onClick={() => navigate(pathFor(key))} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-bold ${section === key ? 'bg-[#111] text-white' : 'text-[#666] hover:bg-[#f3f3f0]'}`}><Icon size={14} />{label}</button>)}</div><button onClick={() => navigate('/')} className={secondary}><ArrowLeft size={15} />Projects</button></div><div className="mx-auto flex max-w-[1240px] gap-1 overflow-x-auto px-5 pb-3 md:hidden sm:px-8">{links.map(({ key, label, icon: Icon }) => <button key={key} aria-current={section === key ? 'page' : undefined} onClick={() => navigate(pathFor(key))} className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-bold ${section === key ? 'bg-[#111] text-white' : 'bg-white text-[#666]'}`}><Icon size={13} />{label}</button>)}</div></header>
     <section className="mx-auto max-w-[1240px] px-5 py-7 sm:px-8 sm:py-10"><div className="mb-8 flex items-end justify-between gap-4"><div><p className="text-[11px] font-bold uppercase tracking-[.2em] text-[#888]">{project.brandProfile?.brandName ?? 'Campaign'}</p><h1 className="mt-2 text-3xl font-black tracking-[-.055em] sm:text-5xl">{section === 'home' ? 'Make the next render.' : links.find((item) => item.key === section)?.label}</h1></div>{section === 'home' ? null : <p className="hidden max-w-sm text-right text-sm leading-6 text-[#777] sm:block">{description}</p>}</div>{children}</section>
   </main>;
 }
@@ -104,7 +110,7 @@ function nextAction(project: ProjectSnapshot) {
   const hasDemo = project.mediaAssets.some((asset) => asset.type === 'VIDEO' && asset.metadata?.kind === 'brand-demo');
   if (!project.brandProfile) return { label: 'Complete your brand profile', description: 'Give ContentLane the context it needs to make useful hooks.', route: 'brand' as Section };
   if (!saved) return { label: 'Generate more content', description: 'Swipe through fresh ideas and save the ones you want to use.', route: 'generate' as Section };
-  if (!hasDemo) return { label: 'Add your product demo', description: 'Upload the product video that will follow the creator hook.', route: 'content' as Section };
+  if (!hasDemo) return { label: 'Add your product demo', description: 'Upload the product video that will follow the creator hook.', route: 'demos' as Section };
   return { label: 'Render more videos', description: 'Select any saved hooks from your content library and render the set you need.', route: 'content' as Section };
 }
 
@@ -112,7 +118,8 @@ function HomeSection({ project }: { project: ProjectSnapshot }) {
   const navigate = useNavigate();
   const action = nextAction(project);
   const saved = project.concepts.filter((concept) => concept.reviewDecision === 'LIKED');
-  return <div className="space-y-6"><section className="rounded-[32px] bg-[#111] p-7 text-white shadow-[0_24px_80px_rgba(0,0,0,.12)] sm:p-10"><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b8f36b]">Next step</p><h2 className="mt-5 max-w-2xl text-4xl font-black leading-[.98] tracking-[-.06em] sm:text-6xl">{action.label}</h2><p className="mt-5 max-w-xl text-sm leading-6 text-white/65">{action.description}</p><button className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#b8f36b] px-5 py-3 text-sm font-black text-[#111]" onClick={() => navigate(`/projects/${project.id}/${action.route === 'home' ? '' : action.route}`)}>{action.label}<ArrowRight size={16} /></button></section><div className="grid gap-4 md:grid-cols-3"><StatusCard label="Brand" value={project.brandProfile ? 'Ready' : 'Needs setup'} complete={Boolean(project.brandProfile)} onClick={() => navigate(`/projects/${project.id}/brand`)} /><StatusCard label="Saved" value={`${saved.length} hooks`} complete={saved.length > 0} onClick={() => navigate(`/projects/${project.id}/content`)} /><StatusCard label="Generate" value="8 fresh ideas" complete={false} onClick={() => navigate(`/projects/${project.id}/generate`)} /></div><section className="rounded-[28px] border border-black/8 bg-white p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Campaign</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black tracking-[-.04em]">{project.website}</h2><p className="mt-1 text-sm text-[#777]">Brand feedback guides future ideas. Existing videos stay safe.</p></div><button className={secondary} onClick={() => navigate(`/projects/${project.id}/content`)}>Open content <ArrowRight size={15} /></button></div></section></div>;
+  const demos = brandDemos(project);
+  return <div className="space-y-6"><section className="rounded-[32px] bg-[#111] p-7 text-white shadow-[0_24px_80px_rgba(0,0,0,.12)] sm:p-10"><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b8f36b]">Next step</p><h2 className="mt-5 max-w-2xl text-4xl font-black leading-[.98] tracking-[-.06em] sm:text-6xl">{action.label}</h2><p className="mt-5 max-w-xl text-sm leading-6 text-white/65">{action.description}</p><button className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#b8f36b] px-5 py-3 text-sm font-black text-[#111]" onClick={() => navigate(`/projects/${project.id}/${action.route === 'home' ? '' : action.route}`)}>{action.label}<ArrowRight size={16} /></button></section><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><StatusCard label="Brand" value={project.brandProfile ? 'Ready' : 'Needs setup'} complete={Boolean(project.brandProfile)} onClick={() => navigate(`/projects/${project.id}/brand`)} /><StatusCard label="Demos" value={`${demos.length} videos`} complete={demos.length > 0} onClick={() => navigate(`/projects/${project.id}/demos`)} /><StatusCard label="Saved" value={`${saved.length} hooks`} complete={saved.length > 0} onClick={() => navigate(`/projects/${project.id}/content`)} /><StatusCard label="Generate" value="8 fresh ideas" complete={false} onClick={() => navigate(`/projects/${project.id}/generate`)} /></div><section className="rounded-[28px] border border-black/8 bg-white p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Campaign</p><div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-xl font-black tracking-[-.04em]">{project.website}</h2><p className="mt-1 text-sm text-[#777]">Brand feedback guides future ideas. Existing videos stay safe.</p></div><button className={secondary} onClick={() => navigate(`/projects/${project.id}/content`)}>Open content <ArrowRight size={15} /></button></div></section></div>;
 }
 
 function StatusCard({ label, value, complete, onClick }: { label: string; value: string; complete: boolean; onClick: () => void }) {
@@ -135,6 +142,33 @@ function BrandSection({ project, onProjectChange }: { project: ProjectSnapshot; 
   return <div className="space-y-5"><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(420px,.9fr)]"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><p className="max-w-2xl text-sm leading-6 text-[#666]">This is the context ContentLane uses when it creates new hooks. Updating it never changes existing videos.</p><div className="mt-7 space-y-5"><label className="block text-sm font-bold">Brand name<input className={input} value={profile.brandName} onChange={(e) => setProfile({ ...profile, brandName: e.target.value })} /></label><label className="block text-sm font-bold">What does your product do?<textarea className={input} rows={3} value={profile.productSummary} onChange={(e) => setProfile({ ...profile, productSummary: e.target.value })} /></label><label className="block text-sm font-bold">Who is it for?<textarea className={input} rows={2} value={profile.targetAudience} onChange={(e) => setProfile({ ...profile, targetAudience: e.target.value })} /></label><div className="flex items-center gap-3 border-t border-black/8 pt-5"><button className={button} onClick={() => void save()} disabled={busy === 'profile'}><Save size={15} />{busy === 'profile' ? 'Saving…' : 'Save changes'}</button>{message ? <span className="text-sm font-semibold text-[#4b8125]">{message}</span> : null}</div></div></section><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><button className="flex w-full items-center justify-between text-left" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}><span><span className="block text-xs font-bold uppercase tracking-[.18em] text-[#888]">Optional context</span><span className="mt-2 block text-2xl font-black tracking-[-.04em]">More brand context</span></span><ChevronDown size={18} className={`transition ${advanced ? 'rotate-180' : ''}`} /></button>{advanced ? <div className="mt-6 grid gap-4 border-t border-black/8 pt-5 sm:grid-cols-2">{([['customerProblems', 'Customer problems'], ['keyBenefits', 'Key benefits'], ['proofPoints', 'Proof points'], ['claimConstraints', 'Claim constraints']] as const).map(([key, label]) => <label key={key} className="block text-sm font-bold">{label}<textarea className={`${input} resize-y overflow-hidden`} rows={contextRows(profile[key])} value={profile[key].join('\n')} onChange={(e) => updateList(key, e.target.value)} placeholder="One item per line" /></label>)}</div> : <p className="mt-5 text-sm leading-6 text-[#666]">Add problems, benefits, proof, and claim guardrails to make future hooks more specific.</p>}</section></div><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Generation preferences</p><h2 className="mt-2 text-xl font-black tracking-[-.04em]">Shape the next batch</h2></div><div className="text-sm font-bold text-[#666]">Always on</div></div><div className="mt-5 rounded-2xl border border-black/8 bg-[#fafaf8] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">Content language</p><p className="mt-1 text-xs leading-5 text-[#666]">Future hooks and demo overlays will use this language.</p></div><label className="sr-only" htmlFor="workspace-generation-language">Content language</label><select id="workspace-generation-language" className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold outline-none focus:border-black focus:ring-2 focus:ring-black/10" value={project.hookPreferences?.language ?? "English"} onChange={(event) => void saveLanguage(event.target.value as GenerationLanguage)} disabled={languageBusy}>{generationLanguages.map((language) => <option key={language} value={language}>{language}</option>)}</select></div><p className="mt-2 min-h-5 text-xs font-semibold text-[#4b8125]" role="status" aria-live="polite">{languageBusy ? "Saving language…" : languageMessage}</p></div><div className="mt-5 space-y-5 border-t border-black/8 pt-5"><div><p className="text-sm font-bold">Good examples</p><EditableExampleList value={preferences.patterns} onChange={(patterns) => setPreferences({ ...preferences, patterns })} placeholder="Good hook pattern" /><span className="mt-2 block text-xs font-medium leading-5 text-[#777]">Each example is injected into the proven-pattern guidance and adapted to your brand.</span></div><div><p className="text-sm font-bold">Bad examples</p><EditableExampleList value={preferences.rejected} onChange={(rejected) => setPreferences({ ...preferences, rejected })} placeholder="Pattern to avoid" /><span className="mt-2 block text-xs font-medium leading-5 text-[#777]">Leave this empty if there are no patterns to avoid. These examples become negative guidance.</span></div><button className={`${secondary} w-fit`} onClick={() => void saveRules()} disabled={busy === 'rules'}><Save size={15} />{busy === 'rules' ? 'Saving…' : 'Save preferences'}</button></div></section></div>;
 }
 
+function BrandDemosSection({ project, onProjectChange }: { project: ProjectSnapshot; onProjectChange: (project: ProjectSnapshot) => void }) {
+  const demos = brandDemos(project);
+  const defaultDemo = demos.find((demo) => demo.id === project.defaultBrandDemoAssetId) ?? demos[0] ?? null;
+  const overrideCount = project.concepts.filter((concept) => concept.assignedBrandDemoAssetId).length;
+
+  return <div className="space-y-5">
+    <section className="relative overflow-hidden rounded-[34px] bg-[#151515] p-6 text-white shadow-[0_24px_70px_rgba(0,0,0,.13)] sm:p-8">
+      <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#b8f36b]/10 blur-3xl" />
+      <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[.2em] text-[#b8f36b]">Campaign footage</p>
+          <h2 className="mt-3 max-w-[13ch] text-3xl font-black leading-[.98] tracking-[-.055em] sm:text-5xl">One library. The right demo for every hook.</h2>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-white/60">Your default demo fills every Reel automatically. Choose a different one from the hook editor only when the story calls for it.</p>
+          <div className="mt-6 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full bg-white/10 px-3 py-2">{demos.length} of 10 demos</span><span className="rounded-full bg-white/10 px-3 py-2">{overrideCount} hook overrides</span></div>
+        </div>
+        <div className="mx-auto w-full max-w-[280px] overflow-hidden rounded-[26px] border border-white/15 bg-white/5 p-2 shadow-2xl lg:mx-0">
+          {defaultDemo ? <><div className="relative aspect-[9/16] overflow-hidden rounded-[19px] bg-black"><video src={defaultDemo.url} className="h-full w-full object-contain" muted autoPlay loop playsInline controls preload="metadata" /><span className="pointer-events-none absolute left-3 top-3 rounded-full bg-[#b8f36b] px-2.5 py-1 text-[9px] font-black uppercase tracking-[.12em] text-[#111]">Project default</span></div><p className="truncate px-2 pb-1 pt-3 text-sm font-black">{brandDemoName(defaultDemo)}</p></> : <div className="grid aspect-[9/16] place-items-center rounded-[19px] border border-dashed border-white/15 text-center text-sm font-bold text-white/45"><span><Video className="mx-auto mb-2" size={24} />No demo uploaded yet</span></div>}
+        </div>
+      </div>
+    </section>
+
+    <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8">
+      <BrandDemoLibrary projectId={project.id} demos={demos} defaultDemoAssetId={project.defaultBrandDemoAssetId} onProjectChange={onProjectChange} layout="grid" />
+    </section>
+  </div>;
+}
+
 
 function ContentSection({ project, creators, billing, onProjectChange }: { project: ProjectSnapshot; creators: CreatorRecord[]; billing: BillingStatus | null; onProjectChange: (project: ProjectSnapshot) => void }) {
   const navigate = useNavigate();
@@ -143,6 +177,7 @@ function ContentSection({ project, creators, billing, onProjectChange }: { proje
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [editingAssignment, setEditingAssignment] = useState<ReviewAssignment | null>(null);
   const savedConcepts = useMemo(() => project.concepts
     .filter((concept) => concept.reviewDecision === 'LIKED')
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || Date.parse(b.createdAt) - Date.parse(a.createdAt) || a.sortOrder - b.sortOrder), [project.concepts]);
@@ -151,7 +186,19 @@ function ContentSection({ project, creators, billing, onProjectChange }: { proje
   const rendered = useMemo(() => projectOutputs(project).filter((output) => savedIds.has(output.conceptId)), [project, savedIds]);
   const conceptById = useMemo(() => new Map(project.concepts.map((concept) => [concept.id, concept])), [project.concepts]);
   const renderCapacity = billing?.videoUsage.remaining ?? (billing?.accessTier === 'admin' ? 100 : 0);
-  const editConcept = async (concept: ConceptCard) => { const hookText = window.prompt('Hook text', concept.hookText); if (!hookText) return; const demoOverlayText = window.prompt('Demo overlay text', concept.demoOverlayText); if (!demoOverlayText) return; setBusy(`edit:${concept.id}`); try { const response = await api<ProjectResponse>(`/projects/${project.id}/concepts/${concept.id}`, { method: 'PATCH', body: JSON.stringify({ hookText, demoOverlayText }) }); onProjectChange(response.project); setMessage('Hook copy saved.'); } catch (caught) { setError(caught instanceof ApiClientError ? caught.message : 'Unable to save hook copy.'); } finally { setBusy(''); } };
+  const demoLibrary = useMemo(() => brandDemos(project), [project]);
+  const selectedCreatorIds = new Set(effectiveCreatorSelection(project, creators)?.characters.map((creator) => creator.id) ?? []);
+  const editorCreators = creators.filter((creator) => selectedCreatorIds.has(creator.id));
+  const saveConcept = async (input: { conceptId: string; hookText: string; demoOverlayText: string; creatorId: string; clipId: string; brandDemoAssetId: string | null }) => {
+    setBusy(`edit:${input.conceptId}`); setError('');
+    try {
+      const response = await api<ProjectResponse>(`/projects/${project.id}/concepts/${input.conceptId}`, { method: 'PATCH', body: JSON.stringify({ hookText: input.hookText, demoOverlayText: input.demoOverlayText, creatorId: input.creatorId, clipId: input.clipId, brandDemoAssetId: input.brandDemoAssetId }) });
+      onProjectChange(response.project); setMessage('Hook, creator footage, and product demo saved.'); setEditingAssignment(null);
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : 'Unable to save this hook.');
+      throw caught;
+    } finally { setBusy(''); }
+  };
   const createBatch = async () => {
     if (selected.length === 0 || selected.length > renderCapacity) return;
     const hasBrandDemo = project.mediaAssets.some((asset) => asset.type === 'VIDEO' && asset.metadata?.kind === 'brand-demo');
@@ -169,7 +216,7 @@ function ContentSection({ project, creators, billing, onProjectChange }: { proje
       setBusy('');
     }
   };
-  return <div className="space-y-5"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm leading-6 text-[#666]">Only saved hooks appear here. Select any number up to your remaining render capacity.</p><p className="mt-2 text-xs font-bold uppercase tracking-[.16em] text-[#999]">{savedConcepts.length} saved hooks · {rendered.length} rendered outputs · {billing?.videoUsage.remaining ?? 'Unlimited'} remaining</p></div><button className={button} onClick={() => navigate(`/projects/${project.id}/generate`)}><Sparkles size={15} />Generate more</button></div><div className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f3f3f0] p-1"><button className={`rounded-full px-4 py-2 text-sm font-bold ${!showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(false)}>Saved content</button><button className={`rounded-full px-4 py-2 text-sm font-bold ${showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(true)}>Rendered videos</button></div></section>{message || error ? <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? 'bg-red-50 text-red-700' : 'bg-[#e8f8d4] text-[#315016]'}`}>{error || message}</p> : null}{showRendered ? <RenderedContent rendered={rendered} conceptById={conceptById} /> : <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-3 border-b border-black/8 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Saved content</p><h2 className="mt-2 text-2xl font-black tracking-[-.04em]">Choose what to render</h2><p className="mt-2 text-sm text-[#666]">Each selected hook becomes one rendered video.</p></div><button className={button} onClick={() => void createBatch()} disabled={selected.length === 0 || selected.length > renderCapacity || busy === 'render'}><Video size={15} />{busy === 'render' ? 'Starting…' : `Render selected · ${selected.length}`}</button></div>{renderCapacity === 0 ? <p className="mt-5 rounded-2xl bg-[#fff3ef] p-4 text-sm font-bold text-[#9a3e29]">Your render allowance is used for this billing period. Upgrade or wait for the reset.</p> : null}{assignments.length ? <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{assignments.map((assignment) => <HookVideoCard key={assignment.concept.id} assignment={assignment} selected={selected.includes(assignment.concept.id)} disabled={busy === `edit:${assignment.concept.id}`} onToggle={() => setSelected((current) => current.includes(assignment.concept.id) ? current.filter((conceptId) => conceptId !== assignment.concept.id) : current.length < renderCapacity ? [...current, assignment.concept.id] : current)} onEdit={() => void editConcept(assignment.concept)} />)}</div> : <EmptyPanel title="No saved content yet" action="Generate more" onClick={() => navigate(`/projects/${project.id}/generate`)} />}</section>}</div>;
+  return <div className="space-y-5"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm leading-6 text-[#666]">Only saved hooks appear here. Select any number up to your remaining render capacity.</p><p className="mt-2 text-xs font-bold uppercase tracking-[.16em] text-[#999]">{savedConcepts.length} saved hooks · {rendered.length} rendered outputs · {billing?.videoUsage.remaining ?? 'Unlimited'} remaining</p></div><button className={button} onClick={() => navigate(`/projects/${project.id}/generate`)}><Sparkles size={15} />Generate more</button></div><div className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f3f3f0] p-1"><button className={`rounded-full px-4 py-2 text-sm font-bold ${!showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(false)}>Saved content</button><button className={`rounded-full px-4 py-2 text-sm font-bold ${showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(true)}>Rendered videos</button></div></section>{message || error ? <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? 'bg-red-50 text-red-700' : 'bg-[#e8f8d4] text-[#315016]'}`}>{error || message}</p> : null}{showRendered ? <RenderedContent rendered={rendered} conceptById={conceptById} /> : <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-3 border-b border-black/8 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Saved content</p><h2 className="mt-2 text-2xl font-black tracking-[-.04em]">Choose what to render</h2><p className="mt-2 text-sm text-[#666]">Each selected hook becomes one rendered video.</p></div><button className={button} onClick={() => void createBatch()} disabled={selected.length === 0 || selected.length > renderCapacity || busy === 'render'}><Video size={15} />{busy === 'render' ? 'Starting…' : `Render selected · ${selected.length}`}</button></div>{renderCapacity === 0 ? <p className="mt-5 rounded-2xl bg-[#fff3ef] p-4 text-sm font-bold text-[#9a3e29]">Your render allowance is used for this billing period. Upgrade or wait for the reset.</p> : null}{assignments.length ? <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{assignments.map((assignment) => <HookVideoCard key={assignment.concept.id} assignment={assignment} selected={selected.includes(assignment.concept.id)} disabled={busy === `edit:${assignment.concept.id}`} onToggle={() => setSelected((current) => current.includes(assignment.concept.id) ? current.filter((conceptId) => conceptId !== assignment.concept.id) : current.length < renderCapacity ? [...current, assignment.concept.id] : current)} onEdit={() => setEditingAssignment(assignment)} />)}</div> : <EmptyPanel title="No saved content yet" action="Generate more" onClick={() => navigate(`/projects/${project.id}/generate`)} />}</section>}{editingAssignment ? <HookEditSheet assignment={editingAssignment} creators={editorCreators} demos={demoLibrary} defaultDemoAssetId={project.defaultBrandDemoAssetId} onCancel={() => setEditingAssignment(null)} onSave={saveConcept} /> : null}</div>;
 }
 
 function RenderedContent({ rendered, conceptById }: { rendered: ReelOutput[]; conceptById: Map<string, ConceptCard> }) {
@@ -181,14 +228,18 @@ function GenerateSection({ project, creators, onProjectChange }: { project: Proj
   const navigate = useNavigate();
   const [queue, setQueue] = useState<ConceptCard[]>([]);
   const [busy, setBusy] = useState('');
-  const [dragX, setDragX] = useState(0);
   const [error, setError] = useState('');
   const [assignmentMap, setAssignmentMap] = useState<Map<string, ReturnType<typeof assignCreatorsToConcepts>[number]>>(new Map());
-  const startX = useRef<number | null>(null);
   const started = useRef(false);
   const setReviewQueue = (concepts: ConceptCard[]) => { setQueue(concepts); setAssignmentMap(new Map(assignCreatorsToConcepts(concepts, creators, effectiveCreatorSelection(project, creators)).map((assignment) => [assignment.concept.id, assignment]))); };
-  const currentAssignment = queue[0] ? assignmentMap.get(queue[0].id) : undefined;
+  const reviewAssignments = queue.flatMap((concept) => {
+    const assignment = assignmentMap.get(concept.id);
+    return assignment ? [assignment] : [];
+  });
   const reviewedCount = 8 - queue.length;
+  const demoLibrary = useMemo(() => brandDemos(project), [project]);
+  const selectedCreatorIds = new Set(effectiveCreatorSelection(project, creators)?.characters.map((creator) => creator.id) ?? []);
+  const editorCreators = creators.filter((creator) => selectedCreatorIds.has(creator.id));
   const generate = async () => { setBusy('generate'); setError(''); const existingConceptIds = new Set(project.concepts.map((concept) => concept.id)); try { const response = await api<ProjectResponse>(`/projects/${project.id}/concepts`, { method: 'POST', body: JSON.stringify({ count: 8, append: true, forceRegenerate: false, useHookPreferences: true }) }); const freshConcepts = response.project.concepts.filter((concept) => !existingConceptIds.has(concept.id)).slice(-8); if (!freshConcepts.length) throw new Error('No fresh hooks were returned.'); onProjectChange(response.project); setReviewQueue(freshConcepts); } catch (caught) { setError(caught instanceof ApiClientError ? caught.message : 'Unable to generate fresh hooks.'); } finally { setBusy(''); } };
   useEffect(() => {
     if (started.current) return;
@@ -197,25 +248,50 @@ function GenerateSection({ project, creators, onProjectChange }: { project: Proj
     if (pending.length) setReviewQueue(pending);
     else void generate();
   }, [project.id]);
-  const review = async (decision: ReviewDecision) => { const concept = queue[0]; if (!concept) return; setBusy(decision === 'LIKED' ? 'save' : 'reject'); try { const response = await api<ProjectResponse>(`/projects/${project.id}/concepts/${concept.id}/review`, { method: 'PATCH', body: JSON.stringify({ decision, creatorId: currentAssignment?.creator.id, clipId: currentAssignment?.clip?.id }) }); onProjectChange(response.project); setQueue((current) => current.slice(1)); setDragX(0); } catch (caught) { setError(caught instanceof ApiClientError ? caught.message : 'Unable to save this decision.'); } finally { setBusy(''); } };
-  const finishPointer = () => { if (Math.abs(dragX) < 90) { setDragX(0); return; } void review(dragX > 0 ? 'LIKED' : 'REJECTED'); };
-  const onPointerDown = (event: PointerEvent<HTMLElement>) => { startX.current = event.clientX; event.currentTarget.setPointerCapture(event.pointerId); };
-  const onPointerMove = (event: PointerEvent<HTMLElement>) => { if (startX.current !== null) setDragX(event.clientX - startX.current); };
-  const onPointerUp = () => { if (startX.current === null) return; startX.current = null; finishPointer(); };
-  return <div className="flex flex-col items-center"><div className="mb-4 text-center text-[11px] font-bold uppercase tracking-[.2em] text-[#888]"><span>{reviewedCount} of 8 hooks selected</span><span className="mx-2">·</span><span>{queue.length} cards remaining</span><div className="mx-auto mt-3 flex gap-1.5">{Array.from({ length: 8 }, (_, index) => <span key={index} className={`h-1.5 w-7 rounded-full ${index < reviewedCount ? 'bg-[#111]' : 'bg-black/10'}`} />)}</div></div>{error ? <p className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}{busy === 'generate' && !queue.length ? <div className="grid min-h-[620px] place-items-center text-center"><div><Sparkles className="mx-auto animate-pulse" size={28} /><p className="mt-4 font-bold">Generating…</p></div></div> : currentAssignment ? <><div className="mb-3 flex w-full max-w-[390px] justify-between px-1 text-[11px] font-black uppercase tracking-[.18em]"><span className="text-red-600">← Swipe to reject</span><span className="text-[#15803d]">Swipe to keep →</span></div><div className="relative w-full max-w-[390px]"><div className="absolute inset-x-5 top-4 aspect-[9/16] scale-[.96] rounded-[28px] bg-[#deded8]" /><div className="absolute inset-x-2 top-2 aspect-[9/16] scale-[.98] rounded-[28px] bg-[#efefe9]" /><div className={`relative touch-none ${dragX === 0 ? 'transition-transform duration-200' : ''}`} style={{ transform: `translateX(${dragX}px) rotate(${dragX / 18}deg)` }} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={() => { startX.current = null; setDragX(0); }}><SwipeHookCard assignment={currentAssignment} /></div></div><div className="mt-7 flex justify-center gap-4"><button className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white px-6 py-3 text-sm font-bold text-red-700 transition hover:bg-red-50" onClick={() => void review('REJECTED')} disabled={Boolean(busy)}><ArrowLeft size={16} /><ThumbsDown size={16} />Reject</button><button className="inline-flex items-center gap-2 rounded-full border border-[#b8ebc8] bg-white px-6 py-3 text-sm font-bold text-[#15803d] transition hover:bg-[#effbf2]" onClick={() => void review('LIKED')} disabled={Boolean(busy)}><ThumbsUp size={16} />Keep<ArrowRight size={16} /></button></div><p className="mt-3 text-xs text-[#999]">Drag the card or use the buttons</p></> : <div className="pt-20 text-center"><Check className="mx-auto text-[#4b8125]" size={30} /><h2 className="mt-4 text-2xl font-black">All reviewed</h2><div className="mt-6 flex flex-wrap justify-center gap-3"><button className={secondary} onClick={() => navigate(`/projects/${project.id}/content`)}>View content <ArrowRight size={15} /></button><button className={button} onClick={() => { setQueue([]); void generate(); }}><Sparkles size={15} />Generate 8 more</button></div></div>}</div>;
-}
-
-function SwipeHookCard({ assignment }: { assignment: ReturnType<typeof assignCreatorsToConcepts>[number] }) {
-  const { concept, clip, creator } = assignment;
-  const videoSource = concept.generatedVideoUrl ?? clip?.url;
-  const usesSnapchatCaptions = getCaptionStyle(concept.sortOrder) === 'SNAPCHAT';
-  return <article className="overflow-hidden rounded-[28px] bg-[#111] text-white shadow-[0_24px_50px_rgba(0,0,0,.2)]"><div className="relative aspect-[9/16]">{videoSource ? <video src={videoSource} className="h-full w-full object-cover" muted loop autoPlay playsInline /> : <div className="grid h-full place-items-center bg-[#252525] px-6 text-center text-sm text-white/60">Creator preview unavailable</div>}<div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/85" /><div className="absolute inset-x-5 top-5 flex items-center justify-between gap-3"><span className="inline-flex items-center gap-2 rounded-full bg-black/60 px-3 py-2 text-xs font-bold backdrop-blur"><img src={creator.baseImageUrl} alt="" className="h-5 w-5 rounded-full object-cover" />{creator.name}</span><span className="rounded-full bg-[#dcfce7] px-3 py-2 text-xs font-black text-[#15803d]">✣ {concept.score}</span></div><div className={`absolute inset-x-0 top-1/2 w-full -translate-y-1/2 text-center ${usesSnapchatCaptions ? 'bg-black/60 px-5 py-1.5' : 'px-6'}`}><p className={`text-white ${usesSnapchatCaptions ? 'text-[0.875rem] font-medium leading-[1.25]' : 'text-base font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]'}`}>{concept.hookText}</p></div></div></article>;
+  const review = async (conceptId: string, decision: 'LIKED' | 'REJECTED') => {
+    const assignment = assignmentMap.get(conceptId);
+    if (!assignment) return false;
+    setBusy(decision === 'LIKED' ? 'save' : 'reject');
+    setError('');
+    try {
+      const response = await api<ProjectResponse>(`/projects/${project.id}/concepts/${conceptId}/review`, { method: 'PATCH', body: JSON.stringify({ decision, creatorId: assignment.creator.id, clipId: assignment.clip?.id }) });
+      onProjectChange(response.project);
+      setQueue((current) => current.filter((concept) => concept.id !== conceptId));
+      return true;
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : 'Unable to save this decision.');
+      return false;
+    } finally {
+      setBusy('');
+    }
+  };
+  const saveConcept = async (input: { conceptId: string; hookText: string; demoOverlayText: string; creatorId: string; clipId: string; brandDemoAssetId: string | null }) => {
+    setBusy('edit');
+    setError('');
+    try {
+      const response = await api<ProjectResponse>(`/projects/${project.id}/concepts/${input.conceptId}`, { method: 'PATCH', body: JSON.stringify({ hookText: input.hookText, demoOverlayText: input.demoOverlayText, creatorId: input.creatorId, clipId: input.clipId, brandDemoAssetId: input.brandDemoAssetId }) });
+      const updatedById = new Map(response.project.concepts.map((concept) => [concept.id, concept]));
+      onProjectChange(response.project);
+      setReviewQueue(queue.map((concept) => updatedById.get(concept.id) ?? concept));
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : 'Unable to save this hook.');
+      throw caught;
+    } finally {
+      setBusy('');
+    }
+  };
+  return <div className="flex flex-col items-center">
+    <div className="mb-4 text-center text-[11px] font-bold uppercase tracking-[.2em] text-[#888]"><span>{reviewedCount} of 8 hooks selected</span><span className="mx-2">·</span><span>{queue.length} cards remaining</span><div className="mx-auto mt-3 flex gap-1.5">{Array.from({ length: 8 }, (_, index) => <span key={index} className={`h-1.5 w-7 rounded-full ${index < reviewedCount ? 'bg-[#111]' : 'bg-black/10'}`} />)}</div></div>
+    {error ? <p className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p> : null}
+    {busy === 'generate' && !queue.length ? <div className="grid min-h-[620px] place-items-center text-center"><div><Sparkles className="mx-auto animate-pulse" size={28} /><p className="mt-4 font-bold">Generating…</p></div></div> : reviewAssignments.length ? <SwipeReview assignments={reviewAssignments} creators={editorCreators} demos={demoLibrary} defaultDemoAssetId={project.defaultBrandDemoAssetId} onDecision={review} onEdit={saveConcept} /> : <div className="pt-20 text-center"><Check className="mx-auto text-[#4b8125]" size={30} /><h2 className="mt-4 text-2xl font-black">All reviewed</h2><div className="mt-6 flex flex-wrap justify-center gap-3"><button className={secondary} onClick={() => navigate(`/projects/${project.id}/content`)}>View content <ArrowRight size={15} /></button><button className={button} onClick={() => { setQueue([]); void generate(); }}><Sparkles size={15} />Generate 8 more</button></div></div>}
+  </div>;
 }
 
 function ContentCard({ assignment, selected, disabled, onToggle, onEdit }: { assignment: ReturnType<typeof assignCreatorsToConcepts>[number]; selected: boolean; disabled: boolean; onToggle: () => void; onEdit: () => void }) {
   const { concept, clip, creator } = assignment;
-  const videoSource = concept.generatedVideoUrl ?? clip?.url;
-  return <article role="button" tabIndex={0} aria-pressed={selected} onClick={onToggle} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggle(); } }} className={`hook-card group relative cursor-pointer overflow-hidden rounded-[26px] border-[3px] bg-[#111] transition-[transform,box-shadow,border-color,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 ${selected ? 'hook-card-selected z-10 scale-[1.025] border-black opacity-100 shadow-[0_0_0_5px_rgba(0,0,0,.1),0_18px_34px_rgba(0,0,0,.24)]' : 'border-white opacity-75 shadow-[0_8px_18px_rgba(0,0,0,.08)] hover:-translate-y-1 hover:scale-[1.01] hover:opacity-100 hover:shadow-[0_14px_26px_rgba(0,0,0,.16)]'}`}><div className="relative aspect-[9/16] overflow-hidden"><div className="absolute inset-0 z-10 bg-gradient-to-b from-black/25 via-transparent to-black/70" />{videoSource ? <video src={videoSource} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]" muted loop autoPlay playsInline /> : <div className="grid h-full place-items-center bg-[#252525] px-6 text-center text-sm font-semibold text-white/60">Creator preview unavailable</div>}<div className="absolute inset-x-4 top-4 z-20 flex items-start justify-between gap-3"><span className="inline-flex max-w-[64%] items-center gap-2 truncate rounded-full bg-black/60 px-3 py-2 text-[11px] font-bold text-white backdrop-blur"><img src={creator.baseImageUrl} alt="" className="h-5 w-5 rounded-full object-cover" />{creator.name}</span><span className="shrink-0 rounded-full bg-[#dcfce7] px-3 py-2 text-[11px] font-black text-[#15803d]">✣ {concept.score} Score</span></div><div className="absolute inset-x-4 top-1/2 z-20 -translate-y-1/2 text-center text-white"><p className="text-[clamp(1.15rem,2vw,1.45rem)] font-black leading-[1.08] tracking-[-.03em] drop-shadow-[0_2px_4px_rgba(0,0,0,.75)]">{concept.hookText}</p></div><div className="absolute inset-x-4 bottom-4 z-20 flex items-end justify-between gap-3"><p className="line-clamp-2 max-w-[75%] text-xs font-medium leading-4 text-white/80">{concept.demoOverlayText}</p><button type="button" onClick={(event) => { event.stopPropagation(); onEdit(); }} disabled={disabled} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/30 bg-black/30 px-3 py-2 text-xs font-bold text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-50"><Edit3 size={13} />Edit</button></div></div></article>;
+  const metadata = <p className="line-clamp-2 text-xs font-medium leading-4 text-white/80">{concept.demoOverlayText}</p>;
+  const editButton = <button type="button" onClick={(event) => { event.stopPropagation(); onEdit(); }} onKeyDown={(event) => event.stopPropagation()} disabled={disabled} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/30 bg-black/55 px-3 py-2 text-xs font-bold text-white backdrop-blur transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-50"><Edit3 size={13} />Edit</button>;
+  return <article role="button" tabIndex={0} aria-pressed={selected} onClick={onToggle} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onToggle(); } }} className={`hook-card group relative aspect-[9/16] cursor-pointer overflow-hidden rounded-[26px] border-[3px] bg-[#111] transition-[transform,box-shadow,border-color,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30 focus-visible:ring-offset-2 ${selected ? 'hook-card-selected z-10 scale-[1.025] border-black opacity-100 shadow-[0_0_0_5px_rgba(0,0,0,.1),0_18px_34px_rgba(0,0,0,.24)]' : 'border-white opacity-75 shadow-[0_8px_18px_rgba(0,0,0,.08)] hover:-translate-y-1 hover:scale-[1.01] hover:opacity-100 hover:shadow-[0_14px_26px_rgba(0,0,0,.16)]'}`}><HookVideoPreview concept={concept} creator={creator} clip={clip} compact bottomMetadata={metadata} bottomAction={editButton} /></article>;
 }
 
 function HookVideoCard(props: { assignment: ReturnType<typeof assignCreatorsToConcepts>[number]; selected: boolean; disabled: boolean; onToggle: () => void; onEdit: () => void }) { return <ContentCard {...props} />; }

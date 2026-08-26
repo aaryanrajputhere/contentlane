@@ -47,6 +47,7 @@ export default function App() {
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<CampaignWorkspacePage />} />
           <Route path="/projects/:id/brand" element={<CampaignWorkspacePage />} />
+          <Route path="/projects/:id/demos" element={<CampaignWorkspacePage />} />
           <Route path="/projects/:id/content" element={<CampaignWorkspacePage />} />
           <Route path="/projects/:id/generate" element={<CampaignWorkspacePage />} />
           <Route path="/projects/:id/batches" element={<Navigate to="content" replace />} />

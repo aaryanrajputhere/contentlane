@@ -167,6 +167,7 @@ model Project {
   selectedCharacter   Json?            @map("selectedCharacter")
   creatorSelection    Json?            @map("creatorSelection")
   hookPreferences     Json?            @map("hookPreferences")
+  defaultBrandDemoAssetId String?
   brandProfileConfirmedAt DateTime?
   selectedConcept     HookConcept?     @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
   brandProfile        BrandProfile?
@@ -228,6 +229,7 @@ model HookConcept {
   reviewDecision        ReviewDecision?
   assignedCreatorId     String?
   assignedClipId        String?
+  assignedBrandDemoAssetId String?
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
   selectedByProjects    Project[]    @relation("ProjectSelectedConcept")

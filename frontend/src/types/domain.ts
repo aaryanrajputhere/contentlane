@@ -185,6 +185,7 @@ export interface ConceptCard {
   reviewDecision: 'LIKED' | 'REJECTED' | null;
   assignedCreatorId?: string | null;
   assignedClipId?: string | null;
+  assignedBrandDemoAssetId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -277,6 +278,7 @@ export interface ProjectSnapshot {
   creatorSelection: CreatorSelection | null;
   hookPreferences: HookPreferences | null;
   brandProfileConfirmedAt: string | null;
+  defaultBrandDemoAssetId: string | null;
 }
 
 export interface ProjectResponse {

@@ -70,7 +70,7 @@ test('uses hook sort order rather than database id order for mixed creators', ()
   assert.deepEqual(result.map((item) => item.clipId), ['a-first', 'b-second']);
 });
 
-test('rebalances duplicate persisted clips across the remaining clip library', () => {
+test('keeps duplicate persisted clips authoritative after an explicit edit', () => {
   const result = resolveCreatorClipAssignments(
     [
       { ...concept('hook-1', 'surprised'), assignedCreatorId: 'creator-1', assignedClipId: 'clip-1' },
@@ -83,7 +83,7 @@ test('rebalances duplicate persisted clips across the remaining clip library', (
     { mode: 'single', characters: [{ id: 'creator-1' }] },
   );
 
-  assert.deepEqual(result.map((item) => item.clipId), ['clip-1', 'clip-2']);
+  assert.deepEqual(result.map((item) => item.clipId), ['clip-1', 'clip-1']);
 });
 
 test('keeps valid persisted creator and clip assignments authoritative', () => {

@@ -62,6 +62,12 @@ export const conceptStageInputSchema = z.object({
 export const conceptReviewParamsSchema = projectIdParamsSchema.extend({
   conceptId: z.string().trim().min(1).max(128),
 });
+export const brandDemoParamsSchema = projectIdParamsSchema.extend({
+  demoId: z.string().cuid(),
+});
+export const brandDemoRenameSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+}).strict();
 export const conceptReviewSchema = z.object({
   decision: z.enum(['LIKED', 'REJECTED']).nullable(),
   creatorId: z.string().cuid().optional(),
@@ -138,7 +144,18 @@ export const generationLanguageUpdateSchema = z.object({ language: generationLan
 export const conceptEditSchema = z.object({
   hookText: z.string().trim().min(1).max(240),
   demoOverlayText: z.string().trim().min(1).max(240),
-}).strict();
+  creatorId: z.string().cuid().optional(),
+  clipId: z.string().cuid().optional(),
+  brandDemoAssetId: z.string().cuid().nullable().optional(),
+}).strict().superRefine((value, context) => {
+  if (Boolean(value.creatorId) !== Boolean(value.clipId)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Creator and clip must be provided together',
+      path: value.creatorId ? ['clipId'] : ['creatorId'],
+    });
+  }
+});
 export const mediaStageInputSchema = z.object({
   conceptId: z.string().cuid().nullable().optional(),
   forceRegenerate: z.boolean().default(false),
@@ -328,6 +345,10 @@ export const conceptCardSchema = z.object({
   generatedImageUrl: z.string().min(1).nullable(),
   generatedVideoUrl: z.string().min(1).nullable(),
   sortOrder: z.number().int(),
+  reviewDecision: z.enum(['LIKED', 'REJECTED']).nullable(),
+  assignedCreatorId: z.string().nullable().optional(),
+  assignedClipId: z.string().nullable().optional(),
+  assignedBrandDemoAssetId: z.string().nullable().optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 }).strict();
@@ -378,6 +399,7 @@ export const projectSchema = z.object({
   selectedCharacterId: z.string().min(1).nullable(),
   hookPreferences: hookPreferencesSchema.nullable(),
   brandProfileConfirmedAt: z.coerce.date().nullable(),
+  defaultBrandDemoAssetId: z.string().cuid().nullable(),
 }).strict();
 
 export const projectSnapshotSchema = projectSchema.extend({

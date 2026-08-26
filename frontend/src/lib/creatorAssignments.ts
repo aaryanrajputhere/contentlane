@@ -48,7 +48,6 @@ export function assignCreatorsToConcepts(
     const clip = creator?.clips.find((candidate) => candidate.id === concept.assignedClipId);
     if (!creator || !clip) return;
     const usedClipIds = persistedClipIdsByCreator.get(creator.id) ?? new Set<string>();
-    if (usedClipIds.has(clip.id)) return;
     usedClipIds.add(clip.id);
     persistedClipIdsByCreator.set(creator.id, usedClipIds);
     persisted.set(concept.id, { concept, creator, clip });

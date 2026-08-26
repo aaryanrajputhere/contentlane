@@ -7,6 +7,8 @@ import {
   characterSelectionSchema,
   brandProfileUpdateSchema,
   brandProfileConfirmationSchema,
+  brandDemoParamsSchema,
+  brandDemoRenameSchema,
   conceptSelectionSchema,
   conceptStageInputSchema,
   conceptReviewParamsSchema,
@@ -51,6 +53,7 @@ import { FREE_HOOK_SELECTION_LIMIT, getFreeAccess, hasPaidAccess, requireFreePro
 import { createReservedRenderJob, releaseRenderReservation } from '../lib/render-quota';
 
 const HOOK_SELECTION_TARGET = 8;
+const MAX_BRAND_DEMOS = 10;
 
 function toBrandProfilePrismaData(
   profile: Omit<BrandProfile, 'id' | 'projectId' | 'createdAt' | 'updatedAt'>,
@@ -310,6 +313,28 @@ function requireVideoFile(
   if (!file.mimetype.startsWith("video/"))
     throw new ApiError(400, "INVALID_FILE_TYPE", message);
   return file;
+}
+
+function demoDisplayName(filename: string) {
+  const withoutExtension = filename.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  return (withoutExtension || 'Product demo').slice(0, 80);
+}
+
+function demoAssetDisplayName(asset: { metadata: Prisma.JsonValue | null }) {
+  if (asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata)) {
+    const metadata = asset.metadata as Record<string, unknown>;
+    if (typeof metadata.displayName === 'string' && metadata.displayName.trim()) return metadata.displayName.trim();
+    if (typeof metadata.originalName === 'string' && metadata.originalName.trim()) return demoDisplayName(metadata.originalName);
+  }
+  return 'Product demo';
+}
+
+function renderJobUsesDemo(input: Prisma.JsonValue, demoId: string) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const assignments = (input as Record<string, unknown>).assignments;
+  return Array.isArray(assignments) && assignments.some((assignment) => (
+    assignment && typeof assignment === 'object' && (assignment as Record<string, unknown>).demoAssetId === demoId
+  ));
 }
 
 function conceptOrFail(
@@ -647,14 +672,15 @@ export const uploadBrandDemo: RequestHandler = async (req, res) => {
     mimeType: demoFile.mimetype,
   });
   try {
-    await prisma.$transaction([
-      prisma.mediaAsset.deleteMany({
-        where: {
-          projectId: project.id,
-          id: { in: existingDemoAssets.map((asset) => asset.id) },
-        },
-      }),
-      prisma.mediaAsset.create({
+    await prisma.$transaction(async (tx) => {
+      await tx.hookConcept.updateMany({
+        where: { projectId: project.id, assignedBrandDemoAssetId: { not: null } },
+        data: { assignedBrandDemoAssetId: null },
+      });
+      await tx.mediaAsset.deleteMany({
+        where: { projectId: project.id, id: { in: existingDemoAssets.map((asset) => asset.id) } },
+      });
+      const created = await tx.mediaAsset.create({
         data: {
           projectId: project.id,
           conceptId: null,
@@ -666,12 +692,14 @@ export const uploadBrandDemo: RequestHandler = async (req, res) => {
           metadata: {
             ...(stored.metadata as Record<string, unknown>),
             kind: "brand-demo",
+            displayName: demoDisplayName(demoFile.originalname),
             originalName: demoFile.originalname,
             uploadedAt: new Date().toISOString(),
           } as Prisma.InputJsonValue,
         },
-      }),
-    ]);
+      });
+      await tx.project.update({ where: { id: project.id }, data: { defaultBrandDemoAssetId: created.id } });
+    });
   } catch (error) {
     await deleteStoredAsset({
       provider: stored.provider,
@@ -694,6 +722,115 @@ export const uploadBrandDemo: RequestHandler = async (req, res) => {
     .json({
       project: assertProject(await loadProjectSnapshot(project.id, userId)),
     });
+};
+
+export const uploadBrandDemos: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const project = await getProjectOrFail(id, userId);
+  const files = Array.isArray(req.files) ? req.files.map((file) => requireVideoFile(file, 'Upload video files for the brand demo library')) : [];
+  if (files.length === 0) throw new ApiError(400, 'VIDEO_REQUIRED', 'Choose at least one product demo video');
+  const existingDemoAssets = project.mediaAssets.filter(isBrandDemoAsset);
+  if (existingDemoAssets.length + files.length > MAX_BRAND_DEMOS) {
+    throw new ApiError(400, 'BRAND_DEMO_LIMIT', `A project can contain up to ${MAX_BRAND_DEMOS} product demos`);
+  }
+
+  const storedAssets: Array<Awaited<ReturnType<typeof storeUploadedAsset>> & { originalName: string }> = [];
+  try {
+    for (const file of files) {
+      const stored = await storeUploadedAsset(file.buffer, {
+        folder: `ContentLane/projects/${project.id}/brand-demo`,
+        publicId: `${project.id}-${Date.now()}-${storedAssets.length}-${file.originalname}`,
+        mimeType: file.mimetype,
+      });
+      storedAssets.push({ ...stored, originalName: file.originalname });
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`brand-demos:${project.id}`}))`;
+      const currentAssets = (await tx.mediaAsset.findMany({
+        where: { projectId: project.id, conceptId: null, type: 'VIDEO' },
+        select: { metadata: true },
+      })).filter((asset) => asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) && (asset.metadata as Record<string, unknown>).kind === 'brand-demo');
+      if (currentAssets.length + storedAssets.length > MAX_BRAND_DEMOS) {
+        throw new ApiError(400, 'BRAND_DEMO_LIMIT', `A project can contain up to ${MAX_BRAND_DEMOS} product demos`);
+      }
+      const createdIds: string[] = [];
+      for (const stored of storedAssets) {
+        const created = await tx.mediaAsset.create({
+          data: {
+            projectId: project.id,
+            conceptId: null,
+            type: 'VIDEO',
+            provider: stored.provider,
+            providerId: stored.providerId,
+            url: stored.url,
+            mimeType: stored.mimeType,
+            metadata: {
+              ...(stored.metadata as Record<string, unknown>),
+              kind: 'brand-demo',
+              displayName: demoDisplayName(stored.originalName),
+              originalName: stored.originalName,
+              uploadedAt: new Date().toISOString(),
+            } as Prisma.InputJsonValue,
+          },
+        });
+        createdIds.push(created.id);
+      }
+      if (!project.defaultBrandDemoAssetId && createdIds[0]) {
+        await tx.project.update({ where: { id: project.id }, data: { defaultBrandDemoAssetId: createdIds[0] } });
+      }
+    });
+  } catch (error) {
+    await Promise.allSettled(storedAssets.map((asset) => deleteStoredAsset({ provider: asset.provider, providerId: asset.providerId, mimeType: asset.mimeType })));
+    throw error;
+  }
+  res.status(201).json({ project: assertProject(await loadProjectSnapshot(project.id, userId)) });
+};
+
+export const renameBrandDemo: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id, demoId } = brandDemoParamsSchema.parse(req.params);
+  const { name } = brandDemoRenameSchema.parse(req.body);
+  const project = await getProjectOrFail(id, userId);
+  const demo = project.mediaAssets.find((asset) => asset.id === demoId && isBrandDemoAsset(asset));
+  if (!demo) throw new ApiError(404, 'BRAND_DEMO_NOT_FOUND', 'Product demo not found for this project');
+  const metadata = demo.metadata && typeof demo.metadata === 'object' && !Array.isArray(demo.metadata) ? demo.metadata as Record<string, unknown> : {};
+  await prisma.mediaAsset.update({ where: { id: demo.id }, data: { metadata: { ...metadata, displayName: name } as Prisma.InputJsonValue } });
+  res.json({ project: assertProject(await loadProjectSnapshot(project.id, userId)) });
+};
+
+export const setDefaultBrandDemo: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id, demoId } = brandDemoParamsSchema.parse(req.params);
+  const project = await getProjectOrFail(id, userId);
+  const demo = project.mediaAssets.find((asset) => asset.id === demoId && isBrandDemoAsset(asset));
+  if (!demo) throw new ApiError(404, 'BRAND_DEMO_NOT_FOUND', 'Product demo not found for this project');
+  await prisma.project.update({ where: { id: project.id }, data: { defaultBrandDemoAssetId: demo.id } });
+  res.json({ project: assertProject(await loadProjectSnapshot(project.id, userId)) });
+};
+
+export const deleteBrandDemo: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id, demoId } = brandDemoParamsSchema.parse(req.params);
+  const project = await getProjectOrFail(id, userId);
+  const demo = project.mediaAssets.find((asset) => asset.id === demoId && isBrandDemoAsset(asset));
+  if (!demo) throw new ApiError(404, 'BRAND_DEMO_NOT_FOUND', 'Product demo not found for this project');
+  const activeJobs = await prisma.generationJob.findMany({
+    where: { projectId: project.id, type: JobType.RENDER_REELS, status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE] } },
+    select: { input: true },
+  });
+  if (activeJobs.some((job) => renderJobUsesDemo(job.input, demo.id))) {
+    throw new ApiError(409, 'BRAND_DEMO_IN_USE', 'Wait for the active render to finish before deleting this demo');
+  }
+  const remaining = project.mediaAssets.filter((asset) => asset.id !== demo.id && isBrandDemoAsset(asset)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const affectedHookCount = await prisma.hookConcept.count({ where: { projectId: project.id, assignedBrandDemoAssetId: demo.id } });
+  await prisma.$transaction([
+    prisma.hookConcept.updateMany({ where: { projectId: project.id, assignedBrandDemoAssetId: demo.id }, data: { assignedBrandDemoAssetId: null } }),
+    ...(project.defaultBrandDemoAssetId === demo.id ? [prisma.project.update({ where: { id: project.id }, data: { defaultBrandDemoAssetId: remaining[0]?.id ?? null } })] : []),
+    prisma.mediaAsset.delete({ where: { id: demo.id } }),
+  ]);
+  await deleteStoredAsset({ provider: demo.provider, providerId: demo.providerId, mimeType: demo.mimeType }).catch(() => undefined);
+  res.json({ project: assertProject(await loadProjectSnapshot(project.id, userId)), affectedHookCount });
 };
 
 export const getProject: RequestHandler = async (req, res) => {
@@ -776,9 +913,65 @@ export const updateConcept: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id, conceptId } = conceptReviewParamsSchema.parse(req.params);
   const value = conceptEditSchema.parse(req.body);
-  const concept = await prisma.hookConcept.findFirst({ where: { id: conceptId, projectId: id, project: { userId } } });
+  const project = await getProjectOrFail(id, userId);
+  const concept = project.concepts.find((item) => item.id === conceptId);
   if (!concept) throw new ApiError(404, 'CONCEPT_NOT_FOUND', 'Hook not found for this project');
-  await prisma.hookConcept.update({ where: { id: concept.id }, data: value });
+
+  const paid = await hasPaidAccess(userId, req.user!.role);
+  if (!paid) {
+    const access = await getFreeAccess(userId);
+    if (access.projectId !== id || access.ended || access.conversionRequired) {
+      throw new ApiError(402, 'UPGRADE_REQUIRED', 'Start your free trial to edit this hook');
+    }
+    if (concept.reviewDecision !== null) {
+      throw new ApiError(409, 'REVIEW_ALREADY_SAVED', 'Only unreviewed hooks can be edited during the free trial');
+    }
+  }
+
+  const { creatorId, clipId, brandDemoAssetId, hookText, demoOverlayText } = value;
+  if (creatorId && clipId) {
+    const parsedSelection = project.creatorSelection
+      ? projectCreatorSelectionSchema.safeParse(project.creatorSelection)
+      : null;
+    let selectedCreatorIds = parsedSelection?.success
+      ? parsedSelection.data.characters.map((character) => character.id)
+      : project.selectedCharacter
+        ? [creatorCharacterSchema.parse(project.selectedCharacter).id]
+        : [];
+    // Free onboarding uses the same effective default roster as the frontend
+    // before a paid creator selection has been persisted.
+    if (selectedCreatorIds.length === 0) {
+      selectedCreatorIds = (await prisma.creator.findMany({
+        where: { clips: { some: {} } },
+        select: { id: true },
+      })).map((creator) => creator.id);
+    }
+    if (!selectedCreatorIds.includes(creatorId)) {
+      throw new ApiError(400, 'INVALID_CLIP_ASSIGNMENT', 'Choose a clip from the project creator selection');
+    }
+    const clip = await prisma.creatorClip.findFirst({
+      where: { id: clipId, creatorId },
+      select: { id: true },
+    });
+    if (!clip) {
+      throw new ApiError(400, 'INVALID_CLIP_ASSIGNMENT', 'The selected clip does not belong to the selected creator');
+    }
+  }
+  const updatesBrandDemo = Object.prototype.hasOwnProperty.call(value, 'brandDemoAssetId');
+  if (updatesBrandDemo && brandDemoAssetId) {
+    const demo = project.mediaAssets.find((asset) => asset.id === brandDemoAssetId && isBrandDemoAsset(asset));
+    if (!demo) throw new ApiError(400, 'INVALID_BRAND_DEMO', 'Choose a product demo from this project');
+  }
+
+  await prisma.hookConcept.update({
+    where: { id: concept.id },
+    data: {
+      hookText,
+      demoOverlayText,
+      ...(creatorId && clipId ? { assignedCreatorId: creatorId, assignedClipId: clipId } : {}),
+      ...(updatesBrandDemo ? { assignedBrandDemoAssetId: brandDemoAssetId ?? null } : {}),
+    },
+  });
   res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
 };
 
@@ -1506,8 +1699,9 @@ export const renderProject: RequestHandler = async (req, res) => {
   const concepts = (conceptIds?.length ? project.concepts.filter((concept) => conceptIds.includes(concept.id)) : likedConcepts)
     .sort((a, b) => a.sortOrder - b.sortOrder);
   if (concepts.length === 0) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Select at least one hook to render');
-  const demo = project.mediaAssets.find(isBrandDemoAsset);
-  if (!demo) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Upload a product demo before rendering');
+  const demos = project.mediaAssets.filter(isBrandDemoAsset);
+  const defaultDemo = demos.find((demo) => demo.id === project.defaultBrandDemoAssetId) ?? demos[0];
+  if (!defaultDemo) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Upload a product demo before rendering');
   const selection = project.creatorSelection && projectCreatorSelectionSchema.safeParse(project.creatorSelection).success
     ? projectCreatorSelectionSchema.parse(project.creatorSelection)
     : project.selectedCharacter
@@ -1528,7 +1722,17 @@ export const renderProject: RequestHandler = async (req, res) => {
       ? resolveCreatorClipAssignments(concepts, creators, selection)
       : [];
   if (assignments.length !== concepts.length) throw new ApiError(409, 'PROJECT_INCOMPLETE', 'A matching creator clip is missing for one or more hooks');
-  const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments };
+  const renderAssignments: RenderJobInput['assignments'] = assignments.map((assignment) => {
+    const concept = concepts.find((item) => item.id === assignment.conceptId)!;
+    const demo = demos.find((item) => item.id === concept.assignedBrandDemoAssetId) ?? defaultDemo;
+    return {
+      ...assignment,
+      demoAssetId: demo.id,
+      demoUrl: demo.url,
+      demoName: demoAssetDisplayName(demo),
+    };
+  });
+  const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments: renderAssignments };
   const job = await createReservedRenderJob({
     userId,
     role: req.user!.role,
