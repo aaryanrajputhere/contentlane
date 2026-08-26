@@ -20,6 +20,15 @@ const generationLanguages: GenerationLanguage[] = ['English', 'Spanish', 'French
 type Section = 'home' | 'brand' | 'demos' | 'content' | 'generate';
 type PreferenceDraft = { liked: string; rejected: string; patterns: string };
 type ReelOutput = { url: string; conceptId: string };
+type PendingRenderState = { pendingRenderConceptIds?: unknown };
+
+function pendingRenderConceptIds(state: unknown, project: ProjectSnapshot) {
+  if (!state || typeof state !== 'object') return [];
+  const value = (state as PendingRenderState).pendingRenderConceptIds;
+  if (!Array.isArray(value)) return [];
+  const savedIds = new Set(project.concepts.filter((concept) => concept.reviewDecision === 'LIKED').map((concept) => concept.id));
+  return [...new Set(value.filter((conceptId): conceptId is string => typeof conceptId === 'string' && savedIds.has(conceptId)))].slice(0, 100);
+}
 
 function sectionFromPath(pathname: string): Section {
   if (pathname.endsWith('/brand')) return 'brand';
@@ -79,11 +88,12 @@ export default function CampaignWorkspacePage() {
   useEffect(() => { void load().catch((caught) => setError(caught instanceof Error ? caught.message : 'Unable to load campaign')); }, [id]);
 
   if (!project) return <main className="grid min-h-screen place-items-center bg-[#f6f6f1] text-sm">{error || 'Loading campaign…'}</main>;
+  const pendingConceptIds = pendingRenderConceptIds(location.state, project);
   return <WorkspaceShell project={project} section={section}>
     {section === 'home' ? <HomeSection project={project} /> : null}
     {section === 'brand' ? <BrandSection project={project} onProjectChange={setProject} /> : null}
-    {section === 'demos' ? <BrandDemosSection project={project} onProjectChange={setProject} /> : null}
-    {section === 'content' ? <ContentSection project={project} creators={creators} billing={billing} onProjectChange={setProject} /> : null}
+    {section === 'demos' ? <BrandDemosSection project={project} pendingRenderConceptIds={pendingConceptIds} onProjectChange={setProject} /> : null}
+    {section === 'content' ? <ContentSection project={project} creators={creators} billing={billing} initialSelectedConceptIds={pendingConceptIds} onProjectChange={setProject} /> : null}
     {section === 'generate' ? <GenerateSection project={project} creators={creators} onProjectChange={setProject} /> : null}
   </WorkspaceShell>;
 }
@@ -142,12 +152,32 @@ function BrandSection({ project, onProjectChange }: { project: ProjectSnapshot; 
   return <div className="space-y-5"><div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(420px,.9fr)]"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><p className="max-w-2xl text-sm leading-6 text-[#666]">This is the context ContentLane uses when it creates new hooks. Updating it never changes existing videos.</p><div className="mt-7 space-y-5"><label className="block text-sm font-bold">Brand name<input className={input} value={profile.brandName} onChange={(e) => setProfile({ ...profile, brandName: e.target.value })} /></label><label className="block text-sm font-bold">What does your product do?<textarea className={input} rows={3} value={profile.productSummary} onChange={(e) => setProfile({ ...profile, productSummary: e.target.value })} /></label><label className="block text-sm font-bold">Who is it for?<textarea className={input} rows={2} value={profile.targetAudience} onChange={(e) => setProfile({ ...profile, targetAudience: e.target.value })} /></label><div className="flex items-center gap-3 border-t border-black/8 pt-5"><button className={button} onClick={() => void save()} disabled={busy === 'profile'}><Save size={15} />{busy === 'profile' ? 'Saving…' : 'Save changes'}</button>{message ? <span className="text-sm font-semibold text-[#4b8125]">{message}</span> : null}</div></div></section><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><button className="flex w-full items-center justify-between text-left" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}><span><span className="block text-xs font-bold uppercase tracking-[.18em] text-[#888]">Optional context</span><span className="mt-2 block text-2xl font-black tracking-[-.04em]">More brand context</span></span><ChevronDown size={18} className={`transition ${advanced ? 'rotate-180' : ''}`} /></button>{advanced ? <div className="mt-6 grid gap-4 border-t border-black/8 pt-5 sm:grid-cols-2">{([['customerProblems', 'Customer problems'], ['keyBenefits', 'Key benefits'], ['proofPoints', 'Proof points'], ['claimConstraints', 'Claim constraints']] as const).map(([key, label]) => <label key={key} className="block text-sm font-bold">{label}<textarea className={`${input} resize-y overflow-hidden`} rows={contextRows(profile[key])} value={profile[key].join('\n')} onChange={(e) => updateList(key, e.target.value)} placeholder="One item per line" /></label>)}</div> : <p className="mt-5 text-sm leading-6 text-[#666]">Add problems, benefits, proof, and claim guardrails to make future hooks more specific.</p>}</section></div><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Generation preferences</p><h2 className="mt-2 text-xl font-black tracking-[-.04em]">Shape the next batch</h2></div><div className="text-sm font-bold text-[#666]">Always on</div></div><div className="mt-5 rounded-2xl border border-black/8 bg-[#fafaf8] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-bold">Content language</p><p className="mt-1 text-xs leading-5 text-[#666]">Future hooks and demo overlays will use this language.</p></div><label className="sr-only" htmlFor="workspace-generation-language">Content language</label><select id="workspace-generation-language" className="rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-bold outline-none focus:border-black focus:ring-2 focus:ring-black/10" value={project.hookPreferences?.language ?? "English"} onChange={(event) => void saveLanguage(event.target.value as GenerationLanguage)} disabled={languageBusy}>{generationLanguages.map((language) => <option key={language} value={language}>{language}</option>)}</select></div><p className="mt-2 min-h-5 text-xs font-semibold text-[#4b8125]" role="status" aria-live="polite">{languageBusy ? "Saving language…" : languageMessage}</p></div><div className="mt-5 space-y-5 border-t border-black/8 pt-5"><div><p className="text-sm font-bold">Good examples</p><EditableExampleList value={preferences.patterns} onChange={(patterns) => setPreferences({ ...preferences, patterns })} placeholder="Good hook pattern" /><span className="mt-2 block text-xs font-medium leading-5 text-[#777]">Each example is injected into the proven-pattern guidance and adapted to your brand.</span></div><div><p className="text-sm font-bold">Bad examples</p><EditableExampleList value={preferences.rejected} onChange={(rejected) => setPreferences({ ...preferences, rejected })} placeholder="Pattern to avoid" /><span className="mt-2 block text-xs font-medium leading-5 text-[#777]">Leave this empty if there are no patterns to avoid. These examples become negative guidance.</span></div><button className={`${secondary} w-fit`} onClick={() => void saveRules()} disabled={busy === 'rules'}><Save size={15} />{busy === 'rules' ? 'Saving…' : 'Save preferences'}</button></div></section></div>;
 }
 
-function BrandDemosSection({ project, onProjectChange }: { project: ProjectSnapshot; onProjectChange: (project: ProjectSnapshot) => void }) {
+function BrandDemosSection({ project, pendingRenderConceptIds, onProjectChange }: { project: ProjectSnapshot; pendingRenderConceptIds: string[]; onProjectChange: (project: ProjectSnapshot) => void }) {
+  const navigate = useNavigate();
+  const [renderBusy, setRenderBusy] = useState(false);
+  const [renderError, setRenderError] = useState('');
   const demos = brandDemos(project);
   const defaultDemo = demos.find((demo) => demo.id === project.defaultBrandDemoAssetId) ?? demos[0] ?? null;
   const overrideCount = project.concepts.filter((concept) => concept.assignedBrandDemoAssetId).length;
+  const pendingCount = pendingRenderConceptIds.length;
+  const pendingLabel = `${pendingCount} ${pendingCount === 1 ? 'video' : 'videos'}`;
+  const continueRender = async () => {
+    if (!defaultDemo || pendingCount === 0 || renderBusy) return;
+    setRenderBusy(true); setRenderError('');
+    try {
+      await api(`/projects/${project.id}/render`, { method: 'POST', body: JSON.stringify({ conceptIds: pendingRenderConceptIds }) });
+      navigate(`/projects/${project.id}/render`);
+    } catch (caught) {
+      setRenderError(caught instanceof ApiClientError ? caught.message : 'Unable to start render.');
+      setRenderBusy(false);
+    }
+  };
 
   return <div className="space-y-5">
+    {pendingCount > 0 ? <section className="flex flex-col gap-5 rounded-[28px] border border-[#b6df91] bg-[#eef9e4] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6" aria-labelledby="pending-render-title">
+      <div className="flex min-w-0 items-start gap-4"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#111] text-[#b8f36b]"><Video size={19} /></span><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-[#4b8125]">Render waiting</p><h2 id="pending-render-title" className="mt-1 text-xl font-black tracking-[-.04em]">{pendingLabel} selected</h2><p className="mt-1 max-w-xl text-sm leading-6 text-[#567044]">{defaultDemo ? 'Your product demo is ready. Continue when you want to start the render.' : 'Upload a product demo below. Your selection is preserved and rendering will not start automatically.'}</p>{renderError ? <p className="mt-2 text-sm font-bold text-red-700" role="alert">{renderError}</p> : null}</div></div>
+      <div className="flex shrink-0 flex-wrap gap-2"><button type="button" className={secondary} onClick={() => navigate(`/projects/${project.id}/content`, { state: { pendingRenderConceptIds } })}>Back to selection</button>{defaultDemo ? <button type="button" className={button} onClick={() => void continueRender()} disabled={renderBusy}>{renderBusy ? 'Starting…' : `Continue rendering ${pendingLabel}`}</button> : null}</div>
+    </section> : null}
     <section className="relative overflow-hidden rounded-[34px] bg-[#151515] p-6 text-white shadow-[0_24px_70px_rgba(0,0,0,.13)] sm:p-8">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#b8f36b]/10 blur-3xl" />
       <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center">
@@ -170,13 +200,14 @@ function BrandDemosSection({ project, onProjectChange }: { project: ProjectSnaps
 }
 
 
-function ContentSection({ project, creators, billing, onProjectChange }: { project: ProjectSnapshot; creators: CreatorRecord[]; billing: BillingStatus | null; onProjectChange: (project: ProjectSnapshot) => void }) {
+function ContentSection({ project, creators, billing, initialSelectedConceptIds, onProjectChange }: { project: ProjectSnapshot; creators: CreatorRecord[]; billing: BillingStatus | null; initialSelectedConceptIds: string[]; onProjectChange: (project: ProjectSnapshot) => void }) {
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(initialSelectedConceptIds);
   const [showRendered, setShowRendered] = useState(false);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [missingDemoSelection, setMissingDemoSelection] = useState<string[]>([]);
   const [editingAssignment, setEditingAssignment] = useState<ReviewAssignment | null>(null);
   const savedConcepts = useMemo(() => project.concepts
     .filter((concept) => concept.reviewDecision === 'LIKED')
@@ -189,6 +220,10 @@ function ContentSection({ project, creators, billing, onProjectChange }: { proje
   const demoLibrary = useMemo(() => brandDemos(project), [project]);
   const selectedCreatorIds = new Set(effectiveCreatorSelection(project, creators)?.characters.map((creator) => creator.id) ?? []);
   const editorCreators = creators.filter((creator) => selectedCreatorIds.has(creator.id));
+  useEffect(() => {
+    if (initialSelectedConceptIds.length === 0) return;
+    setSelected(initialSelectedConceptIds.filter((conceptId) => savedIds.has(conceptId)).slice(0, renderCapacity));
+  }, [initialSelectedConceptIds, renderCapacity, savedIds]);
   const saveConcept = async (input: { conceptId: string; hookText: string; demoOverlayText: string; creatorId: string; clipId: string; brandDemoAssetId: string | null }) => {
     setBusy(`edit:${input.conceptId}`); setError('');
     try {
@@ -203,8 +238,8 @@ function ContentSection({ project, creators, billing, onProjectChange }: { proje
     if (selected.length === 0 || selected.length > renderCapacity) return;
     const hasBrandDemo = project.mediaAssets.some((asset) => asset.type === 'VIDEO' && asset.metadata?.kind === 'brand-demo');
     if (!hasBrandDemo) {
-      const addDemo = window.confirm('Add your product demo before rendering these videos. Go to the upload step now?');
-      if (addDemo) navigate(`/projects/${project.id}/hooks`);
+      setMissingDemoSelection([...selected]);
+      setError('');
       return;
     }
     setBusy('render');
@@ -216,7 +251,7 @@ function ContentSection({ project, creators, billing, onProjectChange }: { proje
       setBusy('');
     }
   };
-  return <div className="space-y-5"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm leading-6 text-[#666]">Only saved hooks appear here. Select any number up to your remaining render capacity.</p><p className="mt-2 text-xs font-bold uppercase tracking-[.16em] text-[#999]">{savedConcepts.length} saved hooks · {rendered.length} rendered outputs · {billing?.videoUsage.remaining ?? 'Unlimited'} remaining</p></div><button className={button} onClick={() => navigate(`/projects/${project.id}/generate`)}><Sparkles size={15} />Generate more</button></div><div className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f3f3f0] p-1"><button className={`rounded-full px-4 py-2 text-sm font-bold ${!showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(false)}>Saved content</button><button className={`rounded-full px-4 py-2 text-sm font-bold ${showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(true)}>Rendered videos</button></div></section>{message || error ? <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? 'bg-red-50 text-red-700' : 'bg-[#e8f8d4] text-[#315016]'}`}>{error || message}</p> : null}{showRendered ? <RenderedContent rendered={rendered} conceptById={conceptById} /> : <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-3 border-b border-black/8 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Saved content</p><h2 className="mt-2 text-2xl font-black tracking-[-.04em]">Choose what to render</h2><p className="mt-2 text-sm text-[#666]">Each selected hook becomes one rendered video.</p></div><button className={button} onClick={() => void createBatch()} disabled={selected.length === 0 || selected.length > renderCapacity || busy === 'render'}><Video size={15} />{busy === 'render' ? 'Starting…' : `Render selected · ${selected.length}`}</button></div>{renderCapacity === 0 ? <p className="mt-5 rounded-2xl bg-[#fff3ef] p-4 text-sm font-bold text-[#9a3e29]">Your render allowance is used for this billing period. Upgrade or wait for the reset.</p> : null}{assignments.length ? <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{assignments.map((assignment) => <HookVideoCard key={assignment.concept.id} assignment={assignment} selected={selected.includes(assignment.concept.id)} disabled={busy === `edit:${assignment.concept.id}`} onToggle={() => setSelected((current) => current.includes(assignment.concept.id) ? current.filter((conceptId) => conceptId !== assignment.concept.id) : current.length < renderCapacity ? [...current, assignment.concept.id] : current)} onEdit={() => setEditingAssignment(assignment)} />)}</div> : <EmptyPanel title="No saved content yet" action="Generate more" onClick={() => navigate(`/projects/${project.id}/generate`)} />}</section>}{editingAssignment ? <HookEditSheet assignment={editingAssignment} creators={editorCreators} demos={demoLibrary} defaultDemoAssetId={project.defaultBrandDemoAssetId} onCancel={() => setEditingAssignment(null)} onSave={saveConcept} /> : null}</div>;
+  return <div className="space-y-5"><section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm leading-6 text-[#666]">Only saved hooks appear here. Select any number up to your remaining render capacity.</p><p className="mt-2 text-xs font-bold uppercase tracking-[.16em] text-[#999]">{savedConcepts.length} saved hooks · {rendered.length} rendered outputs · {billing?.videoUsage.remaining ?? 'Unlimited'} remaining</p></div><button className={button} onClick={() => navigate(`/projects/${project.id}/generate`)}><Sparkles size={15} />Generate more</button></div><div className="mt-6 inline-flex rounded-full border border-black/10 bg-[#f3f3f0] p-1"><button className={`rounded-full px-4 py-2 text-sm font-bold ${!showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(false)}>Saved content</button><button className={`rounded-full px-4 py-2 text-sm font-bold ${showRendered ? 'bg-[#111] text-white' : 'text-[#666]'}`} onClick={() => setShowRendered(true)}>Rendered videos</button></div></section>{missingDemoSelection.length > 0 ? <section className="flex flex-col gap-4 rounded-[24px] border border-[#b6df91] bg-[#eef9e4] p-5 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="missing-demo-title"><div><p className="text-[10px] font-black uppercase tracking-[.18em] text-[#4b8125]">Product demo required</p><h2 id="missing-demo-title" className="mt-1 text-lg font-black tracking-[-.03em]">Your {missingDemoSelection.length} selected {missingDemoSelection.length === 1 ? 'video is' : 'videos are'} saved.</h2><p className="mt-1 text-sm leading-6 text-[#567044]">Add the product footage that follows the hook, then choose when to start rendering.</p></div><div className="flex shrink-0 gap-2"><button type="button" className={secondary} onClick={() => setMissingDemoSelection([])}>Not now</button><button type="button" className={button} onClick={() => navigate(`/projects/${project.id}/demos`, { state: { pendingRenderConceptIds: missingDemoSelection } })}><Video size={15} />Add product demo</button></div></section> : null}{message || error ? <p className={`rounded-2xl px-4 py-3 text-sm font-semibold ${error ? 'bg-red-50 text-red-700' : 'bg-[#e8f8d4] text-[#315016]'}`}>{error || message}</p> : null}{showRendered ? <RenderedContent rendered={rendered} conceptById={conceptById} /> : <section className="rounded-[30px] border border-black/8 bg-white p-6 sm:p-8"><div className="flex flex-col gap-3 border-b border-black/8 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#888]">Saved content</p><h2 className="mt-2 text-2xl font-black tracking-[-.04em]">Choose what to render</h2><p className="mt-2 text-sm text-[#666]">Each selected hook becomes one rendered video.</p></div><button className={button} onClick={() => void createBatch()} disabled={selected.length === 0 || selected.length > renderCapacity || busy === 'render'}><Video size={15} />{busy === 'render' ? 'Starting…' : `Render selected · ${selected.length}`}</button></div>{renderCapacity === 0 ? <p className="mt-5 rounded-2xl bg-[#fff3ef] p-4 text-sm font-bold text-[#9a3e29]">Your render allowance is used for this billing period. Upgrade or wait for the reset.</p> : null}{assignments.length ? <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{assignments.map((assignment) => <HookVideoCard key={assignment.concept.id} assignment={assignment} selected={selected.includes(assignment.concept.id)} disabled={busy === `edit:${assignment.concept.id}`} onToggle={() => setSelected((current) => current.includes(assignment.concept.id) ? current.filter((conceptId) => conceptId !== assignment.concept.id) : current.length < renderCapacity ? [...current, assignment.concept.id] : current)} onEdit={() => setEditingAssignment(assignment)} />)}</div> : <EmptyPanel title="No saved content yet" action="Generate more" onClick={() => navigate(`/projects/${project.id}/generate`)} />}</section>}{editingAssignment ? <HookEditSheet assignment={editingAssignment} creators={editorCreators} demos={demoLibrary} defaultDemoAssetId={project.defaultBrandDemoAssetId} onCancel={() => setEditingAssignment(null)} onSave={saveConcept} /> : null}</div>;
 }
 
 function RenderedContent({ rendered, conceptById }: { rendered: ReelOutput[]; conceptById: Map<string, ConceptCard> }) {

@@ -102,6 +102,7 @@ test('billing and render payloads require known plans and flexible unique select
   assert.throws(() => checkoutInputSchema.parse({}));
   assert.throws(() => checkoutInputSchema.parse({ planId: 'enterprise' }));
   const conceptIds = Array.from({ length: 30 }, (_, index) => `c${String(index).padStart(24, '0')}`);
+  assert.deepEqual(renderRequestSchema.parse({ conceptIds: [conceptIds[0]] }).conceptIds, [conceptIds[0]]);
   assert.equal(renderRequestSchema.parse({ conceptIds }).conceptIds?.length, 30);
   assert.throws(() => renderRequestSchema.parse({ conceptIds: [conceptIds[0], conceptIds[0]] }));
   assert.throws(() => renderRequestSchema.parse({ conceptIds: Array.from({ length: 101 }, (_, index) => `c${String(index).padStart(24, '0')}`) }));
