@@ -8,6 +8,7 @@ export type HookVideoPreviewProps = {
   creator?: CreatorRecord;
   clip: CreatorClipRecord | null;
   videoSourceOverride?: string;
+  captionsBakedIn?: boolean;
   compact?: boolean;
   className?: string;
   bottomMetadata?: ReactNode;
@@ -19,6 +20,7 @@ export default function HookVideoPreview({
   creator,
   clip,
   videoSourceOverride,
+  captionsBakedIn = false,
   compact = false,
   className = '',
   bottomMetadata,
@@ -61,11 +63,13 @@ export default function HookVideoPreview({
         </div>
       </div>
 
-      <div className={`absolute top-1/2 z-10 w-full -translate-y-1/2 text-center ${usesSnapchatCaptions ? `inset-x-0 bg-black/60 ${compact ? 'px-3 py-1.5' : 'px-5 py-1.5'}` : compact ? 'inset-x-0 px-3' : 'inset-x-0 px-6'}`}>
-        <p className={`break-words text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : `${compact ? 'text-[0.78rem] sm:text-sm' : 'text-base'} font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]`}`}>
-          {concept.hookText}
-        </p>
-      </div>
+      {!captionsBakedIn ? (
+        <div className={`absolute top-1/2 z-10 w-full -translate-y-1/2 text-center ${usesSnapchatCaptions ? `inset-x-0 bg-black/60 ${compact ? 'px-3 py-1.5' : 'px-5 py-1.5'}` : compact ? 'inset-x-0 px-3' : 'inset-x-0 px-6'}`}>
+          <p className={`break-words text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : `${compact ? 'text-[0.78rem] sm:text-sm' : 'text-base'} font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]`}`}>
+            {concept.hookText}
+          </p>
+        </div>
+      ) : null}
 
       {bottomMetadata || bottomAction ? (
         <div className={`absolute z-20 flex items-end justify-between gap-3 ${compact ? 'inset-x-3 bottom-3' : 'inset-x-4 bottom-4'}`}>

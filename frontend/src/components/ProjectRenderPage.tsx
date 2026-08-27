@@ -131,6 +131,7 @@ export default function ProjectRenderPage() {
                 creator={reel.creator}
                 clip={reel.clip}
                 videoSourceOverride={output?.url}
+                captionsBakedIn={Boolean(output)}
                 compact
                 className="rounded-[25px]"
                 bottomMetadata={(
