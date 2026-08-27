@@ -7,6 +7,7 @@ export type HookVideoPreviewProps = {
   concept: ConceptCard;
   creator?: CreatorRecord;
   clip: CreatorClipRecord | null;
+  videoSourceOverride?: string;
   compact?: boolean;
   className?: string;
   bottomMetadata?: ReactNode;
@@ -17,12 +18,13 @@ export default function HookVideoPreview({
   concept,
   creator,
   clip,
+  videoSourceOverride,
   compact = false,
   className = '',
   bottomMetadata,
   bottomAction,
 }: HookVideoPreviewProps) {
-  const videoSource = concept.generatedVideoUrl ?? clip?.url;
+  const videoSource = videoSourceOverride ?? concept.generatedVideoUrl ?? clip?.url;
   const usesSnapchatCaptions = getCaptionStyle(concept.sortOrder) === 'SNAPCHAT';
 
   return (

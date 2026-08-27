@@ -5,14 +5,14 @@ import { api, ApiClientError } from '../lib/api';
 import { assignCreatorsToConcepts, effectiveCreatorSelection } from '../lib/creatorAssignments';
 import { createZip } from '../lib/zip';
 import { brandDemoName, brandDemos } from '../lib/brandDemos';
-import type { CreatorRecord, GenerationJob, ProjectResponse, ProjectSnapshot } from '../types/domain';
+import HookVideoPreview from './HookVideoPreview';
+import type { ConceptCard, CreatorClipRecord, CreatorRecord, GenerationJob, ProjectResponse, ProjectSnapshot } from '../types/domain';
 
 const shell = 'mx-auto w-full max-w-[1440px] px-6 sm:px-8 lg:px-12';
-const panel = 'rounded-[32px] border border-black/8 bg-white shadow-[0_18px_50px_rgba(0,0,0,0.04)]';
 const black = 'inline-flex items-center justify-center gap-2 rounded-full bg-[#111] px-5 py-3 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50';
 const white = 'inline-flex items-center justify-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50';
 
-type Reel = { conceptId: string; clipId: string; creatorName: string; clipUrl: string; sortOrder: number; demoAssetId: string; demoName: string };
+type Reel = { concept: ConceptCard; creator: CreatorRecord; clip: CreatorClipRecord; demoAssetId: string; demoName: string };
 type Output = { conceptId: string; creatorName: string; url: string; sortOrder: number; format: string; demoAssetId?: string; demoName?: string };
 
 function isCompleted(job: GenerationJob | null): job is GenerationJob & { status: 'COMPLETED' } { return job?.status === 'COMPLETED'; }
@@ -77,7 +77,7 @@ export default function ProjectRenderPage() {
   const defaultDemo = demos.find((demo) => demo.id === project?.defaultBrandDemoAssetId) ?? demos[0];
   const reels: Reel[] = assignments.flatMap((item) => {
     const demo = demos.find((candidate) => candidate.id === item.concept.assignedBrandDemoAssetId) ?? defaultDemo;
-    return item.clip && demo ? [{ conceptId: item.concept.id, clipId: item.clip.id, creatorName: item.creator.name, clipUrl: item.clip.url, sortOrder: item.concept.sortOrder, demoAssetId: demo.id, demoName: brandDemoName(demo) }] : [];
+    return item.clip && demo ? [{ concept: item.concept, creator: item.creator, clip: item.clip, demoAssetId: demo.id, demoName: brandDemoName(demo) }] : [];
   });
   const outputs = isCompleted(job) && job.result && typeof job.result === 'object' && Array.isArray((job.result as { reels?: unknown }).reels)
     ? (job.result as { reels: Output[] }).reels : [];
@@ -91,7 +91,7 @@ export default function ProjectRenderPage() {
     try {
       const response = await api<{ job: GenerationJob }>(`/projects/${id}/render`, {
         method: 'POST',
-        body: JSON.stringify({ conceptIds: reels.map((reel) => reel.conceptId) }),
+        body: JSON.stringify({ conceptIds: reels.map((reel) => reel.concept.id) }),
       });
       setJob(response.job);
     } catch (caught) { setError(caught instanceof ApiClientError ? caught.message : 'Unable to start server render'); }
@@ -116,7 +116,49 @@ export default function ProjectRenderPage() {
       <div className="text-center"><div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium"><Server size={15} />Video render</div><h1 className="mx-auto mt-7 max-w-[15ch] text-[clamp(3rem,6vw,5.2rem)] font-black leading-[.94] tracking-[-.07em]">Your {reels.length} Reels are taking shape.</h1><p className="mx-auto mt-4 max-w-2xl text-[1.05rem] leading-7 text-[#666]">This render is preserved in your campaign history. Start another from your saved content whenever you want.</p><div className="mt-6 flex flex-wrap justify-center gap-3"><button type="button" onClick={() => navigate(`/projects/${id}/content`)} className={white}>Render more videos</button><button type="button" onClick={() => void startRender()} disabled={starting || renderInProgress || isCompleted(job) || reels.length === 0} className={black}>{starting || renderInProgress ? <Loader2 size={16} className="animate-spin" /> : <Server size={15} />}{starting || renderInProgress ? `Rendering ${progress}%` : isCompleted(job) ? 'Render complete' : 'Render on server'}</button><button type="button" onClick={() => void downloadAll()} disabled={outputs.length === 0 || downloading} className={white}><Download size={16} />{downloading ? 'Preparing ZIP…' : 'Download all'}</button></div></div>
       {failed ? <div className="mx-auto mt-8 flex max-w-2xl items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span className="flex items-center gap-2"><TriangleAlert size={17} />{job.errorMessage ?? 'The render failed.'}</span><button type="button" onClick={() => { setJob(null); void startRender(); }} className={white}>Retry</button></div> : null}
       {error ? <p className="mx-auto mt-5 max-w-2xl text-center text-sm text-red-700">{error}</p> : null}
-      <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{reels.map((reel, index) => { const output = outputByConcept.get(reel.conceptId); return <article key={reel.conceptId} className={`${panel} overflow-hidden p-4`}><div className="flex items-center justify-between"><div><p className="text-[11px] uppercase tracking-[.18em] text-[#8c8c8c]">Reel {index + 1}</p><h2 className="mt-1 line-clamp-2 text-base font-bold">{concepts.find((concept) => concept.id === reel.conceptId)?.hookText}</h2><p className="mt-2 text-xs text-[#666]">{reel.creatorName} · Demo: {output?.demoName ?? reel.demoName}</p></div><span className="rounded-full bg-[#f2f0eb] px-2.5 py-1 text-xs">{output ? 'completed' : failed ? 'failed' : job ? 'rendering' : 'queued'}</span></div><div className="mt-4 overflow-hidden rounded-[24px] bg-[#111]">{output ? <video src={output.url} className="aspect-[9/16] w-full object-cover" controls playsInline /> : <video src={reel.clipUrl} className="aspect-[9/16] w-full object-cover opacity-70" muted loop autoPlay playsInline />}</div>{output ? <a href={output.url} download={`${id}-reel-${index + 1}.mp4`} className={`${black} mt-4 w-full`}><Download size={15} />Download MP4</a> : null}</article>; })}</div>
+      <div className="mx-auto mt-10 grid max-w-[1120px] grid-cols-1 gap-3 min-[520px]:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+        {reels.map((reel, index) => {
+          const output = outputByConcept.get(reel.concept.id);
+          const statusLabel = failed ? 'Failed' : renderInProgress ? `Rendering ${progress}%` : isCompleted(job) ? 'Unavailable' : 'Queued';
+          return (
+            <article
+              key={reel.concept.id}
+              aria-label={`Reel ${index + 1}: ${reel.concept.hookText}`}
+              className="aspect-[9/16] w-full max-w-[360px] justify-self-center overflow-hidden rounded-[28px] border-2 border-[#151515] bg-[#111] shadow-[0_14px_34px_rgba(0,0,0,0.14)] sm:max-w-none"
+            >
+              <HookVideoPreview
+                concept={reel.concept}
+                creator={reel.creator}
+                clip={reel.clip}
+                videoSourceOverride={output?.url}
+                compact
+                className="rounded-[25px]"
+                bottomMetadata={(
+                  <div className="text-[10px] leading-[1.25] text-white/75 drop-shadow-sm sm:text-[11px]">
+                    <p className="font-semibold text-white">Reel {index + 1}</p>
+                    <p className="mt-0.5 line-clamp-2">Demo: {output?.demoName ?? reel.demoName}</p>
+                  </div>
+                )}
+                bottomAction={output ? (
+                  <a
+                    href={output.url}
+                    download={`${id}-reel-${index + 1}.mp4`}
+                    aria-label={`Download Reel ${index + 1} as MP4`}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/35 bg-black/65 px-3 py-2 text-[11px] font-bold text-white shadow-sm backdrop-blur transition hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                  >
+                    <Download size={12} /> Download
+                  </a>
+                ) : (
+                  <span aria-live="polite" className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-bold shadow-sm backdrop-blur ${failed ? 'border-red-300/50 bg-red-950/70 text-red-100' : 'border-white/25 bg-black/60 text-white'}`}>
+                    {renderInProgress ? <Loader2 size={11} className="animate-spin motion-reduce:animate-none" /> : null}
+                    {statusLabel}
+                  </span>
+                )}
+              />
+            </article>
+          );
+        })}
+      </div>
       <p className="mx-auto mt-8 max-w-2xl text-center text-xs text-[#888]">Server rendering keeps the browser responsive while the worker downloads, composes, and uploads each reel.</p>
     </section>
   </main>;
