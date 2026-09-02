@@ -4,6 +4,17 @@ import prisma from '../lib/prisma';
 import { ApiError } from '../lib/errors';
 import { adminListQuerySchema, adminIdParamsSchema } from '../domain/schemas';
 
+type AdminRenderReel = {
+  conceptId: string;
+  creatorName: string;
+  demoAssetId: string;
+  demoName: string;
+  sortOrder: number;
+  url: string;
+  mimeType: string;
+  format: string;
+};
+
 const userSelect = {
   id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true,
   _count: { select: { projects: true, supportRequests: true, subscriptions: true } },
@@ -17,6 +28,35 @@ const projectSelect = {
 
 function pagination(page: number, pageSize: number, total: number) {
   return { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+function isJsonRecord(value: Prisma.JsonValue): value is Prisma.JsonObject {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeRenderReel(value: Prisma.JsonValue): AdminRenderReel | null {
+  if (!isJsonRecord(value)) return null;
+  const { conceptId, creatorName, demoAssetId, demoName, sortOrder, url, mimeType, format } = value;
+  if (
+    typeof conceptId !== 'string' || !conceptId ||
+    typeof creatorName !== 'string' || !creatorName ||
+    typeof demoAssetId !== 'string' || !demoAssetId ||
+    typeof demoName !== 'string' || !demoName ||
+    typeof sortOrder !== 'number' || !Number.isInteger(sortOrder) ||
+    typeof url !== 'string' || !url ||
+    typeof mimeType !== 'string' || !mimeType ||
+    typeof format !== 'string' || !format
+  ) return null;
+  return { conceptId, creatorName, demoAssetId, demoName, sortOrder, url, mimeType, format };
+}
+
+function normalizeRenderBatch(job: { id: string; updatedAt: Date; result: Prisma.JsonValue | null }) {
+  if (!job.result || !isJsonRecord(job.result) || !Array.isArray(job.result.reels)) return null;
+  const reels = job.result.reels.flatMap((value) => {
+    const reel = normalizeRenderReel(value);
+    return reel ? [reel] : [];
+  }).sort((a, b) => a.sortOrder - b.sortOrder);
+  return reels.length ? { id: job.id, completedAt: job.updatedAt, reels } : null;
 }
 
 export const getAdminOverview: RequestHandler = async (_req, res) => {
@@ -93,20 +133,32 @@ export const listAdminProjects: RequestHandler = async (req, res) => {
 
 export const getAdminProject: RequestHandler = async (req, res) => {
   const { id } = adminIdParamsSchema.parse(req.params);
-  const project = await prisma.project.findUnique({
-    where: { id },
-    select: {
-      ...projectSelect,
-      brandProfile: true,
-      websiteAnalysis: { select: { id: true, sourceUrl: true, rootDomain: true, sourceContentFingerprint: true, createdAt: true, updatedAt: true } },
-      concepts: { orderBy: { sortOrder: 'asc' }, select: { id: true, angle: true, hookText: true, score: true, scoreLabel: true, reviewDecision: true, sortOrder: true, createdAt: true, updatedAt: true } },
-      mediaAssets: { orderBy: { createdAt: 'desc' }, select: { id: true, conceptId: true, type: true, provider: true, url: true, mimeType: true, createdAt: true } },
-      exportState: { select: { id: true, settings: true, createdAt: true, updatedAt: true } },
-      jobs: { orderBy: { createdAt: 'desc' }, select: { id: true, type: true, status: true, progress: true, progressMessage: true, errorMessage: true, createdAt: true, updatedAt: true } },
-    },
-  });
+  const [project, renderJobs] = await prisma.$transaction([
+    prisma.project.findUnique({
+      where: { id },
+      select: {
+        ...projectSelect,
+        defaultBrandDemoAssetId: true,
+        brandProfile: true,
+        websiteAnalysis: { select: { id: true, sourceUrl: true, rootDomain: true, sourceContentFingerprint: true, createdAt: true, updatedAt: true } },
+        concepts: { orderBy: { sortOrder: 'asc' }, select: { id: true, angle: true, hookText: true, score: true, scoreLabel: true, reviewDecision: true, sortOrder: true, createdAt: true, updatedAt: true } },
+        mediaAssets: { orderBy: { createdAt: 'desc' }, select: { id: true, conceptId: true, type: true, provider: true, url: true, mimeType: true, metadata: true, createdAt: true } },
+        exportState: { select: { id: true, settings: true, createdAt: true, updatedAt: true } },
+        jobs: { orderBy: { createdAt: 'desc' }, select: { id: true, type: true, status: true, progress: true, progressMessage: true, errorMessage: true, createdAt: true, updatedAt: true } },
+      },
+    }),
+    prisma.generationJob.findMany({
+      where: { projectId: id, type: 'RENDER_REELS', status: 'COMPLETED' },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, updatedAt: true, result: true },
+    }),
+  ]);
   if (!project) throw new ApiError(404, 'NOT_FOUND', 'Project not found');
-  res.json({ project });
+  const renderBatches = renderJobs.flatMap((job) => {
+    const batch = normalizeRenderBatch(job);
+    return batch ? [batch] : [];
+  });
+  res.json({ project: { ...project, renderBatches } });
 };
 
 export const listAdminJobs: RequestHandler = async (req, res) => {
