@@ -34,6 +34,54 @@ body.project-generation-active .support-widget {
   color: #111111;
 }
 
+.landing-editorial-accent {
+  display: inline-block;
+  color: #7c6cff;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 1.11em;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 0.72;
+  transform: translateY(0.035em);
+}
+
+.landing-preview-fan {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4.5%, #000 95.5%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 4.5%, #000 95.5%, transparent 100%);
+  padding-block: 1.25rem 1rem;
+}
+
+@keyframes landing-preview-roll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.landing-preview-viewport {
+  overflow: hidden;
+  padding-block: 0.5rem 1.5rem;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 5%, #000 95%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 5%, #000 95%, transparent 100%);
+}
+
+.landing-preview-track {
+  animation: landing-preview-roll var(--landing-preview-duration, 34s) linear infinite;
+  will-change: transform;
+}
+
+.landing-preview-viewport:hover .landing-preview-track {
+  animation-play-state: paused;
+}
+
+.landing-preview-reduced-motion .landing-preview-track {
+  animation: none;
+  transform: translate3d(calc((100vw - 100%) / 2), 0, 0);
+}
+
 ::-webkit-scrollbar {
   width: 10px;
 }
@@ -111,10 +159,7 @@ body.project-generation-active .support-widget {
 }
 
 .reel-wall {
-  background:
-    radial-gradient(circle at 8% 48%, rgba(154, 140, 255, 0.1), transparent 27%),
-    radial-gradient(circle at 92% 68%, rgba(114, 184, 255, 0.09), transparent 28%),
-    #fcfcfc;
+  background: #fcfcfc;
 }
 
 .reel-wall-track {
@@ -137,11 +182,8 @@ body.project-generation-active .support-widget {
 }
 
 @media (max-width: 767px) {
-  .reel-wall {
-    background:
-      radial-gradient(circle at 0% 48%, rgba(154, 140, 255, 0.12), transparent 38%),
-      radial-gradient(circle at 100% 68%, rgba(114, 184, 255, 0.1), transparent 38%),
-      #fcfcfc;
+  .landing-editorial-accent {
+    font-size: 1.075em;
   }
 
   .reel-wall-viewport {
@@ -268,6 +310,10 @@ body.project-generation-active .support-widget {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing-preview-track {
+    animation: none;
+  }
+
   .production-reel {
     animation: none;
   }
