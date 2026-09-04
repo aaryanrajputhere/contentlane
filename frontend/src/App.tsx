@@ -1,26 +1,36 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import AdminCreatorsPage from './components/AdminCreatorsPage';
-import AuthPage from './components/AuthPage';
 import LandingPage from './components/LandingPage';
-import ProjectPage from './components/ProjectPage';
-import ProjectRenderPage from './components/ProjectRenderPage';
-import CampaignWorkspacePage from './components/CampaignWorkspacePage';
-import ProjectsPage from './components/ProjectsPage';
-import BillingPage from './components/BillingPage';
-import AdminSupportPage from './components/AdminSupportPage';
-import AdminDashboardPage from './components/AdminDashboardPage';
-import AdminUsersPage from './components/AdminUsersPage';
-import AdminProjectsPage from './components/AdminProjectsPage';
-import AdminProjectDetailPage from './components/AdminProjectDetailPage';
-import AdminUserDetailPage from './components/AdminUserDetailPage';
-import AdminJobsPage from './components/AdminJobsPage';
 import SupportWidget from './components/SupportWidget';
-import OnboardingPage from './components/OnboardingPage';
 import { PublicOnlyRoute, RequireAdmin, RequireAuth, RequireSubscription } from './lib/auth';
+
+const AdminCreatorsPage = lazy(() => import('./components/AdminCreatorsPage'));
+const AuthPage = lazy(() => import('./components/AuthPage'));
+const ProjectPage = lazy(() => import('./components/ProjectPage'));
+const ProjectRenderPage = lazy(() => import('./components/ProjectRenderPage'));
+const CampaignWorkspacePage = lazy(() => import('./components/CampaignWorkspacePage'));
+const ProjectsPage = lazy(() => import('./components/ProjectsPage'));
+const BillingPage = lazy(() => import('./components/BillingPage'));
+const AdminSupportPage = lazy(() => import('./components/AdminSupportPage'));
+const AdminDashboardPage = lazy(() => import('./components/AdminDashboardPage'));
+const AdminUsersPage = lazy(() => import('./components/AdminUsersPage'));
+const AdminProjectsPage = lazy(() => import('./components/AdminProjectsPage'));
+const AdminProjectDetailPage = lazy(() => import('./components/AdminProjectDetailPage'));
+const AdminUserDetailPage = lazy(() => import('./components/AdminUserDetailPage'));
+const AdminJobsPage = lazy(() => import('./components/AdminJobsPage'));
+const OnboardingPage = lazy(() => import('./components/OnboardingPage'));
+
+function RouteFallback() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-[#fafafc] text-sm font-medium text-[#686872]">
+      Loading…
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <><Routes>
+    <><Suspense fallback={<RouteFallback />}><Routes>
       <Route path="/" element={<LandingPage />} />
       <Route
         path="/login"
@@ -70,6 +80,6 @@ export default function App() {
         <Route path="/admin/creators" element={<AdminCreatorsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes><SupportWidget /></>
+    </Routes></Suspense><SupportWidget /></>
   );
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, VideoHTMLAttributes } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -40,6 +40,7 @@ type PreviewCardProps = {
   mobile?: boolean;
   featured?: boolean;
   reducedMotion?: boolean | null;
+  pageVisible?: boolean;
 };
 
 type ReelPreview = {
@@ -52,6 +53,66 @@ type ReelPreview = {
   startOffset: number;
   accent: string;
 };
+
+type LazyVideoProps = Omit<
+  VideoHTMLAttributes<HTMLVideoElement>,
+  "autoPlay" | "preload" | "src"
+> & {
+  src: string;
+  playWhenVisible: boolean;
+  startOffset?: number;
+};
+
+function LazyVideo({
+  src,
+  playWhenVisible,
+  startOffset = 0,
+  onCanPlay,
+  onLoadedMetadata,
+  ...videoProps
+}: LazyVideoProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const shouldLoad = useInView(videoRef, {
+    once: true,
+    margin: "600px 0px",
+  });
+  const isVisible = useInView(videoRef, { amount: 0.2 });
+  const shouldPlay = shouldLoad && isVisible && playWhenVisible;
+
+  const playIfEligible = useCallback((video: HTMLVideoElement) => {
+    if (shouldPlay) void video.play().catch(() => undefined);
+  }, [shouldPlay]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (shouldPlay) {
+      void video.play().catch(() => undefined);
+    } else {
+      video.pause();
+    }
+  }, [shouldPlay]);
+
+  return (
+    <video
+      {...videoProps}
+      ref={videoRef}
+      src={shouldLoad ? src : undefined}
+      autoPlay={shouldPlay}
+      preload={shouldLoad ? "metadata" : "none"}
+      onCanPlay={(event) => {
+        onCanPlay?.(event);
+        playIfEligible(event.currentTarget);
+      }}
+      onLoadedMetadata={(event) => {
+        if (startOffset > 0 && event.currentTarget.duration > startOffset) {
+          event.currentTarget.currentTime = startOffset;
+        }
+        onLoadedMetadata?.(event);
+      }}
+    />
+  );
+}
 
 function posterFor(src: string) {
   const transformed = src.replace("/video/upload/", "/video/upload/so_0/");
@@ -321,6 +382,7 @@ function PreviewCard({
   mobile = false,
   featured = false,
   reducedMotion = false,
+  pageVisible = true,
 }: PreviewCardProps) {
   return (
     <motion.div
@@ -338,15 +400,14 @@ function PreviewCard({
       transition={{ duration: 0.7, ease: "easeOut" }}
       className={`group relative overflow-hidden rounded-[22px] border bg-white ${featured || mobile ? "border-[#7c6cff]/25 shadow-[0_28px_80px_rgba(124,108,255,0.2)]" : "border-[#d8d4e9] shadow-[0_18px_45px_rgba(31,25,68,0.08)]"} ${mobile ? "aspect-[9/16] h-auto w-[min(72vw,17rem)]" : `aspect-[9/16] h-auto w-[clamp(15rem,14vw,18rem)] ${className ?? ""}`}`}
     >
-      <video
+      <LazyVideo
         src={src}
         poster={posterFor(src)}
         className={`relative h-full w-full object-cover ${videoClassName ?? ""}`}
         muted
-        autoPlay={!reducedMotion}
+        playWhenVisible={pageVisible && !reducedMotion}
         loop
         playsInline
-        preload={reducedMotion ? "metadata" : "auto"}
       />
       <div className="pointer-events-none absolute inset-0 rounded-[22px] ring-1 ring-white/15" />
       <div className="pointer-events-none absolute inset-0 rounded-[22px] shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]" />
@@ -356,14 +417,10 @@ function PreviewCard({
 
 function ReelCard({
   reel,
-  index,
   shouldPlay,
-  registerVideo,
 }: {
   reel: ReelPreview;
-  index: number;
   shouldPlay: boolean;
-  registerVideo: (index: number, node: HTMLVideoElement | null) => void;
 }) {
   const animationStyle = {
     "--reel-delay": `${-reel.delay}s`,
@@ -376,20 +433,16 @@ function ReelCard({
       style={animationStyle}
       aria-label={`${reel.angle} Reel: ${reel.hook}`}
     >
-      <video
-        ref={(node) => registerVideo(index, node)}
+      <LazyVideo
         data-reel-preview={reel.id}
         src={reel.clip}
         poster={posterFor(reel.clip)}
         className={`h-full w-full object-cover ${reel.crop}`}
         muted
-        autoPlay={shouldPlay}
+        playWhenVisible={shouldPlay}
         loop
         playsInline
-        preload="auto"
-        onLoadedMetadata={(event) => {
-          event.currentTarget.currentTime = reel.startOffset;
-        }}
+        startOffset={reel.startOffset}
       />
     </article>
   );
@@ -405,18 +458,6 @@ function ReelWallCard({
   shouldPlay: boolean;
 }) {
   const cardRef = useRef<HTMLElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const isVisible = useInView(cardRef, { amount: 0.6 });
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    if (shouldPlay && isVisible) {
-      void video.play().catch(() => undefined);
-    } else {
-      video.pause();
-    }
-  }, [isVisible, shouldPlay]);
 
   return (
     <article
@@ -425,37 +466,41 @@ function ReelWallCard({
       style={{ height: `${reelWallCardHeight}px` }}
       aria-label={`${reel.angle} Reel: ${reel.hook}`}
     >
-      <video
-        ref={videoRef}
+      <LazyVideo
         src={reel.clip}
         poster={posterFor(reel.clip)}
         className={`h-full w-full object-cover ${reel.crop}`}
         muted
-        autoPlay={shouldPlay && isVisible}
+        playWhenVisible={shouldPlay}
         loop
         playsInline
-        preload="metadata"
-        onLoadedMetadata={(event) => {
-          event.currentTarget.currentTime = reel.startOffset;
-        }}
+        startOffset={reel.startOffset}
       />
       <div className="pointer-events-none absolute inset-0 rounded-[24px] ring-1 ring-inset ring-white/15" />
     </article>
   );
 }
 
-function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
+function ReelWall({
+  reducedMotion,
+  pageVisible,
+}: {
+  reducedMotion: boolean | null;
+  pageVisible: boolean;
+}) {
   const sectionRef = useRef<HTMLElement>(null);
   const sectionVisible = useInView(sectionRef, { amount: 0.12 });
-  const [tabVisible, setTabVisible] = useState(
-    () => document.visibilityState === "visible",
-  );
+  const shouldFetchCreatorReels = useInView(sectionRef, {
+    once: true,
+    margin: "800px 0px",
+  });
   const [creatorReels, setCreatorReels] = useState<ReelPreview[] | null>(null);
   const isMobileViewport = useMobileViewport();
-  const shouldPlay = sectionVisible && tabVisible && reducedMotion !== true;
+  const shouldPlay = sectionVisible && pageVisible && reducedMotion !== true;
 
   useEffect(() => {
-    let active = true;
+    if (!shouldFetchCreatorReels) return;
+    const controller = new AbortController();
     void api<{
       clips: Array<{
         url: string;
@@ -463,9 +508,9 @@ function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
         tags: string[];
         creatorName: string;
       }>;
-    }>("/creator-showcase")
+    }>("/creator-showcase", { signal: controller.signal })
       .then(({ clips }) => {
-        if (!active || clips.length === 0) return;
+        if (clips.length === 0) return;
         setCreatorReels(
           clips.map((clip, index) => ({
             id: `creator-showcase-${index}`,
@@ -481,18 +526,8 @@ function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
       })
       .catch(() => undefined);
 
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const updateTabVisibility = () =>
-      setTabVisible(document.visibilityState === "visible");
-    document.addEventListener("visibilitychange", updateTabVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", updateTabVisibility);
-  }, []);
+    return () => controller.abort();
+  }, [shouldFetchCreatorReels]);
 
   const wallSource = creatorReels ?? reelPreviews;
   const wallCards = isMobileViewport
@@ -557,67 +592,19 @@ function ReelWall({ reducedMotion }: { reducedMotion: boolean | null }) {
   );
 }
 
-function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
+function ProductionLane({
+  reducedMotion,
+  pageVisible,
+}: {
+  reducedMotion: boolean | null;
+  pageVisible: boolean;
+}) {
   const sectionRef = useRef<HTMLElement>(null);
-  const productVideoRef = useRef<HTMLVideoElement | null>(null);
-  const reelVideoRefs = useRef<Array<HTMLVideoElement | null>>([]);
   const sectionVisible = useInView(sectionRef, { amount: 0.08 });
   const isCompactViewport = useCompactViewport();
-  const [tabVisible, setTabVisible] = useState(
-    () => document.visibilityState === "visible",
-  );
-  const shouldPlayProductDemo = sectionVisible && tabVisible;
+  const shouldPlayProductDemo = sectionVisible && pageVisible;
   const shouldAnimateReels =
     shouldPlayProductDemo && reducedMotion !== true && !isCompactViewport;
-
-  useEffect(() => {
-    const updateTabVisibility = () =>
-      setTabVisible(document.visibilityState === "visible");
-    document.addEventListener("visibilitychange", updateTabVisibility);
-    return () =>
-      document.removeEventListener("visibilitychange", updateTabVisibility);
-  }, []);
-
-  const resumeProductDemo = useCallback(() => {
-    const productVideo = productVideoRef.current;
-    if (!productVideo || !shouldPlayProductDemo) return;
-
-    if (
-      productVideo.ended ||
-      productVideo.currentTime >= productVideo.duration - 0.05
-    ) {
-      productVideo.currentTime = 0;
-    }
-
-    void productVideo.play().catch(() => undefined);
-  }, [shouldPlayProductDemo]);
-
-  useEffect(() => {
-    const productVideo = productVideoRef.current;
-    if (productVideo) {
-      if (shouldPlayProductDemo) {
-        resumeProductDemo();
-      } else {
-        productVideo.pause();
-      }
-    }
-
-    const reelVideos = reelVideoRefs.current.filter(
-      (video): video is HTMLVideoElement => video !== null,
-    );
-
-    for (const video of reelVideos) {
-      if (shouldAnimateReels) {
-        void video.play().catch(() => undefined);
-      } else {
-        video.pause();
-      }
-    }
-  }, [resumeProductDemo, shouldAnimateReels, shouldPlayProductDemo]);
-
-  const registerVideo = (index: number, node: HTMLVideoElement | null) => {
-    reelVideoRefs.current[index] = node;
-  };
 
   return (
     <section
@@ -681,22 +668,15 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
                 <Play size={11} fill="currentColor" />
               </div>
               <div className="relative min-h-0 flex-1 overflow-hidden rounded-[19px] bg-[#ececec] sm:min-h-[19rem]">
-                <video
-                  ref={productVideoRef}
+                <LazyVideo
                   className="absolute inset-0 h-full w-full object-cover object-[52%_35%]"
+                  src="/assets/landing/calai.mp4"
                   poster="/assets/landing/calai.jpg"
                   muted
-                  autoPlay={shouldPlayProductDemo}
+                  playWhenVisible={shouldPlayProductDemo}
                   loop
                   playsInline
-                  preload="auto"
-                  onCanPlay={resumeProductDemo}
-                  onEnded={resumeProductDemo}
-                  onPause={resumeProductDemo}
-                >
-                  <source src="/assets/landing/calai.mp4" type="video/mp4" />
-                  <source src="/assets/landing/calai.webm" type="video/webm" />
-                </video>
+                />
               </div>
             </article>
           </div>
@@ -777,28 +757,24 @@ function ProductionLane({ reducedMotion }: { reducedMotion: boolean | null }) {
             </div>
             {reducedMotion || isCompactViewport ? (
               <div className="production-reel-static absolute inset-0 z-[2] flex snap-x snap-mandatory items-center gap-4 overflow-x-auto px-5 pb-4 pt-8 sm:px-8 sm:pt-10">
-                {reelPreviews.map((reel, index) => (
+                {reelPreviews.map((reel) => (
                   <div
                     key={reel.id}
                     className="relative h-[18rem] w-[10.125rem] shrink-0 snap-center"
                   >
                     <ReelCard
                       reel={reel}
-                      index={index}
                       shouldPlay={false}
-                      registerVideo={registerVideo}
                     />
                   </div>
                 ))}
               </div>
             ) : (
-              reelPreviews.map((reel, index) => (
+              reelPreviews.map((reel) => (
                 <ReelCard
                   key={reel.id}
                   reel={reel}
-                  index={index}
                   shouldPlay={shouldAnimateReels}
-                  registerVideo={registerVideo}
                 />
               ))
             )}
@@ -824,6 +800,17 @@ export default function LandingPage() {
   const isCompactViewport = useCompactViewport();
   const previewSequenceCopies = usePreviewSequenceCopies();
   const { status, user } = useAuth();
+  const [pageVisible, setPageVisible] = useState(
+    () => document.visibilityState === "visible",
+  );
+
+  useEffect(() => {
+    const updatePageVisibility = () =>
+      setPageVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", updatePageVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", updatePageVisibility);
+  }, []);
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -1090,7 +1077,12 @@ export default function LandingPage() {
                       );
                     }}
                   >
-                    <PreviewCard {...previewCards[activePreviewIndex]} mobile reducedMotion={reducedMotion} />
+                    <PreviewCard
+                      {...previewCards[activePreviewIndex]}
+                      mobile
+                      reducedMotion={reducedMotion}
+                      pageVisible={pageVisible}
+                    />
                   </motion.div>
                 </AnimatePresence>
                 <div
@@ -1144,6 +1136,7 @@ export default function LandingPage() {
                               <PreviewCard
                                 {...card}
                                 reducedMotion={reducedMotion}
+                                pageVisible={pageVisible}
                               />
                             </div>
                           )),
@@ -1157,7 +1150,10 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <ProductionLane reducedMotion={reducedMotion} />
+      <ProductionLane
+        reducedMotion={reducedMotion}
+        pageVisible={pageVisible}
+      />
 
       <section
         id="features"
@@ -1252,7 +1248,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <ReelWall reducedMotion={reducedMotion} />
+      <ReelWall reducedMotion={reducedMotion} pageVisible={pageVisible} />
 
       <section
         id="pricing"
