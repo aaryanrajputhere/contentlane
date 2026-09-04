@@ -3,7 +3,7 @@ import { config } from '../config';
 import { getDodoClient, requireCheckoutProducts } from '../lib/dodo';
 import { ApiError } from '../lib/errors';
 import prisma from '../lib/prisma';
-import { getFreeAccess, hasPaidAccess } from '../lib/access';
+import { getEffectiveAccess, getFreeAccess } from '../lib/access';
 import { getPlan, getPlanByProductId, getPublicPlanCatalog, getRecognizedProductIds, type BillingPlanId } from '../lib/billing-plans';
 import { getActiveSubscription, getRenderUsage } from '../lib/render-quota';
 
@@ -15,23 +15,25 @@ export const getBillingStatus: RequestHandler = async (req, res, next) => {
       where: { userId: req.user.id, dodoProductId: { in: getRecognizedProductIds() } },
       orderBy: [{ latestProviderEventAt: 'desc' }, { updatedAt: 'desc' }],
     });
-    const isAdmin = req.user.role === 'ADMIN';
-    const paid = await hasPaidAccess(req.user.id, req.user.role);
+    const access = await getEffectiveAccess(req.user.id, req.user.role);
+    const isAdmin = access.source === 'admin';
     const freeAccess = await getFreeAccess(req.user.id);
-    const plan = subscription ? getPlanByProductId(subscription.dodoProductId) : null;
+    const subscriptionPlan = subscription ? getPlanByProductId(subscription.dodoProductId) : null;
+    const plan = access.source === 'subscription' || access.source === 'complimentary' ? access.plan : subscriptionPlan;
     const isLegacyPlan = Boolean(subscription && config.DODO_PAYMENTS_PRODUCT_ID && subscription.dodoProductId === config.DODO_PAYMENTS_PRODUCT_ID && subscription.dodoProductId !== config.DODO_PRO_PRODUCT_ID);
     const scheduledPlan = subscription?.scheduledDodoProductId ? getPlanByProductId(subscription.scheduledDodoProductId) : null;
     const videoUsage = await getRenderUsage(req.user.id, req.user.role);
     res.json({
       planId: isAdmin ? null : plan?.id ?? null,
       planName: isAdmin ? 'Admin' : plan?.name ?? null,
-      price: isLegacyPlan ? 19 : plan?.price ?? null,
+      price: access.source === 'complimentary' ? 0 : isLegacyPlan ? 19 : plan?.price ?? null,
       isLegacyPlan,
       currency: 'USD',
       plans: getPublicPlanCatalog(),
-      status: isAdmin ? 'active' : subscription?.status ?? 'none',
-      hasAccess: paid,
-      accessTier: isAdmin ? 'admin' : paid ? 'subscriber' : (!freeAccess.ended ? 'free' : 'none'),
+      status: isAdmin || access.source === 'complimentary' ? 'active' : subscription?.status ?? 'none',
+      hasAccess: access.source !== 'none',
+      accessTier: access.source === 'admin' ? 'admin' : access.source === 'subscription' ? 'subscriber' : access.source === 'complimentary' ? 'complimentary' : (!freeAccess.ended ? 'free' : 'none'),
+      complimentaryAccess: access.source === 'complimentary' ? { startsAt: access.complimentaryAccess.startsAt.toISOString(), expiresAt: access.complimentaryAccess.expiresAt?.toISOString() ?? null } : null,
       freeAccess,
       renewalDate: subscription?.currentPeriodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: subscription?.cancelAtNextBillingDate ?? false,

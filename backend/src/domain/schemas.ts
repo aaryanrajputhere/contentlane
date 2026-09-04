@@ -39,6 +39,26 @@ export const adminListQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 }).strict();
 export const adminIdParamsSchema = z.object({ id: z.string().cuid() });
+const complimentaryAccessFields = {
+  planId: billingPlanIdSchema,
+  startsAt: z.string().datetime({ offset: true }).transform((value) => new Date(value)),
+  expiresAt: z.string().datetime({ offset: true }).transform((value) => new Date(value)).nullable(),
+  reason: z.string().trim().max(500).nullable(),
+};
+export const complimentaryAccessCreateSchema = z.object({
+  planId: complimentaryAccessFields.planId,
+  startsAt: complimentaryAccessFields.startsAt.optional(),
+  expiresAt: complimentaryAccessFields.expiresAt.optional().default(null),
+  reason: complimentaryAccessFields.reason.optional().default(null),
+}).strict().refine((value) => !value.expiresAt || !value.startsAt || value.expiresAt > value.startsAt, {
+  message: 'Expiration must be after the start date', path: ['expiresAt'],
+});
+export const complimentaryAccessUpdateSchema = z.object({
+  planId: complimentaryAccessFields.planId.optional(),
+  startsAt: complimentaryAccessFields.startsAt.optional(),
+  expiresAt: complimentaryAccessFields.expiresAt.optional(),
+  reason: complimentaryAccessFields.reason.optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, { message: 'At least one change is required' });
 
 export const loginSchema = z.object({
   email: emailSchema,

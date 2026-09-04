@@ -1,4 +1,5 @@
 import type { RequestHandler } from 'express';
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { ApiError } from '../lib/errors';
@@ -14,6 +15,24 @@ type AdminRenderReel = {
   mimeType: string;
   format: string;
 };
+
+type AdminComplimentaryAccess = {
+  id: string; userId: string; planId: string; startsAt: Date; expiresAt: Date | null; revokedAt: Date | null;
+  reason: string | null; grantedById: string | null; createdAt: Date; updatedAt: Date;
+  grantedBy: { id: string; name: string | null; email: string } | null;
+};
+
+async function getComplimentaryAccess(userId: string): Promise<AdminComplimentaryAccess | null> {
+  const rows = await prisma.$queryRaw<Array<Omit<AdminComplimentaryAccess, 'grantedBy'> & { grantorName: string | null; grantorEmail: string | null }>>`
+    SELECT ca.*, g."name" AS "grantorName", g."email" AS "grantorEmail"
+    FROM "ComplimentaryAccess" ca LEFT JOIN "User" g ON g."id" = ca."grantedById"
+    WHERE ca."userId" = ${userId} LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  const { grantorName, grantorEmail, ...access } = row;
+  return { ...access, grantedBy: access.grantedById && grantorEmail ? { id: access.grantedById, name: grantorName, email: grantorEmail } : null };
+}
 
 const userSelect = {
   id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true,
@@ -101,16 +120,59 @@ export const listAdminUsers: RequestHandler = async (req, res) => {
 
 export const getAdminUser: RequestHandler = async (req, res) => {
   const { id } = adminIdParamsSchema.parse(req.params);
-  const user = await prisma.user.findUnique({
+  const [user, complimentaryAccess] = await Promise.all([prisma.user.findUnique({
     where: { id }, select: {
       ...userSelect,
       projects: { select: projectSelect, orderBy: { updatedAt: 'desc' } },
       subscriptions: { orderBy: { updatedAt: 'desc' }, take: 10 },
       supportRequests: { orderBy: { createdAt: 'desc' }, take: 10, select: { id: true, email: true, message: true, status: true, createdAt: true, updatedAt: true } },
     },
-  });
+  }), getComplimentaryAccess(id)]);
   if (!user) throw new ApiError(404, 'NOT_FOUND', 'User not found');
-  res.json({ user });
+  res.json({ user: { ...user, complimentaryAccess } });
+};
+
+export const grantComplimentaryAccess: RequestHandler = async (req, res) => {
+  if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+  const { id } = adminIdParamsSchema.parse(req.params);
+  const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true } });
+  if (!target) throw new ApiError(404, 'NOT_FOUND', 'User not found');
+  if (target.role === 'ADMIN') throw new ApiError(409, 'NOT_APPLICABLE', 'Administrators already have unlimited access');
+  const startsAt = req.body.startsAt ?? new Date();
+  const expiresAt = req.body.expiresAt ?? null;
+  if (expiresAt && expiresAt <= startsAt) throw new ApiError(400, 'INVALID_EXPIRATION', 'Expiration must be after the start date');
+  await prisma.$executeRaw`
+    INSERT INTO "ComplimentaryAccess" ("id", "userId", "planId", "startsAt", "expiresAt", "revokedAt", "reason", "grantedById", "createdAt", "updatedAt")
+    VALUES (${randomUUID()}, ${id}, ${req.body.planId}, ${startsAt}, ${expiresAt}, NULL, ${req.body.reason ?? null}, ${req.user.id}, NOW(), NOW())
+    ON CONFLICT ("userId") DO UPDATE SET "planId" = EXCLUDED."planId", "startsAt" = EXCLUDED."startsAt", "expiresAt" = EXCLUDED."expiresAt",
+      "revokedAt" = NULL, "reason" = EXCLUDED."reason", "grantedById" = EXCLUDED."grantedById", "updatedAt" = NOW()
+  `;
+  const complimentaryAccess = await getComplimentaryAccess(id);
+  res.status(201).json({ complimentaryAccess });
+};
+
+export const updateComplimentaryAccess: RequestHandler = async (req, res) => {
+  if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+  const { id } = adminIdParamsSchema.parse(req.params);
+  const existing = await getComplimentaryAccess(id);
+  if (!existing) throw new ApiError(404, 'NOT_FOUND', 'Complimentary access has not been granted');
+  const startsAt = req.body.startsAt ?? existing.startsAt;
+  const expiresAt = req.body.expiresAt === undefined ? existing.expiresAt : req.body.expiresAt;
+  if (expiresAt && expiresAt <= startsAt) throw new ApiError(400, 'INVALID_EXPIRATION', 'Expiration must be after the start date');
+  const planId = req.body.planId ?? existing.planId;
+  const reason = req.body.reason === undefined ? existing.reason : req.body.reason;
+  await prisma.$executeRaw`UPDATE "ComplimentaryAccess" SET "planId" = ${planId}, "startsAt" = ${startsAt}, "expiresAt" = ${expiresAt},
+    "reason" = ${reason}, "grantedById" = ${req.user.id}, "updatedAt" = NOW() WHERE "userId" = ${id}`;
+  const complimentaryAccess = await getComplimentaryAccess(id);
+  res.json({ complimentaryAccess });
+};
+
+export const revokeComplimentaryAccess: RequestHandler = async (req, res) => {
+  if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Sign in to continue');
+  const { id } = adminIdParamsSchema.parse(req.params);
+  const changed = await prisma.$executeRaw`UPDATE "ComplimentaryAccess" SET "revokedAt" = NOW(), "grantedById" = ${req.user.id}, "updatedAt" = NOW() WHERE "userId" = ${id} AND "revokedAt" IS NULL`;
+  if (changed === 0) throw new ApiError(404, 'NOT_FOUND', 'Active complimentary access was not found');
+  res.status(204).send();
 };
 
 export const listAdminProjects: RequestHandler = async (req, res) => {

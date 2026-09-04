@@ -51,7 +51,8 @@ export interface BillingStatus {
   }>;
   status: string;
   hasAccess: boolean;
-  accessTier: 'admin' | 'subscriber' | 'free' | 'none';
+  accessTier: 'admin' | 'subscriber' | 'complimentary' | 'free' | 'none';
+  complimentaryAccess: { startsAt: string; expiresAt: string | null } | null;
   renewalDate: string | null;
   cancelAtPeriodEnd: boolean;
   scheduledPlanId: 'starter' | 'pro' | null;
