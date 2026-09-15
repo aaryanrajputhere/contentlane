@@ -8,6 +8,7 @@ const AdminCreatorsPage = lazy(() => import('./components/AdminCreatorsPage'));
 const AuthPage = lazy(() => import('./components/AuthPage'));
 const ProjectPage = lazy(() => import('./components/ProjectPage'));
 const ProjectRenderPage = lazy(() => import('./components/ProjectRenderPage'));
+const FreeReelPreviewPage = lazy(() => import('./components/FreeReelPreviewPage'));
 const CampaignWorkspacePage = lazy(() => import('./components/CampaignWorkspacePage'));
 const ProjectsPage = lazy(() => import('./components/ProjectsPage'));
 const BillingPage = lazy(() => import('./components/BillingPage'));
@@ -51,6 +52,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/projects/:id/hooks" element={<ProjectPage />} />
+        <Route path="/projects/:id/preview" element={<FreeReelPreviewPage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/billing/success" element={<BillingPage success />} />
         <Route element={<RequireSubscription />}>

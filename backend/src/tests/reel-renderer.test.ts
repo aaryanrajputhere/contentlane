@@ -129,3 +129,37 @@ test('reel filter accepts explicit static caption image inputs', () => {
   assert.match(filter, /\[demo-base\]\[5:v\]overlay=0:0:format=auto\[demo\]/);
   assert.doesNotMatch(filter, /drawtext|drawbox/);
 });
+
+test('preview reel filter composites a full-frame watermark after concatenation', () => {
+  const filter = buildReelFilter({ hook: 2, demo: 3 }, 4);
+  assert.match(filter, /concat=n=2:v=1:a=0\[joined\]/);
+  assert.match(filter, /\[joined\]\[4:v\]overlay=0:0:format=auto:shortest=1\[video\]/);
+});
+
+test('looped preview watermark stops when both video clips finish', { timeout: 30000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'contentlane-watermark-duration-'));
+  const ffmpeg = process.env.FFMPEG_PATH ?? 'ffmpeg';
+  try {
+    const overlay = join(directory, 'overlay.png');
+    const output = join(directory, 'output.mp4');
+    const canvas = createCanvas(1080, 1920);
+    await writeFile(overlay, canvas.toBuffer('image/png'));
+    await execFileAsync(ffmpeg, [
+      '-y', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'color=c=red:s=180x320:r=30:d=0.3',
+      '-f', 'lavfi', '-i', 'color=c=blue:s=180x320:r=30:d=0.5',
+      '-i', overlay, '-i', overlay, '-loop', '1', '-i', overlay,
+      '-filter_complex', buildReelFilter({ hook: 2, demo: 3 }, 4),
+      '-map', '[video]', '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2',
+      '-pix_fmt', 'yuv420p', output,
+    ], { timeout: 10000 });
+    const probe = await execFileAsync('ffprobe', [
+      '-v', 'error', '-select_streams', 'v:0',
+      '-show_entries', 'stream=duration', '-of', 'csv=p=0', output,
+    ]);
+    const duration = Number(probe.stdout.trim());
+    assert.ok(duration >= 0.7 && duration <= 0.9, `Expected both clips to total 0.8 seconds, received ${duration}`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

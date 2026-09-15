@@ -33,6 +33,7 @@ import {
 import { isFreeConversionRequired } from "../lib/onboarding.mjs";
 import BrandProfileConfirmationModal from "./BrandProfileConfirmationModal";
 import BrandDemoLibrary from "./BrandDemoLibrary";
+import FreeDemoStep from "./FreeDemoStep";
 import type { BrandProfileConfirmation } from "./BrandProfileConfirmationModal";
 import { requiresBrandProfileConfirmation } from "../lib/brand-profile-confirmation.mjs";
 import { brandDemoName, brandDemos } from "../lib/brandDemos";
@@ -1804,6 +1805,10 @@ export default function ProjectPage() {
     setError("");
     navigate(`/billing?plan=starter&projectId=${encodeURIComponent(id)}`);
   };
+
+  if (freeConversionRequired && reviewComplete) {
+    return <FreeDemoStep project={project} onProjectChange={setProject} />;
+  }
 
   if (freeConversionRequired) {
     const conversionHeadline = reviewComplete

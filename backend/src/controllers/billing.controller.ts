@@ -68,6 +68,7 @@ export const createCheckout: RequestHandler = async (req, res, next) => {
     }
     const returnParams = new URLSearchParams({ plan: planId });
     if (projectId) returnParams.set('projectId', projectId);
+    if (req.body.returnTo === 'preview') returnParams.set('returnTo', 'preview');
 
     const session = await getDodoClient().checkoutSessions.create({
       product_cart: [{ product_id: selectedPlan.productId, quantity: 1 }],

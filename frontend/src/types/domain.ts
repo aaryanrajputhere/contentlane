@@ -1,7 +1,7 @@
 export type UserRole = 'USER' | 'ADMIN';
 export type ProjectStatus = 'DRAFT' | 'ANALYZING' | 'READY' | 'HOOKS_READY' | 'SCRIPTS_READY' | 'MEDIA_READY' | 'EXPORT_READY' | 'FAILED';
 export type JobStatus = 'QUEUED' | 'ACTIVE' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-export type JobType = 'ANALYZE_WEBSITE' | 'GENERATE_CONCEPTS' | 'GENERATE_MEDIA' | 'SAVE_EXPORT' | 'GENERATE_HOOKS' | 'GENERATE_SCRIPTS' | 'RENDER_REELS';
+export type JobType = 'ANALYZE_WEBSITE' | 'GENERATE_CONCEPTS' | 'GENERATE_MEDIA' | 'SAVE_EXPORT' | 'GENERATE_HOOKS' | 'GENERATE_SCRIPTS' | 'PREVIEW_REELS' | 'RENDER_REELS';
 export type MediaType = 'IMAGE' | 'VIDEO';
 export type CharacterSource = 'preset' | 'custom';
 export type SupportStatus = 'NEW' | 'OPEN' | 'RESOLVED';

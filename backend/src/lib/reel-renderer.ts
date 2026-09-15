@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { createCanvas } from '@napi-rs/canvas';
 import { storeUploadedAsset } from './asset-storage';
 import { rasterizeCaption, wrapCaptionText } from './caption-rasterizer';
 
@@ -16,6 +17,7 @@ export interface ReelRenderInput {
   outputId: string;
   folder: string;
   captionStyle: 'SNAPCHAT' | 'STANDARD';
+  watermark?: boolean;
 }
 
 export function wrapOverlayText(value: string, captionStyle: ReelRenderInput['captionStyle']) {
@@ -27,14 +29,35 @@ export interface ReelCaptionInputs {
   demo: number;
 }
 
-export function buildReelFilter(captionInputs: ReelCaptionInputs = { hook: 2, demo: 3 }) {
-  return [
+export function buildReelFilter(captionInputs: ReelCaptionInputs = { hook: 2, demo: 3 }, watermarkInput?: number) {
+  const filters = [
     '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,setpts=PTS-STARTPTS[hook-base]',
     `[hook-base][${captionInputs.hook}:v]overlay=0:0:format=auto[hook]`,
     '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,setpts=PTS-STARTPTS[demo-base]',
     `[demo-base][${captionInputs.demo}:v]overlay=0:0:format=auto[demo]`,
-    '[hook][demo]concat=n=2:v=1:a=0[video]',
-  ].join(';');
+    `[hook][demo]concat=n=2:v=1:a=0${watermarkInput === undefined ? '[video]' : '[joined]'}`,
+  ];
+  // The watermark input loops forever; stop its overlay when the joined clips end.
+  if (watermarkInput !== undefined) filters.push(`[joined][${watermarkInput}:v]overlay=0:0:format=auto:shortest=1[video]`);
+  return filters.join(';');
+}
+
+function createPreviewWatermark() {
+  const canvas = createCanvas(1080, 1920);
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, 1080, 1920);
+  context.translate(540, 960);
+  context.rotate(-Math.PI / 7);
+  context.font = '700 64px Arial';
+  context.textAlign = 'center';
+  context.fillStyle = 'rgba(255,255,255,0.24)';
+  context.strokeStyle = 'rgba(0,0,0,0.18)';
+  context.lineWidth = 3;
+  for (let y = -900; y <= 900; y += 330) {
+    context.strokeText('CONTENTLANE PREVIEW', 0, y);
+    context.fillText('CONTENTLANE PREVIEW', 0, y);
+  }
+  return canvas.toBuffer('image/png');
 }
 
 async function materialize(url: string, directory: string, name: string) {
@@ -58,6 +81,7 @@ export async function renderReel(input: ReelRenderInput) {
     const demo = await materialize(input.demoUrl, directory, 'demo.mp4');
     const hookCaption = join(directory, 'hook-caption.png');
     const demoCaption = join(directory, 'demo-caption.png');
+    const watermark = input.watermark ? join(directory, 'preview-watermark.png') : null;
     const [hookCaptionPng, demoCaptionPng] = await Promise.all([
       rasterizeCaption(input.hookOverlay, input.captionStyle, 'HOOK'),
       rasterizeCaption(input.demoOverlay, input.captionStyle, 'DEMO'),
@@ -65,6 +89,7 @@ export async function renderReel(input: ReelRenderInput) {
     await Promise.all([
       writeFile(hookCaption, hookCaptionPng),
       writeFile(demoCaption, demoCaptionPng),
+      ...(watermark ? [writeFile(watermark, createPreviewWatermark())] : []),
     ]);
 
     const output = join(directory, 'output.mp4');
@@ -74,7 +99,8 @@ export async function renderReel(input: ReelRenderInput) {
       '-i', demo,
       '-i', hookCaption,
       '-i', demoCaption,
-      '-filter_complex', buildReelFilter(),
+      ...(watermark ? ['-loop', '1', '-i', watermark] : []),
+      '-filter_complex', buildReelFilter({ hook: 2, demo: 3 }, watermark ? 4 : undefined),
       '-map', '[video]',
       '-map', '1:a?',
       '-c:v', 'libx264',

@@ -50,7 +50,7 @@ import { creatorToCharacter } from "../lib/creator-library";
 import { renderQueue, type RenderJobInput } from "../lib/render-queue";
 import { resolveCreatorClipAssignments, resolveStoredCreatorClipAssignments } from "../lib/creator-clip-matching";
 import { FREE_HOOK_SELECTION_LIMIT, getFreeAccess, hasPaidAccess, requireFreeProjectAccess } from "../lib/access";
-import { createReservedRenderJob, releaseRenderReservation } from '../lib/render-quota';
+import { createIdempotentReservedRenderJob, createReservedRenderJob, releaseRenderReservation } from '../lib/render-quota';
 
 const HOOK_SELECTION_TARGET = 8;
 const MAX_BRAND_DEMOS = 10;
@@ -661,6 +661,15 @@ export const uploadBrandDemo: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id } = projectIdParamsSchema.parse(req.params);
   const project = await getProjectOrFail(id, userId);
+  const paid = await hasPaidAccess(userId, req.user!.role);
+  if (!paid) {
+    const access = await requireFreeProjectAccess(userId, id);
+    if (access.ended || access.selected !== FREE_HOOK_SELECTION_LIMIT) {
+      throw new ApiError(402, 'UPGRADE_REQUIRED', 'Select 8 hooks before adding your product demo');
+    }
+    const previewStarted = project.jobs.some((job) => job.type === ('PREVIEW_REELS' as JobType));
+    if (previewStarted) throw new ApiError(409, 'PREVIEW_ALREADY_STARTED', 'The product demo cannot be replaced after preview rendering starts');
+  }
   const demoFile = requireVideoFile(
     req.file,
     "Upload a video file for the brand demo",
@@ -1686,17 +1695,15 @@ export const saveExportState: RequestHandler = async (req, res) => {
   });
 };
 
-export const renderProject: RequestHandler = async (req, res) => {
-  const userId = requireUserId(req);
-  const { id } = projectIdParamsSchema.parse(req.params);
-  const { conceptIds } = renderRequestSchema.parse(req.body);
+async function buildRenderInput(userId: string, id: string, requestedConceptIds?: string[], likedOnly = false): Promise<RenderJobInput> {
   const project = await getProjectOrFail(id, userId);
   const likedConcepts = project.concepts.filter((concept) => concept.reviewDecision === ReviewDecision.LIKED);
-  if (!conceptIds?.length && likedConcepts.length === 0) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select at least one hook before rendering');
-  if (conceptIds?.some((conceptId) => !project.concepts.some((concept) => concept.id === conceptId))) {
+  if (!requestedConceptIds?.length && likedConcepts.length === 0) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select at least one hook before rendering');
+  const selectableConcepts = likedOnly ? likedConcepts : project.concepts;
+  if (requestedConceptIds?.some((conceptId) => !selectableConcepts.some((concept) => concept.id === conceptId))) {
     throw new ApiError(409, 'HOOK_NOT_SELECTED', 'Only selected hooks can be rendered');
   }
-  const concepts = (conceptIds?.length ? project.concepts.filter((concept) => conceptIds.includes(concept.id)) : likedConcepts)
+  const concepts = (requestedConceptIds?.length ? selectableConcepts.filter((concept) => requestedConceptIds.includes(concept.id)) : likedConcepts)
     .sort((a, b) => a.sortOrder - b.sortOrder);
   if (concepts.length === 0) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Select at least one hook to render');
   const demos = project.mediaAssets.filter(isBrandDemoAsset);
@@ -1732,14 +1739,85 @@ export const renderProject: RequestHandler = async (req, res) => {
       demoName: demoAssetDisplayName(demo),
     };
   });
-  const input: RenderJobInput = { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), assignments: renderAssignments };
-  const job = await createReservedRenderJob({
+  return { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), mode: 'final', assignments: renderAssignments };
+}
+
+function isRenderJobInput(value: unknown): value is RenderJobInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const input = value as Record<string, unknown>;
+  return typeof input.projectId === 'string' && Array.isArray(input.conceptIds) && Array.isArray(input.assignments);
+}
+
+export const createPreviewRender: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  if (await hasPaidAccess(userId, req.user!.role)) throw new ApiError(409, 'PREVIEW_NOT_REQUIRED', 'This account already has full rendering access');
+  const access = await requireFreeProjectAccess(userId, id);
+  if (access.ended || access.selected !== FREE_HOOK_SELECTION_LIMIT) throw new ApiError(409, 'HOOK_REVIEW_INCOMPLETE', 'Select exactly 8 hooks before generating previews');
+
+  const existing = await prisma.generationJob.findFirst({ where: { projectId: id, type: 'PREVIEW_REELS' as JobType }, orderBy: { createdAt: 'desc' } });
+  if (existing && existing.status !== JobStatus.FAILED && existing.status !== JobStatus.CANCELLED) {
+    res.status(existing.status === JobStatus.COMPLETED ? 200 : 202).json({ job: existing });
+    return;
+  }
+  const prepared = await buildRenderInput(userId, id, undefined, true);
+  if (prepared.conceptIds.length !== FREE_HOOK_SELECTION_LIMIT) throw new ApiError(409, 'HOOK_SELECTION_MISMATCH', 'Exactly 8 selected hooks are required');
+  const input: RenderJobInput = { ...prepared, mode: 'preview' };
+  const previewJob = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`preview:${id}`}))`;
+    const active = await tx.generationJob.findFirst({
+      where: { projectId: id, type: 'PREVIEW_REELS' as JobType, status: { in: [JobStatus.QUEUED, JobStatus.ACTIVE, JobStatus.COMPLETED] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (active) return { job: active, created: false };
+    return { job: await tx.generationJob.create({ data: { projectId: id, type: 'PREVIEW_REELS' as JobType, input: input as unknown as Prisma.InputJsonValue, status: JobStatus.QUEUED, progress: 0 } }), created: true };
+  });
+  const { job } = previewJob;
+  try {
+    if (previewJob.created) {
+      await renderQueue.add('render-reels', input, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
+    } else if (job.status === JobStatus.QUEUED) {
+      const queuedInput = isRenderJobInput(job.input) ? job.input : input;
+      const queueJob = await renderQueue.getJob(job.id);
+      if (!queueJob) await renderQueue.add('render-reels', queuedInput, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
+    }
+  } catch (error) {
+    await prisma.generationJob.update({ where: { id: job.id }, data: { status: JobStatus.FAILED, progress: 100, progressMessage: 'Unable to queue previews', errorMessage: 'Render queue is unavailable' } });
+    throw error;
+  }
+  res.status(job.status === JobStatus.COMPLETED ? 200 : 202).json({ job });
+};
+
+export const renderProject: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const { conceptIds, sourcePreviewJobId } = renderRequestSchema.parse(req.body);
+  let input: RenderJobInput;
+  if (sourcePreviewJobId) {
+    const preview = await prisma.generationJob.findFirst({ where: { id: sourcePreviewJobId, projectId: id, type: 'PREVIEW_REELS' as JobType, status: JobStatus.COMPLETED } });
+    const previewInput: unknown = preview?.input;
+    if (!preview || !isRenderJobInput(previewInput)) throw new ApiError(409, 'PREVIEW_NOT_READY', 'The Reel preview is not ready to unlock');
+    if (conceptIds && (conceptIds.length !== previewInput.conceptIds.length || conceptIds.some((conceptId) => !previewInput.conceptIds.includes(conceptId)))) {
+      throw new ApiError(409, 'PREVIEW_SELECTION_MISMATCH', 'The clean render must match the previewed Reels');
+    }
+    input = { ...previewInput, mode: 'final', sourcePreviewJobId };
+  } else {
+    input = await buildRenderInput(userId, id, conceptIds);
+  }
+  const result = sourcePreviewJobId
+    ? await createIdempotentReservedRenderJob({ userId, role: req.user!.role, projectId: id, sourcePreviewJobId, renderInput: input as unknown as Prisma.InputJsonValue, requestedCount: input.conceptIds.length })
+    : { job: await createReservedRenderJob({
     userId,
     role: req.user!.role,
-    projectId: project.id,
+    projectId: id,
     renderInput: input as unknown as Prisma.InputJsonValue,
-    requestedCount: concepts.length,
-  });
+    requestedCount: input.conceptIds.length,
+  }), created: true };
+  const { job } = result;
+  if (!result.created) {
+    res.status(job.status === JobStatus.COMPLETED ? 200 : 202).json({ job });
+    return;
+  }
   try {
     await renderQueue.add('render-reels', input, { jobId: job.id, removeOnComplete: 100, removeOnFail: 100 });
   } catch (error) {

@@ -8,5 +8,7 @@ export const renderQueue = new Queue('contentlane-render-reels', { connection: r
 export interface RenderJobInput {
   projectId: string;
   conceptIds: string[];
+  mode: 'preview' | 'final';
+  sourcePreviewJobId?: string;
   assignments: Array<{ conceptId: string; clipUrl: string; clipId: string; creatorName: string; demoAssetId: string; demoUrl: string; demoName: string }>;
 }

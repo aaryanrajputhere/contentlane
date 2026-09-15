@@ -79,6 +79,44 @@ export async function createReservedRenderJob(input: {
   });
 }
 
+export async function createIdempotentReservedRenderJob(input: {
+  userId: string;
+  role: UserRole;
+  projectId: string;
+  sourcePreviewJobId: string;
+  renderInput: Prisma.InputJsonValue;
+  requestedCount: number;
+}) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`final-preview:${input.sourcePreviewJobId}`}))`;
+    const existing = await tx.generationJob.findFirst({
+      where: {
+        projectId: input.projectId,
+        type: JobType.RENDER_REELS,
+        input: { path: ['sourcePreviewJobId'], equals: input.sourcePreviewJobId },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing && existing.status !== JobStatus.FAILED && existing.status !== JobStatus.CANCELLED) return { job: existing, created: false };
+
+    const access = await getEffectiveAccess(input.userId, input.role, tx);
+    if (access.source === 'none') throw new ApiError(402, 'SUBSCRIPTION_REQUIRED', 'Start your free trial to download clean Reels');
+    const job = await tx.generationJob.create({
+      data: { projectId: input.projectId, type: JobType.RENDER_REELS, input: input.renderInput, status: JobStatus.QUEUED, progress: 0 },
+    });
+    if (access.source === 'admin') return { job, created: true };
+    const usage = await getRenderUsage(input.userId, input.role, tx);
+    if (!usage.periodStart || !usage.periodEnd) throw new ApiError(409, 'BILLING_PERIOD_UNAVAILABLE', 'Your billing period is still syncing. Try again shortly.');
+    if (usage.remaining === null || input.requestedCount > usage.remaining) {
+      throw new ApiError(402, 'VIDEO_LIMIT_REACHED', `This render needs ${input.requestedCount} videos, but your ${access.plan.name} plan has ${usage.remaining ?? 0} remaining this period.`);
+    }
+    await tx.renderUsageReservation.create({
+      data: { userId: input.userId, generationJobId: job.id, billingPeriodStart: usage.periodStart, billingPeriodEnd: usage.periodEnd, requestedCount: input.requestedCount },
+    });
+    return { job, created: true };
+  });
+}
+
 export async function consumeRenderReservation(generationJobId: string, consumedCount: number, db: DbClient = prisma) {
   await db.renderUsageReservation.updateMany({
     where: { generationJobId, status: RenderUsageStatus.RESERVED },

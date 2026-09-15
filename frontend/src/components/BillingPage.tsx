@@ -44,7 +44,7 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
         if (cancelled) return;
         if (success && status.hasAccess) {
           const projectId = searchParams.get('projectId');
-          if (projectId) return navigate(`/projects/${projectId}/hooks?unlocked=1`, { replace: true });
+          if (projectId) return navigate(searchParams.get('returnTo') === 'preview' ? `/projects/${projectId}/preview?unlocked=1` : `/projects/${projectId}/hooks?unlocked=1`, { replace: true });
           const pendingWebsite = getPendingWebsite();
           if (pendingWebsite) {
             const response = await post<ProjectResponse>('/projects', { website: pendingWebsite });
@@ -78,7 +78,8 @@ export default function BillingPage({ success = false }: { success?: boolean }) 
     setLoading(true); setError('');
     try {
       const projectId = searchParams.get('projectId');
-      const { url } = await post<{ url: string }>('/billing/checkout', { planId: selectedPlanId, ...(projectId ? { projectId } : {}) });
+      const returnTo = searchParams.get('returnTo') === 'preview' ? 'preview' : undefined;
+      const { url } = await post<{ url: string }>('/billing/checkout', { planId: selectedPlanId, ...(projectId ? { projectId } : {}), ...(returnTo ? { returnTo } : {}) });
       window.location.assign(url);
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to open checkout'); setLoading(false); }
   };
