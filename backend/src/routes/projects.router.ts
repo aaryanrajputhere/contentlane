@@ -4,6 +4,7 @@ import { analyzeProject, confirmBrandProfile, createPreviewRender, createProject
 import { brandDemoParamsSchema, brandDemoRenameSchema, brandProfileConfirmationSchema, brandProfileUpdateSchema, characterSelectionSchema, conceptEditSchema, conceptReviewParamsSchema, conceptReviewResetSchema, conceptReviewSchema, conceptSelectionSchema, conceptStageInputSchema, exportPayloadSchema, generationLanguageUpdateSchema, hookPreferenceSelectionSchema, hookPreferencesUpdateSchema, mediaStageInputSchema, projectIdParamsSchema, renderRequestSchema, websiteInputSchema } from '../domain/schemas';
 import { validate } from '../lib/validation';
 import { requireSubscription } from '../middleware/subscription';
+import { listProjectPublications, publishTikTok, validateTikTokPublication } from '../controllers/social.controller';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -38,5 +39,8 @@ router.post('/:id/media', requireSubscription, validate({ params: projectIdParam
 router.patch('/:id/export', requireSubscription, validate({ params: projectIdParamsSchema, body: exportPayloadSchema }), saveExportState);
 router.post('/:id/render', requireSubscription, validate({ params: projectIdParamsSchema, body: renderRequestSchema }), renderProject);
 router.post('/:id/preview-render', validate({ params: projectIdParamsSchema }), createPreviewRender);
+router.get('/:id/publications', requireSubscription, validate({ params: projectIdParamsSchema }), listProjectPublications);
+router.post('/:id/publications/validate', requireSubscription, validate({ params: projectIdParamsSchema }), validateTikTokPublication);
+router.post('/:id/publications', requireSubscription, validate({ params: projectIdParamsSchema }), publishTikTok);
 
 export default router;

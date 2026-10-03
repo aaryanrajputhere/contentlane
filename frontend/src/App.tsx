@@ -20,6 +20,7 @@ const AdminProjectDetailPage = lazy(() => import('./components/AdminProjectDetai
 const AdminUserDetailPage = lazy(() => import('./components/AdminUserDetailPage'));
 const AdminJobsPage = lazy(() => import('./components/AdminJobsPage'));
 const OnboardingPage = lazy(() => import('./components/OnboardingPage'));
+const SocialAccountsPage = lazy(() => import('./components/SocialAccountsPage'));
 
 function RouteFallback() {
   return (
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/billing/success" element={<BillingPage success />} />
         <Route element={<RequireSubscription />}>
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/social-accounts" element={<SocialAccountsPage />} />
           <Route path="/projects/:id" element={<CampaignWorkspacePage />} />
           <Route path="/projects/:id/brand" element={<CampaignWorkspacePage />} />
           <Route path="/projects/:id/demos" element={<CampaignWorkspacePage />} />

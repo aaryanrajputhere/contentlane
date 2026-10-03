@@ -64,6 +64,23 @@ enum RenderUsageStatus {
   RELEASED
 }
 
+enum SocialPlatform {
+  TIKTOK
+}
+
+enum SocialConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  NEEDS_RECONNECTION
+}
+
+enum SocialPublicationStatus {
+  VALIDATING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
 model User {
   id                String           @id @default(cuid())
   clerkId           String?          @unique
@@ -84,6 +101,8 @@ model User {
   complimentaryAccess ComplimentaryAccess? @relation("ComplimentaryAccessRecipient")
   complimentaryAccessGranted ComplimentaryAccess[] @relation("ComplimentaryAccessGrantor")
   supportRequests   SupportRequest[]
+  socialProfile     SocialProfile?
+  socialAccounts    SocialAccount[]
 }
 
 model ComplimentaryAccess {
@@ -196,6 +215,7 @@ model Project {
   mediaAssets         MediaAsset[]
   exportState         ProjectExport?
   jobs                GenerationJob[]
+  socialPublications  SocialPublication[]
 
   @@unique([userId, normalizedWebsite])
   @@index([userId, createdAt])
@@ -254,6 +274,7 @@ model HookConcept {
   updatedAt             DateTime     @updatedAt
   selectedByProjects    Project[]    @relation("ProjectSelectedConcept")
   mediaAssets           MediaAsset[]
+  socialPublications    SocialPublication[]
 
   @@index([projectId, sortOrder])
   @@index([projectId, reviewDecision, sortOrder])
@@ -336,7 +357,82 @@ model GenerationJob {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   renderUsageReservation RenderUsageReservation?
+  socialPublications SocialPublication[]
 
   @@index([projectId, createdAt])
   @@index([status, createdAt])
+}
+
+model SocialProfile {
+  id                String          @id @default(uuid())
+  userId            String          @unique
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zernioProfileId   String          @unique
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  accounts          SocialAccount[]
+}
+
+model SocialAccount {
+  id                String                 @id @default(uuid())
+  userId            String
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socialProfileId   String
+  socialProfile     SocialProfile          @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+  platform          SocialPlatform
+  zernioAccountId   String                 @unique
+  username          String?
+  displayName       String?
+  avatarUrl         String?
+  countryCode       String?
+  connectionStatus  SocialConnectionStatus @default(CONNECTED)
+  metadata          Json?
+  connectedAt       DateTime               @default(now())
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  publications      SocialPublication[]
+
+  @@unique([userId, platform])
+  @@index([socialProfileId])
+}
+
+model SocialPublication {
+  id                 String                  @id @default(uuid())
+  requestKey         String                  @unique
+  projectId          String
+  project            Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conceptId          String?
+  concept            HookConcept?            @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+  renderJobId        String?
+  renderJob          GenerationJob?          @relation(fields: [renderJobId], references: [id], onDelete: SetNull)
+  socialAccountId    String
+  socialAccount      SocialAccount           @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  platform           SocialPlatform
+  sourceUrl          String
+  caption            String
+  music              Json?
+  settings           Json
+  zernioPostId       String?                 @unique
+  platformPostId     String?
+  platformPostUrl    String?
+  status             SocialPublicationStatus @default(VALIDATING)
+  errorCode          String?
+  errorMessage       String?
+  analytics          Json?
+  analyticsSyncedAt  DateTime?
+  publishedAt        DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([projectId, createdAt])
+  @@index([socialAccountId, createdAt])
+  @@index([renderJobId, conceptId])
+}
+
+model SocialWebhookEvent {
+  eventId       String   @id
+  eventType     String
+  payload       Json
+  processedAt   DateTime?
+  createdAt     DateTime @default(now())
 }

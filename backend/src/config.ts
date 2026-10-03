@@ -38,6 +38,10 @@ const schema = z.object({
   // Existing single-plan deployments keep this as a legacy Pro product.
   DODO_PAYMENTS_PRODUCT_ID: z.string().trim().default(""),
   DODO_PAYMENTS_ENVIRONMENT: z.enum(["test_mode", "live_mode"]).default("test_mode"),
+  ZERNIO_API_KEY: z.string().trim().default(""),
+  ZERNIO_BASE_URL: z.string().url().default("https://zernio.com/api"),
+  ZERNIO_WEBHOOK_SECRET: z.string().trim().default(""),
+  ZERNIO_TIKTOK_ROLLOUT: z.enum(["off", "internal", "all"]).default("off"),
 });
 
 const parsed = schema.safeParse(process.env);

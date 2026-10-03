@@ -54,6 +54,17 @@ npm run jobs:retry -- <job-id>
 
 For live generation, set `AI_PROVIDER_MODE=live` and provide every credential documented in [backend/.env.example](backend/.env.example). Startup fails when a required live credential or the JWT secret is missing.
 
+### TikTok publishing
+
+TikTok publishing is integrated through Zernio and is disabled by default. To enable it:
+
+1. Set `ZERNIO_API_KEY` and a random `ZERNIO_WEBHOOK_SECRET` in `backend/.env`.
+2. Set `ZERNIO_TIKTOK_ROLLOUT=internal` for admin-only testing, then change it to `all` after the flow is verified.
+3. Configure a Zernio webhook pointing to `https://<your-api-host>/api/v1/webhooks/zernio`, using the same secret. Subscribe it to `post.platform.published`, `post.platform.failed`, `post.published`, `post.failed`, `post.tiktok.url_resolved`, and `account.disconnected`.
+4. Apply the database migration with `npm run db:migrate -w backend`.
+
+Users connect TikTok once from the workspace. Finished videos then expose a publish composer with TikTok's regional Commercial Music Library, mandatory preview and consent confirmations, interaction settings, status updates, and on-demand post analytics. The integration uses Zernio idempotency keys so retrying a timed-out request does not create a duplicate post.
+
 ## Local ports
 
 - Frontend: `5173`

@@ -305,6 +305,42 @@ export const renderRequestSchema = z.object({
 }).strict();
 export const mediaTypeSchema = z.enum(['IMAGE', 'VIDEO']);
 
+export const socialAccountParamsSchema = z.object({ accountId: z.string().uuid() });
+export const socialPublicationParamsSchema = z.object({ publicationId: z.string().uuid() });
+export const tiktokMusicQuerySchema = z.object({
+  countryCode: z.string().trim().length(2).transform((value) => value.toUpperCase()).default('US'),
+}).strict();
+export const tiktokMusicSchema = z.object({
+  id: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(300),
+  artist: z.string().trim().max(300).default('Unknown artist'),
+  durationSeconds: z.number().nonnegative().max(3600).nullable().default(null),
+  previewUrl: z.string().url().nullable().default(null),
+  thumbnailUrl: z.string().url().nullable().default(null),
+  musicVolume: z.number().int().min(0).max(100).default(50),
+  startMs: z.number().int().min(0).max(600_000).default(0),
+  endMs: z.number().int().min(1).max(600_000).nullable().default(null),
+  originalVolume: z.number().int().min(0).max(100).default(50),
+}).strict().refine((value) => value.endMs === null || value.endMs > value.startMs, {
+  message: 'Music end time must be after its start time', path: ['endMs'],
+});
+export const tiktokPublishSchema = z.object({
+  requestKey: z.string().uuid(),
+  socialAccountId: z.string().uuid(),
+  renderJobId: z.string().cuid(),
+  conceptId: z.string().cuid(),
+  caption: z.string().trim().max(2200),
+  music: tiktokMusicSchema.nullable().default(null),
+  settings: z.object({
+    allowComment: z.boolean().default(true),
+    allowDuet: z.boolean().default(true),
+    allowStitch: z.boolean().default(true),
+    commercialContentType: z.enum(['brand_organic', 'brand_content']).default('brand_organic'),
+    contentPreviewConfirmed: z.literal(true),
+    expressConsentGiven: z.literal(true),
+  }).strict(),
+}).strict();
+
 export const authUserSchema = z.object({
   id: z.string().cuid(),
   email: emailSchema,

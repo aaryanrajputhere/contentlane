@@ -5,6 +5,53 @@ export type JobType = 'ANALYZE_WEBSITE' | 'GENERATE_CONCEPTS' | 'GENERATE_MEDIA'
 export type MediaType = 'IMAGE' | 'VIDEO';
 export type CharacterSource = 'preset' | 'custom';
 export type SupportStatus = 'NEW' | 'OPEN' | 'RESOLVED';
+export type SocialConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NEEDS_RECONNECTION';
+export type SocialPublicationStatus = 'VALIDATING' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+export interface SocialAccount {
+  id: string;
+  platform: 'TIKTOK';
+  username: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  countryCode: string | null;
+  connectionStatus: SocialConnectionStatus;
+  connectedAt: string;
+}
+export interface TikTokMusicTrack {
+  id: string;
+  title: string;
+  artist: string;
+  durationSeconds: number | null;
+  previewUrl: string | null;
+  thumbnailUrl: string | null;
+  rank: number | null;
+  genres: string[];
+}
+export interface SocialPublication {
+  id: string;
+  projectId: string;
+  conceptId: string | null;
+  renderJobId: string | null;
+  socialAccountId: string;
+  platform: 'TIKTOK';
+  sourceUrl: string;
+  caption: string;
+  music: Record<string, unknown> | null;
+  settings: Record<string, unknown>;
+  zernioPostId: string | null;
+  platformPostId: string | null;
+  platformPostUrl: string | null;
+  status: SocialPublicationStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+  analytics: Record<string, unknown> | null;
+  analyticsSyncedAt: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  accountUsername: string | null;
+  accountDisplayName: string | null;
+}
 export interface SupportRequest { id: string; email: string; message: string; userId: string | null; status: SupportStatus; createdAt: string; updatedAt: string; resolvedAt: string | null; user: { id: string; name: string | null; email: string } | null; }
 export interface SupportListResponse { requests: SupportRequest[]; counts: Record<SupportStatus, number>; pagination: { page: number; pageSize: number; total: number; totalPages: number }; }
 export interface AdminProjectRow { id: string; website: string; normalizedWebsite: string; status: ProjectStatus; createdAt: string; updatedAt: string; user: { id: string; name: string | null; email: string } | null; _count: { concepts: number; mediaAssets: number; jobs: number }; }

@@ -21,6 +21,8 @@ import { requireSubscription } from './middleware/subscription';
 import supportRouter from './routes/support.router';
 import adminSupportRouter from './routes/admin-support.router';
 import adminRouter from './routes/admin.router';
+import socialRouter from './routes/social.router';
+import { handleZernioWebhook } from './controllers/zernio-webhook.controller';
 
 export function createApp() {
   const app = express();
@@ -42,6 +44,7 @@ export function createApp() {
     credentials: true,
   }));
   app.post('/api/v1/webhooks/dodo', express.raw({ type: 'application/json', limit: '1mb' }), handleDodoWebhook);
+  app.post('/api/v1/webhooks/zernio', express.raw({ type: 'application/json', limit: '1mb' }), handleZernioWebhook);
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   if (config.NODE_ENV !== 'test') app.use(clerkMiddleware());
@@ -57,6 +60,7 @@ export function createApp() {
   app.use('/api/v1/jobs', requireAuth, jobsRouter);
   app.use('/api/v1/creators', requireAuth, creatorsRouter);
   app.use('/api/v1/clips', requireAuth, requireSubscription, clipsRouter);
+  app.use('/api/v1/social', requireAuth, requireSubscription, socialRouter);
   app.use(notFound);
   app.use(errorHandler);
   return app;

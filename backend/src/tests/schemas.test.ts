@@ -19,6 +19,9 @@ import {
   mediaStageInputSchema,
   projectCreatorSelectionSchema,
   renderRequestSchema,
+  socialAccountParamsSchema,
+  tiktokMusicQuerySchema,
+  tiktokPublishSchema,
   websiteInputSchema,
 } from "../domain/schemas";
 import { creatorToCharacter } from "../lib/creator-library";
@@ -108,6 +111,41 @@ test('billing and render payloads require known plans and flexible unique select
   assert.equal(renderRequestSchema.parse({ sourcePreviewJobId: conceptIds[0] }).sourcePreviewJobId, conceptIds[0]);
   assert.throws(() => renderRequestSchema.parse({ conceptIds: [conceptIds[0], conceptIds[0]] }));
   assert.throws(() => renderRequestSchema.parse({ conceptIds: Array.from({ length: 101 }, (_, index) => `c${String(index).padStart(24, '0')}`) }));
+});
+
+test('TikTok publishing requires consent, valid social ids, and bounded music settings', () => {
+  const socialAccountId = '86a2ad13-6c78-46c1-95ed-643a038be32e';
+  const requestKey = 'edfdfe9c-677d-431c-a0b7-eb94b59022df';
+  const cuid = 'cm00000000000000000000001';
+  assert.equal(socialAccountParamsSchema.parse({ accountId: socialAccountId }).accountId, socialAccountId);
+  assert.equal(tiktokMusicQuerySchema.parse({ countryCode: 'in' }).countryCode, 'IN');
+  const parsed = tiktokPublishSchema.parse({
+    requestKey,
+    socialAccountId,
+    renderJobId: cuid,
+    conceptId: cuid,
+    caption: 'A ready-to-publish video',
+    music: {
+      id: 'track-1',
+      title: 'Launch',
+      artist: 'Studio',
+      musicVolume: 40,
+      originalVolume: 60,
+      startMs: 0,
+      endMs: 15_000,
+    },
+    settings: {
+      allowComment: true,
+      allowDuet: false,
+      allowStitch: false,
+      commercialContentType: 'brand_organic',
+      contentPreviewConfirmed: true,
+      expressConsentGiven: true,
+    },
+  });
+  assert.equal(parsed.music?.endMs, 15_000);
+  assert.throws(() => tiktokPublishSchema.parse({ ...parsed, settings: { ...parsed.settings, expressConsentGiven: false } }));
+  assert.throws(() => tiktokPublishSchema.parse({ ...parsed, music: { ...parsed.music, startMs: 20_000, endMs: 10_000 } }));
 });
 
 test("hook preference schemas accept bounded project-scoped examples", () => {
