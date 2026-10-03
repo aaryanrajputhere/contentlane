@@ -6,7 +6,8 @@ export type MediaType = 'IMAGE' | 'VIDEO';
 export type CharacterSource = 'preset' | 'custom';
 export type SupportStatus = 'NEW' | 'OPEN' | 'RESOLVED';
 export type SocialConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NEEDS_RECONNECTION';
-export type SocialPublicationStatus = 'VALIDATING' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+export type SocialPublicationStatus = 'VALIDATING' | 'PUBLISHING' | 'PUBLISHED' | 'DELIVERED_TO_TIKTOK' | 'FAILED';
+export type SocialPublicationDeliveryMode = 'DIRECT' | 'TIKTOK_DRAFT';
 export interface SocialAccount {
   id: string;
   platform: 'TIKTOK';
@@ -34,6 +35,7 @@ export interface SocialPublication {
   renderJobId: string | null;
   socialAccountId: string;
   platform: 'TIKTOK';
+  deliveryMode: SocialPublicationDeliveryMode;
   sourceUrl: string;
   caption: string;
   music: Record<string, unknown> | null;
@@ -47,6 +49,7 @@ export interface SocialPublication {
   analytics: Record<string, unknown> | null;
   analyticsSyncedAt: string | null;
   publishedAt: string | null;
+  deliveredAt: string | null;
   createdAt: string;
   updatedAt: string;
   accountUsername: string | null;

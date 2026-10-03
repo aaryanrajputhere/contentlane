@@ -78,7 +78,13 @@ enum SocialPublicationStatus {
   VALIDATING
   PUBLISHING
   PUBLISHED
+  DELIVERED_TO_TIKTOK
   FAILED
+}
+
+enum SocialPublicationDeliveryMode {
+  DIRECT
+  TIKTOK_DRAFT
 }
 
 model User {
@@ -408,6 +414,7 @@ model SocialPublication {
   socialAccountId    String
   socialAccount      SocialAccount           @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
   platform           SocialPlatform
+  deliveryMode       SocialPublicationDeliveryMode @default(DIRECT)
   sourceUrl          String
   caption            String
   music              Json?
@@ -421,6 +428,7 @@ model SocialPublication {
   analytics          Json?
   analyticsSyncedAt  DateTime?
   publishedAt        DateTime?
+  deliveredAt        DateTime?
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
 

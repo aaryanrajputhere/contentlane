@@ -149,10 +149,14 @@ function buildPostBody(input: ReturnType<typeof tiktokPublishSchema.parse>, acco
       allow_comment: input.settings.allowComment,
       allow_duet: input.settings.allowDuet,
       allow_stitch: input.settings.allowStitch,
-      commercialContentType: input.settings.commercialContentType,
       content_preview_confirmed: input.settings.contentPreviewConfirmed,
       express_consent_given: input.settings.expressConsentGiven,
-      ...(musicSoundInfo ? { musicSoundInfo, videoOriginalSoundVolume: input.music?.originalVolume ?? 50 } : {}),
+      ...(input.deliveryMode === 'TIKTOK_DRAFT'
+        ? { draft: true }
+        : {
+            commercialContentType: input.settings.commercialContentType,
+            ...(musicSoundInfo ? { musicSoundInfo, videoOriginalSoundVolume: input.music?.originalVolume ?? 50 } : {}),
+          }),
     },
     publishNow: true,
   };
@@ -261,11 +265,11 @@ export const publishTikTok: RequestHandler = async (req, res) => {
   const { id: projectId } = projectIdParamsSchema.parse(req.params);
   const existing = await findPublicationByRequestKey(prepared.input.requestKey);
   if (existing) {
-    if (existing.projectId !== projectId || existing.socialAccountId !== prepared.account.id) {
+    if (existing.projectId !== projectId || existing.socialAccountId !== prepared.account.id || existing.deliveryMode !== prepared.input.deliveryMode) {
       throw new ApiError(409, 'REQUEST_KEY_CONFLICT', 'This publishing request key has already been used');
     }
     if (existing.status !== 'FAILED') {
-      res.status(existing.status === 'PUBLISHED' ? 200 : 202).json({ publication: existing });
+      res.status(existing.status === 'PUBLISHED' || existing.status === 'DELIVERED_TO_TIKTOK' ? 200 : 202).json({ publication: existing });
       return;
     }
   }
@@ -275,6 +279,7 @@ export const publishTikTok: RequestHandler = async (req, res) => {
     conceptId: prepared.input.conceptId,
     renderJobId: prepared.job.id,
     socialAccountId: prepared.account.id,
+    deliveryMode: prepared.input.deliveryMode,
     sourceUrl: prepared.sourceUrl,
     caption: prepared.input.caption,
     music: prepared.input.music,
@@ -285,8 +290,9 @@ export const publishTikTok: RequestHandler = async (req, res) => {
     assertPreflight(media, post);
     await setPublicationPublishing(publication.id);
     const result = providerPost(await createZernioPost(prepared.postBody, prepared.input.requestKey));
-    const updated = await setPublicationProviderResult(publication.id, { status: result.status, zernioPostId: result.id, platformPostId: result.platformPostId, platformPostUrl: result.platformPostUrl, errorMessage: result.errorMessage });
-    res.status(updated.status === 'PUBLISHED' ? 201 : 202).json({ publication: updated });
+    const status = prepared.input.deliveryMode === 'TIKTOK_DRAFT' && result.status === 'PUBLISHED' ? 'DELIVERED_TO_TIKTOK' : result.status;
+    const updated = await setPublicationProviderResult(publication.id, { status, zernioPostId: result.id, platformPostId: prepared.input.deliveryMode === 'DIRECT' ? result.platformPostId : null, platformPostUrl: prepared.input.deliveryMode === 'DIRECT' ? result.platformPostUrl : null, errorMessage: result.errorMessage });
+    res.status(updated.status === 'PUBLISHED' || updated.status === 'DELIVERED_TO_TIKTOK' ? 201 : 202).json({ publication: updated });
   } catch (error) {
     await setPublicationFailed(publication.id, error instanceof ApiError ? error.code : 'PUBLISH_FAILED', error instanceof Error ? error.message : 'Publishing failed');
     throw error;
@@ -307,6 +313,7 @@ export const getPublicationAnalytics: RequestHandler = async (req, res) => {
   const { publicationId } = socialPublicationParamsSchema.parse(req.params);
   const publication = await findOwnedPublication(publicationId, req.user!.id);
   if (!publication) throw new ApiError(404, 'PUBLICATION_NOT_FOUND', 'Published video not found');
+  if (publication.deliveryMode === 'TIKTOK_DRAFT') throw new ApiError(409, 'ANALYTICS_UNAVAILABLE_FOR_DRAFT', 'Analytics are unavailable for videos finished in TikTok');
   if (!publication.zernioPostId) throw new ApiError(409, 'ANALYTICS_NOT_READY', 'Analytics will appear after TikTok accepts the post');
   const fresh = publication.analyticsSyncedAt && Date.now() - publication.analyticsSyncedAt.getTime() < 15 * 60 * 1000;
   if (fresh && publication.analytics) {

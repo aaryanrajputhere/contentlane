@@ -3,7 +3,8 @@ import { Prisma } from '@prisma/client';
 import prisma from './prisma';
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NEEDS_RECONNECTION';
-export type PublicationStatus = 'VALIDATING' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+export type PublicationStatus = 'VALIDATING' | 'PUBLISHING' | 'PUBLISHED' | 'DELIVERED_TO_TIKTOK' | 'FAILED';
+export type PublicationDeliveryMode = 'DIRECT' | 'TIKTOK_DRAFT';
 
 export interface SocialProfileRow { id: string; userId: string; zernioProfileId: string; createdAt: Date; updatedAt: Date }
 export interface SocialAccountRow {
@@ -13,10 +14,10 @@ export interface SocialAccountRow {
 }
 export interface SocialPublicationRow {
   id: string; requestKey: string; projectId: string; conceptId: string | null; renderJobId: string | null;
-  socialAccountId: string; platform: 'TIKTOK'; sourceUrl: string; caption: string; music: unknown; settings: unknown;
+  socialAccountId: string; platform: 'TIKTOK'; deliveryMode: PublicationDeliveryMode; sourceUrl: string; caption: string; music: unknown; settings: unknown;
   zernioPostId: string | null; platformPostId: string | null; platformPostUrl: string | null; status: PublicationStatus;
   errorCode: string | null; errorMessage: string | null; analytics: unknown; analyticsSyncedAt: Date | null;
-  publishedAt: Date | null; createdAt: Date; updatedAt: Date;
+  publishedAt: Date | null; deliveredAt: Date | null; createdAt: Date; updatedAt: Date;
 }
 
 export async function findSocialProfile(userId: string) {
@@ -61,11 +62,11 @@ export async function findPublicationByRequestKey(requestKey: string) {
 
 export async function createSocialPublication(input: {
   requestKey: string; projectId: string; conceptId: string; renderJobId: string; socialAccountId: string;
-  sourceUrl: string; caption: string; music: unknown; settings: unknown;
+  deliveryMode: PublicationDeliveryMode; sourceUrl: string; caption: string; music: unknown; settings: unknown;
 }) {
   const rows = await prisma.$queryRaw<SocialPublicationRow[]>`
-    INSERT INTO "SocialPublication" ("id", "requestKey", "projectId", "conceptId", "renderJobId", "socialAccountId", "platform", "sourceUrl", "caption", "music", "settings", "status", "createdAt", "updatedAt")
-    VALUES (${randomUUID()}, ${input.requestKey}, ${input.projectId}, ${input.conceptId}, ${input.renderJobId}, ${input.socialAccountId}, 'TIKTOK', ${input.sourceUrl}, ${input.caption}, ${input.music === null ? null : JSON.stringify(input.music)}::jsonb, ${JSON.stringify(input.settings)}::jsonb, 'VALIDATING', NOW(), NOW()) RETURNING *`;
+    INSERT INTO "SocialPublication" ("id", "requestKey", "projectId", "conceptId", "renderJobId", "socialAccountId", "platform", "deliveryMode", "sourceUrl", "caption", "music", "settings", "status", "createdAt", "updatedAt")
+    VALUES (${randomUUID()}, ${input.requestKey}, ${input.projectId}, ${input.conceptId}, ${input.renderJobId}, ${input.socialAccountId}, 'TIKTOK', ${input.deliveryMode}::"SocialPublicationDeliveryMode", ${input.sourceUrl}, ${input.caption}, ${input.music === null ? null : JSON.stringify(input.music)}::jsonb, ${JSON.stringify(input.settings)}::jsonb, 'VALIDATING', NOW(), NOW()) RETURNING *`;
   return rows[0];
 }
 
@@ -75,7 +76,7 @@ export async function setPublicationPublishing(id: string) {
 
 export async function setPublicationProviderResult(id: string, input: { status: PublicationStatus; zernioPostId: string | null; platformPostId: string | null; platformPostUrl: string | null; errorMessage: string | null }) {
   const rows = await prisma.$queryRaw<SocialPublicationRow[]>`
-    UPDATE "SocialPublication" SET "status" = ${input.status}::"SocialPublicationStatus", "zernioPostId" = ${input.zernioPostId}, "platformPostId" = ${input.platformPostId}, "platformPostUrl" = ${input.platformPostUrl}, "errorMessage" = ${input.errorMessage}, "publishedAt" = CASE WHEN ${input.status} = 'PUBLISHED' THEN NOW() ELSE NULL END, "updatedAt" = NOW()
+    UPDATE "SocialPublication" SET "status" = ${input.status}::"SocialPublicationStatus", "zernioPostId" = ${input.zernioPostId}, "platformPostId" = ${input.platformPostId}, "platformPostUrl" = ${input.platformPostUrl}, "errorMessage" = ${input.errorMessage}, "publishedAt" = CASE WHEN ${input.status} = 'PUBLISHED' THEN NOW() ELSE NULL END, "deliveredAt" = CASE WHEN ${input.status} = 'DELIVERED_TO_TIKTOK' THEN NOW() ELSE NULL END, "updatedAt" = NOW()
     WHERE "id" = ${id} RETURNING *`;
   return rows[0];
 }
@@ -124,14 +125,15 @@ export async function updatePublicationFromWebhook(identifier: { zernioPostId: s
   const analyticsJson = input.analytics === undefined ? null : JSON.stringify(input.analytics);
   await prisma.$executeRaw(Prisma.sql`
     UPDATE "SocialPublication" SET
-      "status" = COALESCE(${input.status ?? null}::"SocialPublicationStatus", "status"),
-      "platformPostId" = COALESCE(${input.platformPostId ?? null}, "platformPostId"),
-      "platformPostUrl" = COALESCE(${input.platformPostUrl ?? null}, "platformPostUrl"),
+      "status" = CASE WHEN "deliveryMode" = 'TIKTOK_DRAFT' AND ${input.status ?? null} = 'PUBLISHED' THEN 'DELIVERED_TO_TIKTOK'::"SocialPublicationStatus" ELSE COALESCE(${input.status ?? null}::"SocialPublicationStatus", "status") END,
+      "platformPostId" = CASE WHEN "deliveryMode" = 'TIKTOK_DRAFT' THEN NULL ELSE COALESCE(${input.platformPostId ?? null}, "platformPostId") END,
+      "platformPostUrl" = CASE WHEN "deliveryMode" = 'TIKTOK_DRAFT' THEN NULL ELSE COALESCE(${input.platformPostUrl ?? null}, "platformPostUrl") END,
       "errorCode" = COALESCE(${input.errorCode ?? null}, "errorCode"),
       "errorMessage" = COALESCE(${input.errorMessage ?? null}, "errorMessage"),
       "analytics" = CASE WHEN ${analyticsJson}::text IS NULL THEN "analytics" ELSE ${analyticsJson}::jsonb END,
       "analyticsSyncedAt" = CASE WHEN ${analyticsJson}::text IS NULL THEN "analyticsSyncedAt" ELSE NOW() END,
-      "publishedAt" = CASE WHEN ${input.status ?? null} = 'PUBLISHED' THEN COALESCE("publishedAt", NOW()) ELSE "publishedAt" END,
+      "publishedAt" = CASE WHEN ${input.status ?? null} = 'PUBLISHED' AND "deliveryMode" = 'DIRECT' THEN COALESCE("publishedAt", NOW()) ELSE "publishedAt" END,
+      "deliveredAt" = CASE WHEN ${input.status ?? null} = 'PUBLISHED' AND "deliveryMode" = 'TIKTOK_DRAFT' THEN COALESCE("deliveredAt", NOW()) ELSE "deliveredAt" END,
       "updatedAt" = NOW()
     WHERE (${identifier.zernioPostId}::text IS NOT NULL AND "zernioPostId" = ${identifier.zernioPostId})
        OR (${identifier.requestKey}::text IS NOT NULL AND "requestKey" = ${identifier.requestKey})`);

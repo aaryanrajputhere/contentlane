@@ -325,6 +325,7 @@ export const tiktokMusicSchema = z.object({
   message: 'Music end time must be after its start time', path: ['endMs'],
 });
 export const tiktokPublishSchema = z.object({
+  deliveryMode: z.enum(['DIRECT', 'TIKTOK_DRAFT']).default('DIRECT'),
   requestKey: z.string().uuid(),
   socialAccountId: z.string().uuid(),
   renderJobId: z.string().cuid(),
@@ -339,7 +340,11 @@ export const tiktokPublishSchema = z.object({
     contentPreviewConfirmed: z.literal(true),
     expressConsentGiven: z.literal(true),
   }).strict(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.deliveryMode === 'TIKTOK_DRAFT' && value.music !== null) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'TikTok inbox drafts cannot include commercial music', path: ['music'] });
+  }
+});
 
 export const authUserSchema = z.object({
   id: z.string().cuid(),

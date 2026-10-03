@@ -144,8 +144,12 @@ test('TikTok publishing requires consent, valid social ids, and bounded music se
     },
   });
   assert.equal(parsed.music?.endMs, 15_000);
+  assert.equal(parsed.deliveryMode, 'DIRECT');
+  const draft = tiktokPublishSchema.parse({ ...parsed, deliveryMode: 'TIKTOK_DRAFT', music: null });
+  assert.equal(draft.deliveryMode, 'TIKTOK_DRAFT');
   assert.throws(() => tiktokPublishSchema.parse({ ...parsed, settings: { ...parsed.settings, expressConsentGiven: false } }));
   assert.throws(() => tiktokPublishSchema.parse({ ...parsed, music: { ...parsed.music, startMs: 20_000, endMs: 10_000 } }));
+  assert.throws(() => tiktokPublishSchema.parse({ ...parsed, deliveryMode: 'TIKTOK_DRAFT' }));
 });
 
 test("hook preference schemas accept bounded project-scoped examples", () => {
