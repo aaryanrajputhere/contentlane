@@ -14,6 +14,7 @@ export interface ReelRenderInput {
   demoUrl: string;
   hookOverlay: string;
   demoOverlay: string;
+  demoCaptionsEnabled?: boolean;
   outputId: string;
   folder: string;
   captionStyle: 'SNAPCHAT' | 'STANDARD';
@@ -26,7 +27,7 @@ export function wrapOverlayText(value: string, captionStyle: ReelRenderInput['ca
 
 export interface ReelCaptionInputs {
   hook: number;
-  demo: number;
+  demo: number | null;
 }
 
 export function buildReelFilter(captionInputs: ReelCaptionInputs = { hook: 2, demo: 3 }, watermarkInput?: number) {
@@ -34,7 +35,7 @@ export function buildReelFilter(captionInputs: ReelCaptionInputs = { hook: 2, de
     '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,setpts=PTS-STARTPTS[hook-base]',
     `[hook-base][${captionInputs.hook}:v]overlay=0:0:format=auto[hook]`,
     '[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,setpts=PTS-STARTPTS[demo-base]',
-    `[demo-base][${captionInputs.demo}:v]overlay=0:0:format=auto[demo]`,
+    captionInputs.demo === null ? '[demo-base]null[demo]' : `[demo-base][${captionInputs.demo}:v]overlay=0:0:format=auto[demo]`,
     `[hook][demo]concat=n=2:v=1:a=0${watermarkInput === undefined ? '[video]' : '[joined]'}`,
   ];
   // The watermark input loops forever; stop its overlay when the joined clips end.
@@ -80,15 +81,15 @@ export async function renderReel(input: ReelRenderInput) {
     const hook = await materialize(input.hookUrl, directory, 'hook.mp4');
     const demo = await materialize(input.demoUrl, directory, 'demo.mp4');
     const hookCaption = join(directory, 'hook-caption.png');
-    const demoCaption = join(directory, 'demo-caption.png');
+    const demoCaption = input.demoCaptionsEnabled === false ? null : join(directory, 'demo-caption.png');
     const watermark = input.watermark ? join(directory, 'preview-watermark.png') : null;
     const [hookCaptionPng, demoCaptionPng] = await Promise.all([
       rasterizeCaption(input.hookOverlay, input.captionStyle, 'HOOK'),
-      rasterizeCaption(input.demoOverlay, input.captionStyle, 'DEMO'),
+      demoCaption ? rasterizeCaption(input.demoOverlay, input.captionStyle, 'DEMO') : Promise.resolve(null),
     ]);
     await Promise.all([
       writeFile(hookCaption, hookCaptionPng),
-      writeFile(demoCaption, demoCaptionPng),
+      ...(demoCaption && demoCaptionPng ? [writeFile(demoCaption, demoCaptionPng)] : []),
       ...(watermark ? [writeFile(watermark, createPreviewWatermark())] : []),
     ]);
 
@@ -98,9 +99,9 @@ export async function renderReel(input: ReelRenderInput) {
       '-i', hook,
       '-i', demo,
       '-i', hookCaption,
-      '-i', demoCaption,
+      ...(demoCaption ? ['-i', demoCaption] : []),
       ...(watermark ? ['-loop', '1', '-i', watermark] : []),
-      '-filter_complex', buildReelFilter({ hook: 2, demo: 3 }, watermark ? 4 : undefined),
+      '-filter_complex', buildReelFilter({ hook: 2, demo: demoCaption ? 3 : null }, watermark ? (demoCaption ? 4 : 3) : undefined),
       '-map', '[video]',
       '-map', '1:a?',
       '-c:v', 'libx264',

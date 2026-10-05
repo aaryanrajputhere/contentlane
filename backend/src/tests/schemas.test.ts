@@ -7,6 +7,7 @@ import {
   checkoutInputSchema,
   conceptSelectionSchema,
   conceptEditSchema,
+  demoCaptionSettingsSchema,
   conceptStageInputSchema,
   creatorCharacterSchema,
   creatorClipMutationSchema,
@@ -303,4 +304,12 @@ test("concept prompt builders and export state stay aligned", () => {
   assert.equal(videoPrompt.durationSeconds, 5);
   assert.match(exportState.overlayText, /generic hooks/i);
   assert.equal(exportState.selectedConceptId, concept.id);
+});
+
+test("demo caption settings require booleans and overrides distinguish omitted from inherit", () => {
+  assert.deepEqual(demoCaptionSettingsSchema.parse({ brandDemoCaptionsEnabled: false }), { brandDemoCaptionsEnabled: false });
+  assert.throws(() => demoCaptionSettingsSchema.parse({ brandDemoCaptionsEnabled: "false" }));
+  const copy = { hookText: "Hook", demoOverlayText: "Demo" };
+  assert.equal(Object.prototype.hasOwnProperty.call(conceptEditSchema.parse(copy), "demoCaptionsEnabled"), false);
+  for (const value of [true, false, null]) assert.equal(conceptEditSchema.parse({ ...copy, demoCaptionsEnabled: value }).demoCaptionsEnabled, value);
 });

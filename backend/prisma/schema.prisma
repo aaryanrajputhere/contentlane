@@ -212,6 +212,7 @@ model Project {
   selectedCharacter   Json?            @map("selectedCharacter")
   creatorSelection    Json?            @map("creatorSelection")
   hookPreferences     Json?            @map("hookPreferences")
+  brandDemoCaptionsEnabled Boolean @default(true)
   defaultBrandDemoAssetId String?
   brandProfileConfirmedAt DateTime?
   selectedConcept     HookConcept?     @relation("ProjectSelectedConcept", fields: [selectedConceptId], references: [id], onDelete: SetNull)
@@ -262,6 +263,7 @@ model HookConcept {
   angle                 String
   hookText              String
   hookImagePrompt       String
+  demoCaptionsEnabled   Boolean?
   demoOverlayText       String
   videoDirection        String
   targetDurationLabel   String

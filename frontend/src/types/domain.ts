@@ -220,6 +220,7 @@ export interface WebsiteAnalysis {
 }
 
 export interface ConceptCard {
+  demoCaptionsEnabled?: boolean | null;
   id: string;
   projectId: string;
   angle: string;
@@ -331,6 +332,7 @@ export interface ProjectSnapshot {
   creatorSelection: CreatorSelection | null;
   hookPreferences: HookPreferences | null;
   brandProfileConfirmedAt: string | null;
+  brandDemoCaptionsEnabled?: boolean;
   defaultBrandDemoAssetId: string | null;
 }
 

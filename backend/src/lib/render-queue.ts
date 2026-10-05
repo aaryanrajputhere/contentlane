@@ -10,5 +10,5 @@ export interface RenderJobInput {
   conceptIds: string[];
   mode: 'preview' | 'final';
   sourcePreviewJobId?: string;
-  assignments: Array<{ conceptId: string; clipUrl: string; clipId: string; creatorName: string; demoAssetId: string; demoUrl: string; demoName: string }>;
+  assignments: Array<{ conceptId: string; clipUrl: string; clipId: string; creatorName: string; demoAssetId: string; demoUrl: string; demoName: string; demoCaptionsEnabled?: boolean }>;
 }

@@ -225,3 +225,33 @@ test('concept demo overrides reject assets from another project', async () => {
     assert.equal(response.status, 400);
   });
 });
+
+test('demo caption defaults and hook overrides persist, preserve copy, and enforce ownership', async () => {
+  await withServer(async (baseUrl) => {
+    const seeded = await seedEditableProject(true);
+    const other = await seedEditableProject(true);
+    const cookie = await loginAndGetCookie(baseUrl, { email: seeded.user.email, password: seeded.password });
+    assert.equal(seeded.project.brandDemoCaptionsEnabled, true);
+    assert.equal(seeded.concept.demoCaptionsEnabled, null);
+    const settingRequest = (projectId: string, enabled: unknown) => fetch(`${baseUrl}/api/v1/projects/${projectId}/demo-caption-settings`, {
+      method: 'PATCH', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify({ brandDemoCaptionsEnabled: enabled }),
+    });
+    const disabled = await settingRequest(seeded.project.id, false);
+    assert.equal(disabled.status, 200);
+    const snapshot = await disabled.json() as { project: { brandDemoCaptionsEnabled: boolean } };
+    assert.equal(snapshot.project.brandDemoCaptionsEnabled, false);
+    assert.equal((await prisma.project.findUniqueOrThrow({ where: { id: seeded.project.id } })).brandDemoCaptionsEnabled, false);
+    assert.equal((await settingRequest(other.project.id, false)).status, 404);
+    assert.equal((await settingRequest(seeded.project.id, 'false')).status, 400);
+    const copy = { hookText: seeded.concept.hookText, demoOverlayText: seeded.concept.demoOverlayText };
+    for (const override of [true, false, null]) {
+      assert.equal((await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, { ...copy, demoCaptionsEnabled: override })).status, 200);
+      const saved = await prisma.hookConcept.findUniqueOrThrow({ where: { id: seeded.concept.id } });
+      assert.equal(saved.demoCaptionsEnabled, override);
+      assert.equal(saved.demoOverlayText, copy.demoOverlayText);
+      assert.equal((await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, copy)).status, 200);
+      assert.equal((await prisma.hookConcept.findUniqueOrThrow({ where: { id: seeded.concept.id } })).demoCaptionsEnabled, override);
+    }
+    assert.equal((await settingRequest(seeded.project.id, true)).status, 200);
+  });
+});

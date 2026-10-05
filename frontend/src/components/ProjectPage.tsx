@@ -278,6 +278,7 @@ export function HookEditSheet({
   creators,
   demos,
   defaultDemoAssetId,
+  brandDemoCaptionsEnabled = true,
   onCancel,
   onSave,
 }: {
@@ -285,11 +286,13 @@ export function HookEditSheet({
   creators: CreatorRecord[];
   demos: MediaAsset[];
   defaultDemoAssetId: string | null;
+  brandDemoCaptionsEnabled?: boolean;
   onCancel: () => void;
   onSave: (input: {
     conceptId: string;
     hookText: string;
     demoOverlayText: string;
+    demoCaptionsEnabled: boolean | null;
     creatorId: string;
     clipId: string;
     brandDemoAssetId: string | null;
@@ -309,6 +312,8 @@ export function HookEditSheet({
   const [demoOverlayText, setDemoOverlayText] = useState(
     assignment.concept.demoOverlayText,
   );
+  const [demoCaptionsEnabled, setDemoCaptionsEnabled] = useState<boolean | null>(assignment.concept.demoCaptionsEnabled ?? null);
+  const showDemoCaptions = demoCaptionsEnabled ?? brandDemoCaptionsEnabled;
   const [selectedCreatorId, setSelectedCreatorId] = useState(
     initialCreator?.id ?? "",
   );
@@ -334,6 +339,7 @@ export function HookEditSheet({
     0,
   );
   const hasChanges =
+    demoCaptionsEnabled !== (assignment.concept.demoCaptionsEnabled ?? null) ||
     cleanHookText !== assignment.concept.hookText.trim() ||
     cleanDemoOverlayText !== assignment.concept.demoOverlayText.trim() ||
     selectedCreatorId !== (assignment.creator?.id ?? "") ||
@@ -365,7 +371,7 @@ export function HookEditSheet({
       if (event.key !== "Tab") return;
       const focusable = Array.from(
         dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'button:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
         ),
       );
       if (focusable.length === 0) return;
@@ -399,6 +405,7 @@ export function HookEditSheet({
         conceptId: assignment.concept.id,
         hookText: cleanHookText,
         demoOverlayText: cleanDemoOverlayText,
+        demoCaptionsEnabled,
         creatorId: selectedCreator.id,
         clipId: selectedClip.id,
         brandDemoAssetId: selectedDemoOverrideId || null,
@@ -556,12 +563,12 @@ export function HookEditSheet({
                       preload="metadata"
                     />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/75" />
-                    <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 bg-black/65 px-2.5 py-1.5 text-center backdrop-blur-[1px]">
+                    {showDemoCaptions ? <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 bg-black/65 px-2.5 py-1.5 text-center backdrop-blur-[1px]">
                       <p className="text-[10px] font-medium leading-[1.25] text-white">
                         {cleanDemoOverlayText ||
                           "Your demo overlay appears here"}
                       </p>
-                    </div>
+                    </div> : null}
                   </div>
                 </div>
               ) : null}
@@ -742,6 +749,15 @@ export function HookEditSheet({
                   </span>
                 </div>
 
+                <label className="mt-4 block text-xs font-black text-[#444]">
+                  Demo captions
+                  <select value={demoCaptionsEnabled === null ? 'inherit' : demoCaptionsEnabled ? 'on' : 'off'} onChange={(event) => setDemoCaptionsEnabled(event.target.value === 'inherit' ? null : event.target.value === 'on')} disabled={saving} className="mt-2 block w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2">
+                    <option value="inherit">Use campaign setting ({brandDemoCaptionsEnabled ? 'On' : 'Off'})</option>
+                    <option value="on">On</option>
+                    <option value="off">Off</option>
+                  </select>
+                </label>
+                {!showDemoCaptions ? <p className="mt-2 text-xs text-[#777]">Demo captions are off. Your caption text is kept for later.</p> : null}
                 <label
                   htmlFor="demo-overlay-edit"
                   className="mt-4 block text-xs font-black text-[#444]"
@@ -951,6 +967,7 @@ export function SwipeReview({
   creators,
   demos,
   defaultDemoAssetId,
+  brandDemoCaptionsEnabled = true,
   onEdit,
 }: {
   assignments: ReviewAssignment[];
@@ -961,10 +978,12 @@ export function SwipeReview({
   creators: CreatorRecord[];
   demos: MediaAsset[];
   defaultDemoAssetId: string | null;
+  brandDemoCaptionsEnabled?: boolean;
   onEdit: (input: {
     conceptId: string;
     hookText: string;
     demoOverlayText: string;
+    demoCaptionsEnabled: boolean | null;
     creatorId: string;
     clipId: string;
     brandDemoAssetId: string | null;
@@ -1139,6 +1158,7 @@ export function SwipeReview({
           creators={creators}
           demos={demos}
           defaultDemoAssetId={defaultDemoAssetId}
+          brandDemoCaptionsEnabled={brandDemoCaptionsEnabled}
           onCancel={() => setIsEditing(false)}
           onSave={async (input) => {
             await onEdit(input);
@@ -1386,6 +1406,7 @@ export default function ProjectPage() {
       conceptId: string;
       hookText: string;
       demoOverlayText: string;
+      demoCaptionsEnabled: boolean | null;
       creatorId: string;
       clipId: string;
       brandDemoAssetId: string | null;
@@ -1397,6 +1418,7 @@ export default function ProjectPage() {
           body: JSON.stringify({
             hookText: input.hookText,
             demoOverlayText: input.demoOverlayText,
+            demoCaptionsEnabled: input.demoCaptionsEnabled,
             creatorId: input.creatorId,
             clipId: input.clipId,
             brandDemoAssetId: input.brandDemoAssetId,
@@ -2189,6 +2211,7 @@ export default function ProjectPage() {
                 creators={reviewCreators}
                 demos={demoLibrary}
                 defaultDemoAssetId={project.defaultBrandDemoAssetId}
+                brandDemoCaptionsEnabled={project.brandDemoCaptionsEnabled ?? true}
                 onDecision={decideHook}
                 onEdit={editHook}
               />
@@ -2293,6 +2316,7 @@ export default function ProjectPage() {
                     projectId={id}
                     demos={demoLibrary}
                     defaultDemoAssetId={project.defaultBrandDemoAssetId}
+                    brandDemoCaptionsEnabled={project.brandDemoCaptionsEnabled ?? true}
                     onProjectChange={setProject}
                     tone="dark"
                   />

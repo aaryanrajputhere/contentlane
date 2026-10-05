@@ -161,7 +161,9 @@ export const hookPreferencesUpdateSchema = z.object({
   message: "At most eight hook preferences are allowed",
 });
 export const generationLanguageUpdateSchema = z.object({ language: generationLanguageSchema }).strict();
+export const demoCaptionSettingsSchema = z.object({ brandDemoCaptionsEnabled: z.boolean() }).strict();
 export const conceptEditSchema = z.object({
+  demoCaptionsEnabled: z.boolean().nullable().optional(),
   hookText: z.string().trim().min(1).max(240),
   demoOverlayText: z.string().trim().min(1).max(240),
   creatorId: z.string().cuid().optional(),
@@ -392,6 +394,7 @@ export const websiteAnalysisSchema = z.object({
 
 
 export const conceptCardSchema = z.object({
+  demoCaptionsEnabled: z.boolean().nullable().default(null),
   id: z.string().cuid(),
   projectId: z.string().cuid(),
   angle: z.string().min(1),
@@ -461,6 +464,7 @@ export const projectSchema = z.object({
   selectedCharacterId: z.string().min(1).nullable(),
   hookPreferences: hookPreferencesSchema.nullable(),
   brandProfileConfirmedAt: z.coerce.date().nullable(),
+  brandDemoCaptionsEnabled: z.boolean().default(true),
   defaultBrandDemoAssetId: z.string().cuid().nullable(),
 }).strict();
 

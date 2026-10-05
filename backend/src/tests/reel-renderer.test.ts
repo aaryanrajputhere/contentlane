@@ -14,6 +14,7 @@ import {
   parseCaptionRuns,
   rasterizeCaption,
 } from '../lib/caption-rasterizer';
+import { resolveDemoCaptionsEnabled } from '../lib/render-overlay';
 import { buildReelFilter, wrapOverlayText } from '../lib/reel-renderer';
 
 const execFileAsync = promisify(execFile);
@@ -137,7 +138,7 @@ test('preview reel filter composites a full-frame watermark after concatenation'
   assert.match(filter, /\[joined\]\[4:v\]overlay=0:0:format=auto:shortest=1\[video\]/);
 });
 
-test('looped preview watermark stops when both video clips finish', { timeout: 30000 }, async () => {
+for (const demoEnabled of [true, false]) test(`looped preview watermark stops when both clips finish (demo captions ${demoEnabled})`, { timeout: 30000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'contentlane-watermark-duration-'));
   const ffmpeg = process.env.FFMPEG_PATH ?? 'ffmpeg';
   try {
@@ -149,8 +150,8 @@ test('looped preview watermark stops when both video clips finish', { timeout: 3
       '-y', '-loglevel', 'error',
       '-f', 'lavfi', '-i', 'color=c=red:s=180x320:r=30:d=0.3',
       '-f', 'lavfi', '-i', 'color=c=blue:s=180x320:r=30:d=0.5',
-      '-i', overlay, '-i', overlay, '-loop', '1', '-i', overlay,
-      '-filter_complex', buildReelFilter({ hook: 2, demo: 3 }, 4),
+      '-i', overlay, ...(demoEnabled ? ['-i', overlay] : []), '-loop', '1', '-i', overlay,
+      '-filter_complex', buildReelFilter({ hook: 2, demo: demoEnabled ? 3 : null }, demoEnabled ? 4 : 3),
       '-map', '[video]', '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2',
       '-pix_fmt', 'yuv420p', output,
     ], { timeout: 10000 });
@@ -162,5 +163,55 @@ test('looped preview watermark stops when both video clips finish', { timeout: 3
     assert.ok(duration >= 0.7 && duration <= 0.9, `Expected both clips to total 0.8 seconds, received ${duration}`);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('disabled demo captions bypass the overlay and preserve hook and watermark inputs', () => {
+  const clean = buildReelFilter({ hook: 2, demo: null });
+  assert.match(clean, /\[hook-base\]\[2:v\]overlay/);
+  assert.match(clean, /\[demo-base\]null\[demo\]/);
+  assert.doesNotMatch(clean, /\[demo-base\]\[\d+:v\]overlay/);
+  const preview = buildReelFilter({ hook: 2, demo: null }, 3);
+  assert.match(preview, /\[joined\]\[3:v\]overlay=0:0:format=auto:shortest=1/);
+});
+
+test('caption-free demo frames remain clean for both styles while hook captions render', { timeout: 30000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'contentlane-clean-demo-'));
+  try {
+    const caption = join(directory, 'hook.png');
+    for (const style of ['STANDARD', 'SNAPCHAT'] as const) {
+      await writeFile(caption, await rasterizeCaption('Visible hook', style, 'HOOK'));
+      const output = join(directory, `${style}.mp4`);
+      await execFileAsync(process.env.FFMPEG_PATH ?? 'ffmpeg', [
+        '-y', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', 'color=c=gray:s=180x320:r=30:d=0.3',
+        '-f', 'lavfi', '-i', 'color=c=gray:s=180x320:r=30:d=0.3',
+        '-i', caption, '-filter_complex', buildReelFilter({ hook: 2, demo: null }),
+        '-map', '[video]', '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2', '-pix_fmt', 'yuv420p', output,
+      ]);
+      for (const [time, hasCaption] of [['0.1', true], ['0.4', false]] as const) {
+        const frame = join(directory, `${style}-${time}.png`);
+        await execFileAsync(process.env.FFMPEG_PATH ?? 'ffmpeg', ['-y', '-loglevel', 'error', '-ss', time, '-i', output, '-frames:v', '1', frame]);
+        const img = await loadImage(frame);
+        const canvas = createCanvas(img.width, img.height);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
+        let contrastPixels = 0;
+        for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 90 || pixels[i] > 180) contrastPixels++;
+        assert.equal(contrastPixels > 100, hasCaption, `${style} at ${time}s`);
+      }
+      const probe = await execFileAsync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', output]);
+      assert.ok(Math.abs(Number(probe.stdout.trim()) - 0.6) < 0.1);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('demo caption overrides take precedence and unset hooks follow the campaign default', () => {
+  for (const campaign of [true, false]) {
+    assert.equal(resolveDemoCaptionsEnabled(campaign, null), campaign);
+    assert.equal(resolveDemoCaptionsEnabled(campaign, undefined), campaign);
+    assert.equal(resolveDemoCaptionsEnabled(campaign, true), true);
+    assert.equal(resolveDemoCaptionsEnabled(campaign, false), false);
   }
 });

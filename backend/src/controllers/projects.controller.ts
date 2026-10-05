@@ -1,3 +1,4 @@
+import { resolveDemoCaptionsEnabled } from '../lib/render-overlay';
 import type { RequestHandler } from "express";
 import { JobStatus, JobType, Prisma, ProjectStatus, ReviewDecision } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -15,6 +16,7 @@ import {
   conceptReviewResetSchema,
   conceptReviewSchema,
   conceptEditSchema,
+  demoCaptionSettingsSchema,
   creatorCharacterSchema,
   exportPayloadSchema,
   generationLanguageUpdateSchema,
@@ -918,6 +920,15 @@ export const updateGenerationLanguage: RequestHandler = async (req, res) => {
   res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
 };
 
+export const updateDemoCaptionSettings: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  const value = demoCaptionSettingsSchema.parse(req.body);
+  await getProjectOrFail(id, userId);
+  await prisma.project.update({ where: { id }, data: value });
+  res.json({ project: assertProject(await loadProjectSnapshot(id, userId)) });
+};
+
 export const updateConcept: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const { id, conceptId } = conceptReviewParamsSchema.parse(req.params);
@@ -977,6 +988,7 @@ export const updateConcept: RequestHandler = async (req, res) => {
     data: {
       hookText,
       demoOverlayText,
+      ...(value.demoCaptionsEnabled !== undefined ? { demoCaptionsEnabled: value.demoCaptionsEnabled } : {}),
       ...(creatorId && clipId ? { assignedCreatorId: creatorId, assignedClipId: clipId } : {}),
       ...(updatesBrandDemo ? { assignedBrandDemoAssetId: brandDemoAssetId ?? null } : {}),
     },
@@ -1737,6 +1749,7 @@ async function buildRenderInput(userId: string, id: string, requestedConceptIds?
       demoAssetId: demo.id,
       demoUrl: demo.url,
       demoName: demoAssetDisplayName(demo),
+      demoCaptionsEnabled: resolveDemoCaptionsEnabled(project.brandDemoCaptionsEnabled, concept.demoCaptionsEnabled),
     };
   });
   return { projectId: project.id, conceptIds: concepts.map((concept) => concept.id), mode: 'final', assignments: renderAssignments };

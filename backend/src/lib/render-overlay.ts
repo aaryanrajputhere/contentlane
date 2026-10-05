@@ -11,3 +11,7 @@ export function composeDemoOverlayText(original: string, index: number, brandNam
   if (!name || text.toLocaleLowerCase().includes(name.toLocaleLowerCase())) return text;
   return text ? `${name} — ${text}` : name;
 }
+
+export function resolveDemoCaptionsEnabled(campaignEnabled: boolean, hookOverride: boolean | null | undefined) {
+  return hookOverride ?? campaignEnabled;
+}
