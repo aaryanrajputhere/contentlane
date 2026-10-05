@@ -3,6 +3,7 @@ import { ArrowLeft, Download, Loader2, Server, TriangleAlert } from 'lucide-reac
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiClientError } from '../lib/api';
 import { assignCreatorsToConcepts, effectiveCreatorSelection } from '../lib/creatorAssignments';
+import { useCreatorLibrary } from '../hooks/useCreatorLibrary';
 import { createZip } from '../lib/zip';
 import { brandDemoName, brandDemos } from '../lib/brandDemos';
 import HookVideoPreview from './HookVideoPreview';
@@ -22,7 +23,7 @@ export default function ProjectRenderPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState<ProjectSnapshot | null>(null);
-  const [creators, setCreators] = useState<CreatorRecord[]>([]);
+  const { creators, loading: creatorLibraryLoading, error: creatorLibraryError, refresh: refreshCreatorLibrary } = useCreatorLibrary(id);
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -31,13 +32,9 @@ export default function ProjectRenderPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([
-      api<ProjectResponse>(`/projects/${id}`),
-      api<{ creators: CreatorRecord[] }>('/creators'),
-    ]).then(([projectResponse, creatorResponse]) => {
+    void api<ProjectResponse>(`/projects/${id}`).then((projectResponse) => {
       if (cancelled) return;
       setProject(projectResponse.project);
-      setCreators(creatorResponse.creators);
       // Jobs are returned newest-first; restore the latest render in any terminal
       // state as well so completed outputs survive a page reload.
       const existing = projectResponse.project.jobs.find((item) => item.type === 'RENDER_REELS');
@@ -108,11 +105,12 @@ export default function ProjectRenderPage() {
     } catch { setError('Unable to prepare the ZIP download.'); } finally { setDownloading(false); }
   }
 
-  if (loading) return <div className="grid min-h-screen place-items-center bg-[#fafaf8]">Loading render…</div>;
+  if (loading || creatorLibraryLoading) return <div className="grid min-h-screen place-items-center bg-[#fafaf8]">Loading render…</div>;
   const failed = job?.status === 'FAILED';
   return <main className="min-h-screen bg-[#fafaf8] pb-16 text-[#111]">
     <header className="border-b border-black/6 bg-white"><div className={`${shell} flex items-center justify-between gap-4 py-4`}><div><p className="text-[13px] uppercase tracking-[0.34em]">ContentLane</p><p className="mt-2 text-sm text-[#666]">Server-rendered MP4 reels</p></div><button type="button" onClick={() => navigate(-1)} className={white}><ArrowLeft size={16} />Back</button></div></header>
     <section className={`${shell} pt-12`}>
+      {creatorLibraryError ? <p role="alert" className="mb-4 text-sm text-red-600">{creatorLibraryError} <button type="button" className="underline" onClick={() => void refreshCreatorLibrary()}>Retry</button></p> : null}
       <div className="text-center"><div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium"><Server size={15} />Video render</div><h1 className="mx-auto mt-7 max-w-[15ch] text-[clamp(3rem,6vw,5.2rem)] font-black leading-[.94] tracking-[-.07em]">Your {reels.length} Reels are taking shape.</h1><p className="mx-auto mt-4 max-w-2xl text-[1.05rem] leading-7 text-[#666]">This render is preserved in your campaign history. Start another from your saved content whenever you want.</p><div className="mt-6 flex flex-wrap justify-center gap-3"><button type="button" onClick={() => navigate(`/projects/${id}/content`)} className={white}>Render more videos</button><button type="button" onClick={() => void startRender()} disabled={starting || renderInProgress || isCompleted(job) || reels.length === 0} className={black}>{starting || renderInProgress ? <Loader2 size={16} className="animate-spin" /> : <Server size={15} />}{starting || renderInProgress ? `Rendering ${progress}%` : isCompleted(job) ? 'Render complete' : 'Render on server'}</button><button type="button" onClick={() => void downloadAll()} disabled={outputs.length === 0 || downloading} className={white}><Download size={16} />{downloading ? 'Preparing ZIP…' : 'Download all'}</button></div></div>
       {failed ? <div className="mx-auto mt-8 flex max-w-2xl items-center justify-between gap-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span className="flex items-center gap-2"><TriangleAlert size={17} />{job.errorMessage ?? 'The render failed.'}</span><button type="button" onClick={() => { setJob(null); void startRender(); }} className={white}>Retry</button></div> : null}
       {error ? <p className="mx-auto mt-5 max-w-2xl text-center text-sm text-red-700">{error}</p> : null}

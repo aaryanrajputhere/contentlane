@@ -213,9 +213,10 @@ async function loadGenerationCreatorContext(project: Awaited<ReturnType<typeof g
     : project.selectedCharacter
       ? [creatorCharacterSchema.parse(project.selectedCharacter).id]
       : [];
+  const assignedIds = project.concepts.flatMap((concept) => concept.assignedCreatorId ? [concept.assignedCreatorId] : []);
   const creators = await prisma.creator.findMany({
     where: selectedIds.length > 0
-      ? { id: { in: selectedIds }, clips: { some: {} } }
+      ? { id: { in: [...new Set([...selectedIds, ...assignedIds])] }, clips: { some: {} } }
       : { clips: { some: {} } },
     include: { clips: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -227,7 +228,7 @@ async function loadGenerationCreatorContext(project: Awaited<ReturnType<typeof g
   const selection = parsedSelection?.success
     ? parsedSelection.data
     : project.selectedCharacter
-      ? { mode: "single" as const, characters: [creatorToCharacter(creators[0]!)] }
+      ? { mode: "single" as const, characters: [creatorCharacterSchema.parse(project.selectedCharacter)] }
       : {
           mode: creators.length >= 2 ? "mix" as const : "single" as const,
           characters: creators.map(creatorToCharacter),
@@ -950,25 +951,6 @@ export const updateConcept: RequestHandler = async (req, res) => {
 
   const { creatorId, clipId, brandDemoAssetId, hookText, demoOverlayText } = value;
   if (creatorId && clipId) {
-    const parsedSelection = project.creatorSelection
-      ? projectCreatorSelectionSchema.safeParse(project.creatorSelection)
-      : null;
-    let selectedCreatorIds = parsedSelection?.success
-      ? parsedSelection.data.characters.map((character) => character.id)
-      : project.selectedCharacter
-        ? [creatorCharacterSchema.parse(project.selectedCharacter).id]
-        : [];
-    // Free onboarding uses the same effective default roster as the frontend
-    // before a paid creator selection has been persisted.
-    if (selectedCreatorIds.length === 0) {
-      selectedCreatorIds = (await prisma.creator.findMany({
-        where: { clips: { some: {} } },
-        select: { id: true },
-      })).map((creator) => creator.id);
-    }
-    if (!selectedCreatorIds.includes(creatorId)) {
-      throw new ApiError(400, 'INVALID_CLIP_ASSIGNMENT', 'Choose a clip from the project creator selection');
-    }
     const clip = await prisma.creatorClip.findFirst({
       where: { id: clipId, creatorId },
       select: { id: true },
@@ -1731,7 +1713,7 @@ async function buildRenderInput(userId: string, id: string, requestedConceptIds?
     throw new ApiError(409, 'PROJECT_INCOMPLETE', 'Select a creator before rendering');
   }
   const creators = await prisma.creator.findMany({
-    where: { id: { in: selection?.characters.map((character) => character.id) ?? assignedCreatorIds } },
+    where: { id: { in: [...new Set([...(selection?.characters.map((character) => character.id) ?? []), ...assignedCreatorIds])] } },
     include: { clips: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
   });
   const storedAssignments = resolveStoredCreatorClipAssignments(concepts, creators);

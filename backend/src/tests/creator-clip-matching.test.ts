@@ -103,3 +103,15 @@ test('keeps valid persisted creator and clip assignments authoritative', () => {
   assert.deepEqual(stored.map((item) => item.clipId), ['clip-office', 'clip-outdoors']);
   assert.deepEqual(resolved.map((item) => item.clipId), ['clip-office', 'clip-outdoors']);
 });
+
+
+test('preserves manual assignments outside the roster and limits fallback to the selected roster', () => {
+  const creators = [creator('original', [{ id: 'old-clip', tags: [] }]), creator('new', [{ id: 'new-clip', tags: [] }])];
+  const concepts = [
+    { ...concept('hook-1', ''), assignedCreatorId: 'new', assignedClipId: 'new-clip' },
+    concept('hook-2', ''),
+  ];
+  const selection = { mode: 'single' as const, characters: [{ id: 'original' }] };
+  assert.deepEqual(resolveCreatorClipAssignments(concepts, creators, selection).map((item) => item.clipId), ['new-clip', 'old-clip']);
+  assert.deepEqual(resolveCreatorClipAssignments(concepts, creators.slice(1), selection).map((item) => item.clipId), ['new-clip']);
+});

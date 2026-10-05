@@ -24,7 +24,7 @@ import {
 } from "framer-motion";
 import { UserButton } from "@clerk/react";
 import { api, post } from "../lib/api";
-import { creatorToCharacter } from "../lib/creatorLibrary";
+import { useCreatorLibrary } from "../hooks/useCreatorLibrary";
 import {
   assignCreatorsToConcepts,
   effectiveCreatorSelection,
@@ -281,7 +281,11 @@ export function HookEditSheet({
   brandDemoCaptionsEnabled = true,
   onCancel,
   onSave,
+  creatorLibraryError,
+  onRefreshCreators,
 }: {
+  creatorLibraryError?: string;
+  onRefreshCreators?: () => Promise<void>;
   assignment: ReviewAssignment;
   creators: CreatorRecord[];
   demos: MediaAsset[];
@@ -645,6 +649,12 @@ export function HookEditSheet({
                   </span>
                 </div>
 
+                {creatorLibraryError ? (
+                  <p role="alert" className="mt-3 text-sm text-red-600">
+                    {creatorLibraryError}{" "}
+                    <button type="button" className="underline" onClick={() => void onRefreshCreators?.()}>Retry</button>
+                  </p>
+                ) : null}
                 <div
                   role="radiogroup"
                   aria-labelledby="clip-picker-title"
@@ -720,7 +730,7 @@ export function HookEditSheet({
                     ))
                   ) : (
                     <div className="rounded-[18px] border border-dashed border-black/15 bg-white p-5 text-center text-sm font-semibold text-[#666]">
-                      No clips are available for the selected creators.
+                      No creator clips are available yet.
                     </div>
                   )}
                 </div>
@@ -969,7 +979,11 @@ export function SwipeReview({
   defaultDemoAssetId,
   brandDemoCaptionsEnabled = true,
   onEdit,
+  onOpenEditor,
+  creatorLibraryError,
 }: {
+  onOpenEditor: () => Promise<void>;
+  creatorLibraryError: string;
   assignments: ReviewAssignment[];
   onDecision: (
     conceptId: string,
@@ -1100,7 +1114,7 @@ export function SwipeReview({
           <button
             type="button"
             onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => setIsEditing(true)}
+            onClick={() => { setIsEditing(true); void onOpenEditor(); }}
             disabled={isTransitioning}
             className="absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-xs font-bold text-white shadow-lg backdrop-blur transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:opacity-50"
           >
@@ -1154,6 +1168,8 @@ export function SwipeReview({
       </p>
       {isEditing ? (
         <HookEditSheet
+          creatorLibraryError={creatorLibraryError}
+          onRefreshCreators={onOpenEditor}
           assignment={current}
           creators={creators}
           demos={demos}
@@ -1181,8 +1197,7 @@ export default function ProjectPage() {
   const [brandConfirmationError, setBrandConfirmationError] = useState("");
   const [billing, setBilling] = useState<BillingStatus | null>(null);
 
-  const [creatorLibrary, setCreatorLibrary] = useState<CreatorRecord[]>([]);
-  const [creatorLibraryLoading, setCreatorLibraryLoading] = useState(true);
+  const { creators: creatorLibrary, loading: creatorLibraryLoading, error: creatorLibraryError, refresh: refreshCreatorLibrary } = useCreatorLibrary(id ?? "");
   const [busy, setBusy] = useState<string | null>(null);
   const [regenerationMessage, setRegenerationMessage] = useState("");
   const [languageMessage, setLanguageMessage] = useState("");
@@ -1246,28 +1261,6 @@ export default function ProjectPage() {
     }, 2000);
     return () => clearInterval(interval);
   }, [project, load]);
-
-  useEffect(() => {
-    let active = true;
-    void api<{ creators: CreatorRecord[] }>("/creators")
-      .then((response) => {
-        if (active) {
-          setCreatorLibrary(
-            response.creators.map((c) => ({
-              ...c,
-              character: creatorToCharacter(c),
-            })),
-          );
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setCreatorLibraryLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     const uploadSection = uploadSectionRef.current;
@@ -1765,12 +1758,7 @@ export default function ProjectPage() {
   const reviewAssignments = nextUnreviewedAssignment
     ? [nextUnreviewedAssignment]
     : [];
-  const reviewCreatorIds = new Set(
-    creatorSelection?.characters.map((character) => character.id) ?? [],
-  );
-  const reviewCreators = availableCreators.filter((creator) =>
-    reviewCreatorIds.has(creator.id),
-  );
+  const reviewCreators = availableCreators;
   const reviewComplete = likedConcepts.length === HOOK_SELECTION_TARGET;
   const reviewedCount = project.concepts.length - unreviewedConcepts.length;
   const hookLimitReached = project.concepts.length >= hookCap;
@@ -2061,6 +2049,12 @@ export default function ProjectPage() {
                 Choose the cast
               </p>
             </div>
+            {creatorLibraryError ? (
+              <p role="alert" className="mb-3 text-sm text-red-600">
+                {creatorLibraryError}{" "}
+                <button type="button" className="underline" onClick={() => void refreshCreatorLibrary()}>Retry</button>
+              </p>
+            ) : null}
             {creatorLibraryLoading ? (
               <div className="flex items-center gap-2 px-2 py-2 text-sm text-[#666]">
                 <Loader2 size={16} className="animate-spin" />
@@ -2214,6 +2208,8 @@ export default function ProjectPage() {
                 brandDemoCaptionsEnabled={project.brandDemoCaptionsEnabled ?? true}
                 onDecision={decideHook}
                 onEdit={editHook}
+                onOpenEditor={refreshCreatorLibrary}
+                creatorLibraryError={creatorLibraryError}
               />
             )}
             {hookRetryFailure?.phase === "generation" &&

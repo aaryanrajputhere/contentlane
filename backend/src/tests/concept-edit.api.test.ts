@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { AddressInfo } from 'node:net';
-import test, { after, afterEach, before } from 'node:test';
+import test, { after, afterEach, before, mock } from 'node:test';
 import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
@@ -142,7 +142,7 @@ test('active free users can atomically edit an unreviewed hook and selected crea
   });
 });
 
-test('clip edits reject creators outside the project roster and expired free access', async () => {
+test('clip edits accept newly added creators while rejecting expired free access', async () => {
   await withServer(async (baseUrl) => {
     const seeded = await seedEditableProject(false);
     const cookie = await loginAndGetCookie(baseUrl, { email: seeded.user.email, password: seeded.password });
@@ -156,10 +156,14 @@ test('clip edits reject creators outside the project roster and expired free acc
       include: { clips: true },
     });
     creatorIds.push(outsider.id);
-    const invalidRoster = await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, {
+    const newCreatorEdit = await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, {
       hookText: 'Edited hook', demoOverlayText: 'Demo', creatorId: outsider.id, clipId: outsider.clips[0]!.id,
     });
-    assert.equal(invalidRoster.status, 400);
+    assert.equal(newCreatorEdit.status, 200);
+    const saved = await prisma.hookConcept.findUniqueOrThrow({ where: { id: seeded.concept.id } });
+    assert.equal(saved.assignedCreatorId, outsider.id);
+    assert.equal(saved.assignedClipId, outsider.clips[0]!.id);
+    assert.deepEqual((await prisma.project.findUniqueOrThrow({ where: { id: seeded.project.id } })).creatorSelection, seeded.project.creatorSelection);
 
     await prisma.user.update({ where: { id: seeded.user.id }, data: { freeAccessEndedAt: new Date() } });
     const expired = await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, {
@@ -253,5 +257,59 @@ test('demo caption defaults and hook overrides persist, preserve copy, and enfor
       assert.equal((await prisma.hookConcept.findUniqueOrThrow({ where: { id: seeded.concept.id } })).demoCaptionsEnabled, override);
     }
     assert.equal((await settingRequest(seeded.project.id, true)).status, 200);
+  });
+});
+
+
+test('clips uploaded after project creation are listed and selectable without resetting the roster', async () => {
+  await withServer(async (baseUrl) => {
+    const seeded = await seedEditableProject(true);
+    const cookie = await loginAndGetCookie(baseUrl, { email: seeded.user.email, password: seeded.password });
+    const clip = await prisma.creatorClip.create({ data: {
+      creatorId: seeded.creator.id, title: 'New upload', url: 'https://example.com/new.mp4', provider: 'test', tags: ['new'],
+    } });
+    const libraryResponse = await fetch(`${baseUrl}/api/v1/creators`, { headers: { cookie } });
+    assert.equal(libraryResponse.status, 200);
+    const library = await libraryResponse.json() as { creators: Array<{ id: string; clips: Array<{ id: string }> }> };
+    assert.ok(library.creators.find((creator) => creator.id === seeded.creator.id)?.clips.some((candidate) => candidate.id === clip.id));
+    const edited = await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, {
+      hookText: seeded.concept.hookText, demoOverlayText: seeded.concept.demoOverlayText, creatorId: seeded.creator.id, clipId: clip.id,
+    });
+    assert.equal(edited.status, 200);
+    assert.equal((await prisma.hookConcept.findUniqueOrThrow({ where: { id: seeded.concept.id } })).assignedClipId, clip.id);
+    assert.deepEqual((await prisma.project.findUniqueOrThrow({ where: { id: seeded.project.id } })).creatorSelection, seeded.project.creatorSelection);
+  });
+});
+
+test('render input preserves a newly selected creator outside the saved generation roster', async () => {
+  await withServer(async (baseUrl) => {
+    const seeded = await seedEditableProject(true);
+    const newcomer = await prisma.creator.create({ data: {
+      name: `New render creator ${randomUUID()}`, baseImageUrl: 'https://example.com/new.jpg', baseImageProvider: 'test',
+      clips: { create: { url: 'https://example.com/new-creator.mp4', provider: 'test', tags: [] } },
+    }, include: { clips: true } });
+    creatorIds.push(newcomer.id);
+    const cookie = await loginAndGetCookie(baseUrl, { email: seeded.user.email, password: seeded.password });
+    const edited = await editRequest(baseUrl, cookie, seeded.project.id, seeded.concept.id, {
+      hookText: seeded.concept.hookText, demoOverlayText: seeded.concept.demoOverlayText,
+      creatorId: newcomer.id, clipId: newcomer.clips[0]!.id,
+    });
+    assert.equal(edited.status, 200);
+    await prisma.hookConcept.update({ where: { id: seeded.concept.id }, data: { reviewDecision: 'LIKED' } });
+    const { renderQueue } = await import('../lib/render-queue.js');
+    // Inspect the real API's stored render input without dispatching fake media to a worker.
+    const enqueue = mock.method(renderQueue, 'add', async () => undefined);
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/projects/${seeded.project.id}/render`, {
+        method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ conceptIds: [seeded.concept.id] }),
+      });
+      assert.equal(response.status, 202);
+      const result = await response.json() as { job: { input: { assignments: Array<{ creatorId: string; clipId: string; clipUrl: string }> } } };
+      assert.equal(result.job.input.assignments[0]!.creatorId, newcomer.id);
+      assert.equal(result.job.input.assignments[0]!.clipId, newcomer.clips[0]!.id);
+      assert.equal(result.job.input.assignments[0]!.clipUrl, newcomer.clips[0]!.url);
+      assert.equal(enqueue.mock.callCount(), 1);
+    } finally { enqueue.mock.restore(); }
   });
 });

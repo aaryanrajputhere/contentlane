@@ -32,19 +32,16 @@ export function assignCreatorsToConcepts(
   creators: CreatorRecord[],
   selection: CreatorSelection | null,
 ): CreatorAssignment[] {
-  if (!selection || selection.characters.length === 0) return [];
-
   const creatorsById = new Map(creators.map((creator) => [creator.id, creator]));
-  const roster = selection.characters
+  const roster = (selection?.characters ?? [])
     .map((character) => creatorsById.get(character.id))
     .filter((creator): creator is CreatorRecord => Boolean(creator?.clips.length));
-  if (roster.length === 0) return [];
 
   const persisted = new Map<string, CreatorAssignment>();
   const persistedClipIdsByCreator = new Map<string, Set<string>>();
   [...concepts].sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id)).forEach((concept) => {
     if (!concept.assignedCreatorId || !concept.assignedClipId) return;
-    const creator = roster.find((candidate) => candidate.id === concept.assignedCreatorId);
+    const creator = creatorsById.get(concept.assignedCreatorId);
     const clip = creator?.clips.find((candidate) => candidate.id === concept.assignedClipId);
     if (!creator || !clip) return;
     const usedClipIds = persistedClipIdsByCreator.get(creator.id) ?? new Set<string>();
@@ -61,7 +58,7 @@ export function assignCreatorsToConcepts(
   });
 
   const creatorByConcept = fallbackConcepts.map((concept) =>
-    selection.mode === 'mix' ? roster[concept.sortOrder % roster.length] : roster[0],
+    selection?.mode === 'mix' ? roster[concept.sortOrder % roster.length] : roster[0],
   );
   const clipsByConcept = new Map<string, CreatorRecord['clips'][number] | null>();
 
