@@ -17,12 +17,12 @@ const SNAPCHAT_FONT_SIZE = 46;
 const SNAPCHAT_LINE_HEIGHT = 58;
 const SNAPCHAT_VERTICAL_PADDING = 24;
 const DEJAVU_SANS_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
-const DEJAVU_SANS_BOLD_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
+const CAPTION_BOLD_FONT = join(__dirname, '../../assets/fonts/LiberationSans-Bold.ttf');
 const TWEMOJI_ASSET_DIRECTORY = join(__dirname, '../../assets/twemoji');
 const emojiImageCache = new Map<string, Promise<Image | null>>();
 
 GlobalFonts.registerFromPath(DEJAVU_SANS_FONT, 'ContentLane Sans');
-GlobalFonts.registerFromPath(DEJAVU_SANS_BOLD_FONT, 'ContentLane Sans Bold');
+GlobalFonts.registerFromPath(CAPTION_BOLD_FONT, 'ContentLane Caption');
 
 export interface CaptionRun {
   kind: 'text' | 'emoji';
@@ -99,12 +99,12 @@ export function wrapCaptionText(value: string, captionStyle: CaptionStyle) {
     .join('\n');
 }
 
-function captionTypography(style: CaptionStyle, role: CaptionRole) {
-  const fontSize = style === 'SNAPCHAT' ? SNAPCHAT_FONT_SIZE : role === 'DEMO' ? 64 : 76;
+function captionTypography(style: CaptionStyle) {
+  const fontSize = style === 'SNAPCHAT' ? SNAPCHAT_FONT_SIZE : 68;
   return {
     fontSize,
-    fontFamily: 'ContentLane Sans',
-    lineHeight: style === 'SNAPCHAT' ? SNAPCHAT_LINE_HEIGHT : fontSize * 1.25,
+    fontFamily: style === 'SNAPCHAT' ? 'ContentLane Sans' : 'ContentLane Caption',
+    lineHeight: style === 'SNAPCHAT' ? SNAPCHAT_LINE_HEIGHT : fontSize * 1.2,
   };
 }
 
@@ -114,7 +114,7 @@ function runWidth(context: SKRSContext2D, run: CaptionRun, fontSize: number) {
 
 export function layoutCaption(value: string, style: CaptionStyle, role: CaptionRole): CaptionLayout {
   const lineTexts = wrapCaptionText(value, style).split('\n');
-  const { fontSize, fontFamily, lineHeight } = captionTypography(style, role);
+  const { fontSize, fontFamily, lineHeight } = captionTypography(style);
   const context = createCanvas(1, 1).getContext('2d');
   context.font = `${fontSize}px "${fontFamily}"`;
   const lines = lineTexts.map((text, index) => {
@@ -157,7 +157,7 @@ export async function rasterizeCaption(value: string, style: CaptionStyle, role:
   const canvas = createCanvas(CAPTION_WIDTH, CAPTION_HEIGHT);
   const context = canvas.getContext('2d');
   const layout = layoutCaption(value, style, role);
-  const fontFamily = 'ContentLane Sans';
+  const { fontFamily } = captionTypography(style);
   context.font = `${layout.fontSize}px "${fontFamily}"`;
   context.textBaseline = 'middle';
   context.fillStyle = '#fff';
@@ -189,7 +189,7 @@ export async function rasterizeCaption(value: string, style: CaptionStyle, role:
       if (style === 'STANDARD') {
         context.save();
         context.lineJoin = 'round';
-        context.lineWidth = layout.fontSize * 0.14;
+        context.lineWidth = layout.fontSize * 0.18;
         context.strokeStyle = '#000';
         context.strokeText(run.text, x, line.y);
         context.fillText(run.text, x, line.y);

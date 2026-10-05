@@ -65,7 +65,7 @@ export default function HookVideoPreview({
 
       {!captionsBakedIn ? (
         <div className={`absolute z-10 w-full -translate-y-1/2 text-center ${usesSnapchatCaptions ? `top-1/2 inset-x-0 bg-black/60 ${compact ? 'px-3 py-1.5' : 'px-5 py-1.5'}` : 'top-[70%] inset-x-0 px-[7%]'}`}>
-          <p className={`break-words text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : 'text-[7cqw] font-normal leading-[1.25] [font-family:Arial,sans-serif] [paint-order:stroke_fill] [-webkit-text-stroke:0.98cqw_#000]'}`}>
+          <p className={`break-words text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : 'text-[6.3cqw] font-bold leading-[1.2] [font-family:"ContentLane_Caption",Arial,sans-serif] [paint-order:stroke_fill] [-webkit-text-stroke:1.13cqw_#000]'}`}>
             {concept.hookText}
           </p>
         </div>
