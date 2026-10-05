@@ -100,11 +100,11 @@ export function wrapCaptionText(value: string, captionStyle: CaptionStyle) {
 }
 
 function captionTypography(style: CaptionStyle, role: CaptionRole) {
-  const fontSize = style === 'SNAPCHAT' ? SNAPCHAT_FONT_SIZE : role === 'DEMO' ? 42 : 68;
+  const fontSize = style === 'SNAPCHAT' ? SNAPCHAT_FONT_SIZE : role === 'DEMO' ? 64 : 76;
   return {
     fontSize,
-    fontFamily: style === 'SNAPCHAT' ? 'ContentLane Sans' : 'ContentLane Sans Bold',
-    lineHeight: style === 'SNAPCHAT' ? SNAPCHAT_LINE_HEIGHT : fontSize + 8,
+    fontFamily: 'ContentLane Sans',
+    lineHeight: style === 'SNAPCHAT' ? SNAPCHAT_LINE_HEIGHT : fontSize * 1.25,
   };
 }
 
@@ -123,7 +123,7 @@ export function layoutCaption(value: string, style: CaptionStyle, role: CaptionR
       text,
       width,
       x: (CAPTION_WIDTH - width) / 2,
-      y: CAPTION_HEIGHT / 2 + (index - (lineTexts.length - 1) / 2) * lineHeight,
+      y: CAPTION_HEIGHT * (style === 'STANDARD' ? 0.7 : 0.5) + (index - (lineTexts.length - 1) / 2) * lineHeight,
     };
   });
   const bandHeight = Math.max(SNAPCHAT_LINE_HEIGHT, lines.length * SNAPCHAT_LINE_HEIGHT + SNAPCHAT_VERTICAL_PADDING);
@@ -157,7 +157,7 @@ export async function rasterizeCaption(value: string, style: CaptionStyle, role:
   const canvas = createCanvas(CAPTION_WIDTH, CAPTION_HEIGHT);
   const context = canvas.getContext('2d');
   const layout = layoutCaption(value, style, role);
-  const fontFamily = style === 'SNAPCHAT' ? 'ContentLane Sans' : 'ContentLane Sans Bold';
+  const fontFamily = 'ContentLane Sans';
   context.font = `${layout.fontSize}px "${fontFamily}"`;
   context.textBaseline = 'middle';
   context.fillStyle = '#fff';
@@ -188,11 +188,9 @@ export async function rasterizeCaption(value: string, style: CaptionStyle, role:
 
       if (style === 'STANDARD') {
         context.save();
-        context.shadowColor = 'rgba(0, 0, 0, 0.5)';
-        context.shadowOffsetY = 2;
         context.lineJoin = 'round';
-        context.lineWidth = role === 'HOOK' ? 20 : 16;
-        context.strokeStyle = 'rgba(0, 0, 0, 0.92)';
+        context.lineWidth = layout.fontSize * 0.14;
+        context.strokeStyle = '#000';
         context.strokeText(run.text, x, line.y);
         context.fillText(run.text, x, line.y);
         context.restore();

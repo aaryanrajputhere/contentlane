@@ -49,7 +49,8 @@ test('pure text, mixed text, multiline, Snapchat, and standard lines are centere
     for (const line of layout.lines) {
       assert.ok(Math.abs(line.x + line.width / 2 - CAPTION_WIDTH / 2) < 0.001);
     }
-    assert.ok(Math.abs((layout.lines[0].y + layout.lines[layout.lines.length - 1].y) / 2 - CAPTION_HEIGHT / 2) < 0.001);
+    const expectedCenter = CAPTION_HEIGHT * (style === 'STANDARD' ? 0.7 : 0.5);
+    assert.ok(Math.abs((layout.lines[0].y + layout.lines[layout.lines.length - 1].y) / 2 - expectedCenter) < 0.001);
   }
 
   const snapchat = layoutCaption('A short hook', 'SNAPCHAT', 'HOOK');

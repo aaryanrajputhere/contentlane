@@ -30,7 +30,7 @@ export default function HookVideoPreview({
   const usesSnapchatCaptions = getCaptionStyle(concept.sortOrder) === 'SNAPCHAT';
 
   return (
-    <div className={`relative h-full w-full overflow-hidden bg-[#111] text-white ${compact ? 'rounded-[22px]' : 'rounded-[28px]'} ${className}`}>
+    <div className={`relative h-full w-full overflow-hidden bg-[#111] text-white [container-type:inline-size] ${compact ? 'rounded-[22px]' : 'rounded-[28px]'} ${className}`}>
       {videoSource ? (
         <video
           src={videoSource}
@@ -64,8 +64,8 @@ export default function HookVideoPreview({
       </div>
 
       {!captionsBakedIn ? (
-        <div className={`absolute top-1/2 z-10 w-full -translate-y-1/2 text-center ${usesSnapchatCaptions ? `inset-x-0 bg-black/60 ${compact ? 'px-3 py-1.5' : 'px-5 py-1.5'}` : compact ? 'inset-x-0 px-3' : 'inset-x-0 px-6'}`}>
-          <p className={`break-words text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : `${compact ? 'text-[0.78rem] sm:text-sm' : 'text-base'} font-extrabold leading-[1.12] [paint-order:stroke_fill] [-webkit-text-stroke:2px_rgba(0,0,0,0.92)] drop-shadow-[0_2px_5px_rgba(0,0,0,0.5)]`}`}>
+        <div className={`absolute z-10 w-full -translate-y-1/2 text-center ${usesSnapchatCaptions ? `top-1/2 inset-x-0 bg-black/60 ${compact ? 'px-3 py-1.5' : 'px-5 py-1.5'}` : 'top-[70%] inset-x-0 px-[7%]'}`}>
+          <p className={`break-words text-white ${usesSnapchatCaptions ? `${compact ? 'text-[0.7rem]' : 'text-[0.875rem]'} font-medium leading-[1.25]` : 'text-[7cqw] font-normal leading-[1.25] [font-family:Arial,sans-serif] [paint-order:stroke_fill] [-webkit-text-stroke:0.98cqw_#000]'}`}>
             {concept.hookText}
           </p>
         </div>
