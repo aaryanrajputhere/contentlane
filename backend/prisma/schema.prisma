@@ -175,8 +175,8 @@ model RenderUsageReservation {
   id                 String            @id @default(cuid())
   userId             String
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  generationJobId    String            @unique
-  generationJob      GenerationJob     @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  generationJobId    String?           @unique
+  generationJob      GenerationJob?    @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
   billingPeriodStart DateTime
   billingPeriodEnd   DateTime
   requestedCount     Int

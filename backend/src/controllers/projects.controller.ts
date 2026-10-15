@@ -611,6 +611,25 @@ export const createProject: RequestHandler = async (req, res) => {
   res.status(201).json({ project: assertProject(await loadProjectSnapshot(project.id, userId)), job: analysisJob, cached: false });
 };
 
+export const deleteProject: RequestHandler = async (req, res) => {
+  const userId = requireUserId(req);
+  const { id } = projectIdParamsSchema.parse(req.params);
+  await prisma.$transaction(async (tx) => {
+    const project = await tx.project.findFirst({ where: { id, userId }, select: { freeOnboardingOwnerId: true } });
+    if (!project) throw new ApiError(404, "NOT_FOUND", "Project not found");
+    // Keep consumed usage after its source project is deleted.
+    await tx.renderUsageReservation.updateMany({
+      where: { generationJob: { projectId: id }, status: 'RESERVED' },
+      data: { status: 'RELEASED' },
+    });
+    if (project.freeOnboardingOwnerId) {
+      await tx.user.update({ where: { id: userId }, data: { freeAccessEndedAt: new Date() } });
+    }
+    await tx.project.delete({ where: { id } });
+  });
+  res.status(204).end();
+};
+
 export const listProjects: RequestHandler = async (req, res) => {
   const userId = requireUserId(req);
   const projects = await prisma.project.findMany({

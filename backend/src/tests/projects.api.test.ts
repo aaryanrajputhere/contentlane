@@ -573,3 +573,32 @@ test("project routes reject anonymous requests", async () => {
     assert.equal(response.status, 401);
   });
 });
+
+test("project deletion requires ownership and removes related records", async () => {
+  await withServer(async (baseUrl) => {
+    const cookie = await signupAndGetCookie(baseUrl, { email: 'project-delete@example.com', password: 'Password123!' });
+    const otherCookie = await signupAndGetCookie(baseUrl, { email: 'project-delete-other@example.com', password: 'Password123!' });
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: 'project-delete@example.com' } });
+    const project = await prisma.project.create({ data: {
+      userId: user.id, website: `${testWebsitePrefix}delete.example`, normalizedWebsite: `${testWebsitePrefix}delete.example`,
+      jobs: { create: { type: 'ANALYZE_WEBSITE', status: 'COMPLETED', input: {} } },
+    }, include: { jobs: true } });
+    const reservation = await prisma.renderUsageReservation.create({ data: {
+      userId: user.id, generationJobId: project.jobs[0].id,
+      billingPeriodStart: new Date(), billingPeriodEnd: new Date(Date.now() + 86400000),
+      requestedCount: 1, consumedCount: 1, status: 'CONSUMED',
+    } });
+    const url = `${baseUrl}/api/v1/projects/${project.id}`;
+    assert.equal((await fetch(url, { method: 'DELETE' })).status, 401);
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { cookie: otherCookie } })).status, 404);
+    assert.ok(await prisma.project.findUnique({ where: { id: project.id } }));
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { cookie } })).status, 204);
+    assert.equal(await prisma.project.findUnique({ where: { id: project.id } }), null);
+    assert.equal(await prisma.generationJob.count({ where: { projectId: project.id } }), 0);
+    const retainedUsage = await prisma.renderUsageReservation.findUniqueOrThrow({ where: { id: reservation.id } });
+    assert.equal(retainedUsage.generationJobId, null);
+    assert.equal(retainedUsage.consumedCount, 1);
+    assert.equal(retainedUsage.status, 'CONSUMED');
+    assert.equal((await fetch(url, { method: 'DELETE', headers: { cookie } })).status, 404);
+  });
+});

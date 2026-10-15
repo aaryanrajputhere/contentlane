@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { analyzeProject, confirmBrandProfile, createPreviewRender, createProject, deleteBrandDemo, generateConceptImageAsset, generateConcepts, generateConceptVideoAsset, generateMedia, getProject, listProjects, renameBrandDemo, renderProject, resetConceptReviews, reviewConcept, saveExportState, selectCharacter, selectConcept, saveHookPreferences, setDefaultBrandDemo, uploadBrandDemo, uploadBrandDemos, updateBrandProfile, updateConcept, updateDemoCaptionSettings, updateGenerationLanguage, updateHookPreferences } from '../controllers/projects.controller';
+import { analyzeProject, confirmBrandProfile, createPreviewRender, createProject, deleteProject, deleteBrandDemo, generateConceptImageAsset, generateConcepts, generateConceptVideoAsset, generateMedia, getProject, listProjects, renameBrandDemo, renderProject, resetConceptReviews, reviewConcept, saveExportState, selectCharacter, selectConcept, saveHookPreferences, setDefaultBrandDemo, uploadBrandDemo, uploadBrandDemos, updateBrandProfile, updateConcept, updateDemoCaptionSettings, updateGenerationLanguage, updateHookPreferences } from '../controllers/projects.controller';
 import { brandDemoParamsSchema, brandDemoRenameSchema, brandProfileConfirmationSchema, brandProfileUpdateSchema, characterSelectionSchema, conceptEditSchema, demoCaptionSettingsSchema, conceptReviewParamsSchema, conceptReviewResetSchema, conceptReviewSchema, conceptSelectionSchema, conceptStageInputSchema, exportPayloadSchema, generationLanguageUpdateSchema, hookPreferenceSelectionSchema, hookPreferencesUpdateSchema, mediaStageInputSchema, projectIdParamsSchema, renderRequestSchema, websiteInputSchema } from '../domain/schemas';
 import { validate } from '../lib/validation';
 import { requireSubscription } from '../middleware/subscription';
@@ -15,6 +15,7 @@ const router = Router();
 
 router.post('/', validate({ body: websiteInputSchema }), createProject);
 router.get('/', requireSubscription, listProjects);
+router.delete('/:id', validate({ params: projectIdParamsSchema }), deleteProject);
 router.get('/:id', validate({ params: projectIdParamsSchema }), getProject);
 router.post('/:id/brand-profile/confirm', validate({ params: projectIdParamsSchema, body: brandProfileConfirmationSchema }), confirmBrandProfile);
 router.patch('/:id/brand-profile', requireSubscription, validate({ params: projectIdParamsSchema, body: brandProfileUpdateSchema }), updateBrandProfile);
